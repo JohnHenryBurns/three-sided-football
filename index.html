@@ -622,6 +622,8 @@ function goalScored(concederTeam){
   const scorerTeam=ball.lastTouch;
   const scorer=ball.lastKicker;
   const wasLeader=leaderIdx();
+  // true underdog test: someone ranked STRICTLY above the scorer before this goal
+  const wasTrailing=(scorerTeam!==null)&&[0,1,2].some(o=>!out[o]&&o!==scorerTeam&&rankCmp(o,scorerTeam)<0);
   const legit=(scorerTeam!==null && scorerTeam!==concederTeam);
   conceded[concederTeam]++; score[concederTeam]--;
   if(legit){ score[scorerTeam]++; scored[scorerTeam]++; }
@@ -661,7 +663,7 @@ function goalScored(concederTeam){
       ?`${tm(concederTeam)} now ${conceded[concederTeam]} conceded`
       :`${tm(scorerTeam)} +1, ${tm(concederTeam)} −1`;
     say(`<span class="goal">⚽ GOOOAL!</span> ${name} beats ${keeper.name} — ${scoreline}!`,true);
-    if(momentumOn && scorerTeam!==wasLeader){
+    if(momentumOn && wasTrailing){
       boostUntil[scorerTeam]=clockSec+20;
       caughtFire=true;
       say(`${tm(scorerTeam)} catch fire! 🔥 The underdogs are flying for the next 20 seconds.`,true);
