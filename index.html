@@ -463,8 +463,9 @@ function think(dt){
     }
     // tackles (fatigue and momentum affect steal odds; radius sits just outside body contact)
     oppOf(owner.team).forEach(o=>{
-      let tc=0.045;
-      tc*=(0.55+0.45*o.stamina);
+      let tc=0.012;                          // ~4x rarer: contested carries last seconds, not frames
+      tc*=(0.55+0.45*o.stamina);             // fresh tacklers bite harder
+      tc*=(1.35-0.5*owner.stamina);          // gassed carriers are easier to rob
       if(momentumOn&&clockSec<boostUntil[o.team]) tc*=1.3;
       if(dist(o,owner)<27 && Math.random()<tc*dt*60){
         const victim=owner;
