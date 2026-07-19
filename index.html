@@ -229,7 +229,7 @@ const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
 // ---------- State ----------
 let matchLen=60;       // game-time seconds until full-time resolution (blitz default)
-let stats, goalsLog, notes=[], resumeAt=0;
+let stats, goalsLog, notes=[], resumeAt=0, goldenScorer=null;
 let players=[], ball, score, conceded, scored, targets, clockSec, running=true, speed=1;
 let phase="regulation", out=[false,false,false], otGolden=false, scoreMode="points";
 let coached=[false,false,false], coachTarget=[null,null,null], activeCoach=null;
@@ -257,7 +257,7 @@ function resetMatch(){
   phase="regulation"; out=[false,false,false]; otGolden=false;
   coached=[false,false,false]; coachTarget=[null,null,null]; activeCoach=null;
   stats={shots:[0,0,0],saves:[0,0,0],tackles:[0,0,0],poss:[0,0,0]};
-  goalsLog=[];
+  goalsLog=[]; goldenScorer=null;
   notes.forEach(n=>n.e.remove()); notes=[];
   pings.forEach(pg=>pg.e.remove()); pings=[];
   boostUntil=[0,0,0]; lastPossessTeam=null; lastPossessComment=-99; lastFatigueComment=0; lastColorComment=0;
@@ -642,6 +642,7 @@ function goalScored(concederTeam){
     if(otGolden || aliveTeams().length===2){
       // two left: this goal settles it
       const champ=legit?scorerTeam:aliveTeams().find(t=>t!==concederTeam);
+      if(legit&&scorer&&scorer.team===scorerTeam) goldenScorer=scorer;
       say(`<span class="goal">⚽ GOLDEN GOAL!</span> ${name??tm(champ)} settles it!`,true);
       crownChampion(champ, legit?`golden goal by ${name}`:`golden goal — own-goal heartbreak for ${TEAMS[concederTeam].name}`);
       return;
@@ -717,9 +718,13 @@ function crownChampion(t,how){
     g.own?`😱 ${mmss(g.t)} own goal — ${TEAMS[g.conceder].short}${g.ot?" (OT)":""}`
          :`⚽ ${mmss(g.t)} ${g.name} (${TEAMS[g.scorer].short}) v ${TEAMS[g.conceder].short}${g.ot?" (OT)":""}`
   ).join("<br>")+`</div>`:"";
-  // player of the match: goals 5, saves 3, tackles 1.5
+  // player of the match: goals x6 (golden goal +4), saves x2, tackles x1.5; champions get x1.4
   let potm=null,pv=-1;
-  players.forEach(pl=>{const v=pl.goals*5+pl.saves*3+pl.tackles*1.5; if(v>pv){pv=v;potm=pl;}});
+  players.forEach(pl=>{
+    let v=pl.goals*6+pl.saves*2+pl.tackles*1.5;
+    if(pl===goldenScorer)v+=4;
+    if(pl.team===t)v*=1.4;
+    if(v>pv){pv=v;potm=pl;}});
   const bits=[]; if(potm.goals)bits.push(`${potm.goals} goal${potm.goals>1?"s":""}`);
   if(potm.saves)bits.push(`${potm.saves} save${potm.saves>1?"s":""}`);
   if(potm.tackles)bits.push(`${potm.tackles} tackle${potm.tackles>1?"s":""}`);
