@@ -224,7 +224,7 @@ const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
 // ---------- State ----------
 let matchLen=300;      // game-time seconds until full-time resolution
-let stats, goalsLog, notes=[];
+let stats, goalsLog, notes=[], resumeAt=0;
 let players=[], ball, score, conceded, scored, targets, clockSec, running=true, speed=1;
 let phase="regulation", out=[false,false,false], otGolden=false, scoreMode="points";
 let coached=[false,false,false], coachTarget=[null,null,null], activeCoach=null;
@@ -274,6 +274,7 @@ function kickoff(toTeam){
   ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
   const fwd=players.find(p=>p.team===toTeam&&p.role==="F");
   fwd.x=CX-8; fwd.y=CY; ball.owner=fwd; ball.lastTouch=toTeam;
+  spawnNote(CX,CY-46,"kick-off!",TEAMS[toTeam].color);
 }
 
 // ---------- Diplomacy & ranking ----------
@@ -470,7 +471,7 @@ function think(dt){
         ball.owner=o; ball.lastTouch=o.team; ball.isShot=false;
         stats.tackles[o.team]++; o.tackles++;
         stam(o,+0.10); stam(victim,-0.12);
-        spawnNote(o.x,o.y-20,"tackle!","#fff");
+        spawnNote(o.x,o.y-20,"tackle!",TEAMS[o.team].color);
         if(o.role!=="K" && Math.random()<0.28) say(pick([
           `${o.name} muscles ${victim.name} off the ball!`,
           `Crunching challenge — ${o.name} strips it from ${victim.name}.`,
@@ -551,11 +552,11 @@ function physics(dt){
         if(best.team===kicker.team){
           // completed pass: small lift for both
           stam(kicker,+0.05); stam(best,+0.03);
-          if(Math.random()<0.22) spawnNote(best.x,best.y-20,"pass ✓","#cfe8cf");
+          if(Math.random()<0.22) spawnNote(best.x,best.y-20,"pass ✓",TEAMS[best.team].color);
         } else if(!wasShot){
           // interception: passer punished, thief energized
           stam(kicker,-0.08); stam(best,+0.06);
-          spawnNote(best.x,best.y-20,"intercepted!","#ffb547");
+          spawnNote(best.x,best.y-20,"intercepted!",TEAMS[best.team].color);
         }
       }
     }
@@ -1015,9 +1016,10 @@ function loop(now){
     if(now<celebrateUntil){
       updateBars();               // frozen frame while we celebrate
     } else {
-      if(pendingKickoff!==null){ hideCelebration(); kickoff(pendingKickoff); pendingKickoff=null; }
+      if(pendingKickoff!==null){ hideCelebration(); kickoff(pendingKickoff); pendingKickoff=null;
+        resumeAt=performance.now()+1200; }   // beat of stillness before play resumes
       if(phase==="regulation" && clockSec>=matchLen) resolveFullTime();
-      if(phase!=="over"){
+      if(phase!=="over" && now>=resumeAt){
         const step=dt*speed;
         clockSec+=step;
         retargetTimer+=step;
@@ -1084,7 +1086,7 @@ document.getElementById("btnStart").onclick=()=>{
   matchLen=parseInt(document.getElementById("setLen").value,10);
   momentumOn=document.getElementById("setMom").checked;
   setupEl.classList.remove("show");
-  camX=CX; camY=CY;
+  camX=CX; camY=CY; resumeAt=0;
   resetMatch(); updateBars(); draw();
   running=true;
   document.getElementById("btnPlay").textContent="Pause";
