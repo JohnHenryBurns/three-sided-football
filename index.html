@@ -162,7 +162,7 @@
   <div class="controls">
     <button id="btnPlay">Pause</button>
     <button id="btnReset">Reset</button>
-    <button id="btnZoom">Zoom 1×</button>
+    <button id="btnZoom">Zoom 2.3×</button>
     <label>Speed <input id="speed" type="range" min="0.5" max="3" step="0.25" value="1"><span id="speedVal">1×</span></label>
     <label><input id="voiceToggle" type="checkbox"> Narrator</label>
   </div>
@@ -1046,7 +1046,7 @@ function loop(now){
 }
 
 // ---------- Camera ----------
-let zoom=1, camX=CX, camY=CY;
+let zoom=2.3, camX=CX, camY=CY;
 const ZOOMS=[1,1.6,2.3,3.5];
 document.getElementById("btnZoom").onclick=e=>{
   const i=(ZOOMS.indexOf(zoom)+1)%ZOOMS.length;
