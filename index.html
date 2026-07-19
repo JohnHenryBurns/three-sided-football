@@ -188,9 +188,9 @@
     <option value="conceded">Classic — fewest conceded wins</option>
   </select></div>
   <div class="formrow"><label for="setLen">Match length</label><select id="setLen">
-    <option value="60">1 minute — blitz</option>
+    <option value="60" selected>1 minute — blitz</option>
     <option value="180">3 minutes</option>
-    <option value="300" selected>5 minutes</option>
+    <option value="300">5 minutes</option>
     <option value="600">10 minutes</option>
   </select></div>
   <div class="formrow chk"><label for="setMom">Underdog fire</label><input id="setMom" type="checkbox" checked></div>
@@ -228,7 +228,7 @@ const goalCenter=t=>{const e=EDGES[GOAL_EDGE[t]];return {x:e.mx,y:e.my};};
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
 // ---------- State ----------
-let matchLen=300;      // game-time seconds until full-time resolution
+let matchLen=60;       // game-time seconds until full-time resolution (blitz default)
 let stats, goalsLog, notes=[], resumeAt=0;
 let players=[], ball, score, conceded, scored, targets, clockSec, running=true, speed=1;
 let phase="regulation", out=[false,false,false], otGolden=false, scoreMode="points";
