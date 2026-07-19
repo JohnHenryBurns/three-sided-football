@@ -110,7 +110,7 @@
   .cele button{margin-top:.8rem;font-size:.9rem;border-color:var(--cele,var(--arg))}
   .cele{max-height:88vh;overflow-y:auto}
   .statsgrid{display:grid;grid-template-columns:auto repeat(4,minmax(2.6rem,auto));gap:.18rem .7rem;
-    font-size:.95rem;margin-top:.7rem;text-align:right;font-variant-numeric:tabular-nums}
+    font-size:.95rem;margin:.7rem auto 0;width:fit-content;text-align:right;font-variant-numeric:tabular-nums}
   .statsgrid .tn{text-align:left;font-weight:600}
   .statsgrid .hd{color:var(--ink-dim);font-size:.8rem;letter-spacing:.08em}
   .hl{font-size:.92rem;color:var(--ink-dim);margin-top:.55rem;line-height:1.6}
@@ -118,7 +118,7 @@
   .cele{background:var(--panel);border:3px solid var(--cele,#fff);border-radius:18px;
     padding:1.5rem 2.5rem;text-align:center;max-width:92vw;min-width:min(26rem,88vw);
     box-shadow:0 0 70px var(--cele,#fff);animation:pop .35s ease-out}
-  .cele .big{font-size:3.1rem;font-weight:600;color:#ffd166;letter-spacing:.08em;line-height:1.05}
+  .cele .big{font-size:clamp(1.9rem,8.5vw,3.1rem);font-weight:600;color:#ffd166;letter-spacing:.06em;line-height:1.05;overflow-wrap:break-word}
   .cele .who{font-size:2.1rem;margin-top:.3rem}
   .cele .who b{color:var(--cele)}
   .cele .sub{font-size:1.25rem;color:var(--ink-dim);margin-top:.45rem}
