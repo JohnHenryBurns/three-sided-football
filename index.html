@@ -97,20 +97,20 @@
   .formrow label{font-size:.8rem}
   .cele button{margin-top:.8rem;font-size:.9rem;border-color:var(--cele,var(--arg))}
   .cele{max-height:88vh;overflow-y:auto}
-  .statsgrid{display:grid;grid-template-columns:auto repeat(4,minmax(2.2rem,auto));gap:.12rem .55rem;
-    font-size:.78rem;margin-top:.55rem;text-align:right;font-variant-numeric:tabular-nums}
+  .statsgrid{display:grid;grid-template-columns:auto repeat(4,minmax(2.6rem,auto));gap:.18rem .7rem;
+    font-size:.95rem;margin-top:.7rem;text-align:right;font-variant-numeric:tabular-nums}
   .statsgrid .tn{text-align:left;font-weight:600}
-  .statsgrid .hd{color:var(--ink-dim);font-size:.68rem;letter-spacing:.08em}
-  .hl{font-size:.75rem;color:var(--ink-dim);margin-top:.45rem;line-height:1.55}
-  .potm{font-size:.85rem;color:#ffd166;margin-top:.45rem}
-  .cele{background:var(--panel);border:3px solid var(--cele,#fff);border-radius:16px;
-    padding:1.1rem 2rem;text-align:center;max-width:88vw;
-    box-shadow:0 0 60px var(--cele,#fff);animation:pop .35s ease-out}
-  .cele .big{font-size:2.4rem;font-weight:600;color:#ffd166;letter-spacing:.08em;line-height:1.05}
-  .cele .who{font-size:1.7rem;margin-top:.25rem}
+  .statsgrid .hd{color:var(--ink-dim);font-size:.8rem;letter-spacing:.08em}
+  .hl{font-size:.92rem;color:var(--ink-dim);margin-top:.55rem;line-height:1.6}
+  .potm{font-size:1.05rem;color:#ffd166;margin-top:.55rem}
+  .cele{background:var(--panel);border:3px solid var(--cele,#fff);border-radius:18px;
+    padding:1.5rem 2.5rem;text-align:center;max-width:92vw;min-width:min(26rem,88vw);
+    box-shadow:0 0 70px var(--cele,#fff);animation:pop .35s ease-out}
+  .cele .big{font-size:3.1rem;font-weight:600;color:#ffd166;letter-spacing:.08em;line-height:1.05}
+  .cele .who{font-size:2.1rem;margin-top:.3rem}
   .cele .who b{color:var(--cele)}
-  .cele .sub{font-size:1.05rem;color:var(--ink-dim);margin-top:.35rem}
-  .cele .fireline{font-size:1.05rem;color:#ffb547;margin-top:.3rem;min-height:1.2rem}
+  .cele .sub{font-size:1.25rem;color:var(--ink-dim);margin-top:.45rem}
+  .cele .fireline{font-size:1.2rem;color:#ffb547;margin-top:.35rem;min-height:1.35rem}
   @keyframes pop{from{transform:scale(.55);opacity:0}to{transform:scale(1);opacity:1}}
   .confetti{position:absolute;top:-8vh;width:.5rem;height:.85rem;border-radius:2px;opacity:.95;
     animation:fall 1.8s cubic-bezier(.3,.6,.6,1) forwards}
@@ -173,6 +173,7 @@
     <option value="conceded">Classic — fewest conceded wins</option>
   </select></div>
   <div class="formrow"><label for="setLen">Match length</label><select id="setLen">
+    <option value="60">1 minute — blitz</option>
     <option value="180">3 minutes</option>
     <option value="300" selected>5 minutes</option>
     <option value="600">10 minutes</option>
@@ -591,7 +592,7 @@ function showCelebration(color, big, whoHTML, subHTML, fireHTML){
     confettiBox.appendChild(c);
   }
   celeEl.classList.add("show");
-  celebrateUntil=performance.now()+3000;
+  celebrateUntil=performance.now()+4800;
 }
 function hideCelebration(){ celeEl.classList.remove("show"); confettiBox.innerHTML=""; celebrateUntil=0; }
 
@@ -1040,8 +1041,8 @@ document.getElementById("btnStart").onclick=()=>{
   running=true;
   document.getElementById("btnPlay").textContent="Pause";
   say(scoreMode==="conceded"
-    ?`Classic Jorn rules today — fewest conceded after ${matchLen/60} minutes takes it.`
-    :`±1 rules — ${matchLen/60} minutes on the clock, tiebreaks by goals scored, then golden-concession overtime.`,true);
+    ?`Classic Jorn rules today — fewest conceded after ${matchLen/60} minute${matchLen>=120?"s":""} takes it.`
+    :`±1 rules — ${matchLen/60} minute${matchLen>=120?"s":""} on the clock, tiebreaks by goals scored, then golden-concession overtime.`,true);
 };
 
 // ---------- Controls ----------
