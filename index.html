@@ -475,9 +475,14 @@ function think(dt){
       if(dist(o,owner)<27 && Math.random()<tc*dt*60){
         const victim=owner;
         ball.owner=o; ball.lastTouch=o.team; ball.isShot=false;
-        stats.tackles[o.team]++; o.tackles++;
+        if(o.role==="K"){
+          // keeper smothering a dribbler is goalkeeping, not a tackle — no tackle credit
+          spawnNote(o.x,o.y-20,"smothered!",TEAMS[o.team].color,TEAMS[o.team].accent);
+        } else {
+          stats.tackles[o.team]++; o.tackles++;
+          spawnNote(o.x,o.y-20,"tackle!",TEAMS[o.team].color,TEAMS[o.team].accent);
+        }
         stam(o,+0.10); stam(victim,-0.12);
-        spawnNote(o.x,o.y-20,"tackle!",TEAMS[o.team].color,TEAMS[o.team].accent);
         if(o.role!=="K" && Math.random()<0.28) say(pick([
           `${o.name} muscles ${victim.name} off the ball!`,
           `Crunching challenge — ${o.name} strips it from ${victim.name}.`,
