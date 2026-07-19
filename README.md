@@ -8,8 +8,7 @@ by Danish situationist philosopher Asger Jorn in the 1960s as an argument agains
 us-vs-them thinking. This version started as a backyard thought experiment with my son and
 escalated.
 
-**Play it:** open `index.html` in any browser (or enable GitHub Pages on this repo and it's
-live at your Pages URL). No build step, no dependencies — one self-contained file.
+**Play it:** open `index.html` in any browser or view the [Github page[(https://johnhenryburns.github.io/three-sided-football/). No build step, no dependencies — one self-contained file.
 
 ## The game
 
