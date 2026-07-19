@@ -202,11 +202,11 @@
 "use strict";
 // ---------- Teams & rosters (2026 WC squads) ----------
 const TEAMS=[
-  {name:"Spain", short:"ESP", color:"#e63946",
+  {name:"Spain", short:"ESP", color:"#e63946", accent:"#f7c948",
    roster:["Unai Simón","Laporte","Cucurella","Rodri","Lamine Yamal"]},
-  {name:"Argentina", short:"ARG", color:"#6fb7e3",
+  {name:"Argentina", short:"ARG", color:"#6fb7e3", accent:"#ffffff",
    roster:["Dibu Martínez","Romero","Tagliafico","Enzo Fernández","Messi"]},
-  {name:"England", short:"ENG", color:"#f2f2f2",
+  {name:"England", short:"ENG", color:"#f2f2f2", accent:"#cf1020",
    roster:["Pickford","Stones","Guéhi","Bellingham","Kane"]},
 ];
 const ROLES=["K","D","D","M","F"];
@@ -279,7 +279,7 @@ function kickoff(toTeam){
   ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
   const fwd=players.find(p=>p.team===toTeam&&p.role==="F");
   fwd.x=CX-8; fwd.y=CY; ball.owner=fwd; ball.lastTouch=toTeam;
-  spawnNote(CX,CY-46,"kick-off!",TEAMS[toTeam].color);
+  spawnNote(CX,CY-46,"kick-off!",TEAMS[toTeam].color,TEAMS[toTeam].accent);
 }
 
 // ---------- Diplomacy & ranking ----------
@@ -477,7 +477,7 @@ function think(dt){
         ball.owner=o; ball.lastTouch=o.team; ball.isShot=false;
         stats.tackles[o.team]++; o.tackles++;
         stam(o,+0.10); stam(victim,-0.12);
-        spawnNote(o.x,o.y-20,"tackle!",TEAMS[o.team].color);
+        spawnNote(o.x,o.y-20,"tackle!",TEAMS[o.team].color,TEAMS[o.team].accent);
         if(o.role!=="K" && Math.random()<0.28) say(pick([
           `${o.name} muscles ${victim.name} off the ball!`,
           `Crunching challenge — ${o.name} strips it from ${victim.name}.`,
@@ -558,11 +558,11 @@ function physics(dt){
         if(best.team===kicker.team){
           // completed pass: small lift for both
           stam(kicker,+0.05); stam(best,+0.03);
-          if(Math.random()<0.22) spawnNote(best.x,best.y-20,"pass ✓",TEAMS[best.team].color);
+          if(Math.random()<0.22) spawnNote(best.x,best.y-20,"pass ✓",TEAMS[best.team].color,TEAMS[best.team].accent);
         } else if(!wasShot){
           // interception: passer punished, thief energized
           stam(kicker,-0.08); stam(best,+0.06);
-          spawnNote(best.x,best.y-20,"intercepted!",TEAMS[best.team].color);
+          spawnNote(best.x,best.y-20,"intercepted!",TEAMS[best.team].color,TEAMS[best.team].accent);
         }
       }
     }
@@ -941,12 +941,12 @@ function buildActors(){
     "font-family":"inherit","paint-order":"stroke",stroke:"rgba(0,0,0,.65)","stroke-width":"4.5"});
 }
 let lastNoteAt={};
-function spawnNote(x,y,text,color){
+function spawnNote(x,y,text,color,stroke){
   const now=performance.now();
   if(lastNoteAt[text]&&now-lastNoteAt[text]<700)return;   // per-label throttle
   lastNoteAt[text]=now;
   const e=el("text",{x,y,fill:color||"#fff","font-size":"23","text-anchor":"middle",
-    "font-family":"inherit","font-weight":"600","paint-order":"stroke",stroke:"rgba(0,0,0,.65)","stroke-width":"4.5"});
+    "font-family":"inherit","font-weight":"600","paint-order":"stroke",stroke:stroke||"rgba(0,0,0,.65)","stroke-width":"4.5"});
   e.textContent=text;
   notes.push({e,t0:now,x,y});
 }
