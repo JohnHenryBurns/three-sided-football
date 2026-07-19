@@ -40,6 +40,14 @@
   select{font-family:inherit;font-size:.78rem;background:var(--panel);color:var(--ink);
     border:1px solid var(--panel-edge);border-radius:6px;padding:.2rem .3rem}
   .card.out{opacity:.45;filter:grayscale(.6)}
+  .card{cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .coachBtn{margin-left:.35rem;font-size:.68rem;padding:.12rem .4rem;min-height:auto;
+    border-radius:5px;background:rgba(0,0,0,.3);flex:none}
+  .card.coached .coachBtn{background:var(--team);color:#10150f;font-weight:700}
+  .card.activeC{animation:coachPulse 1.3s ease-in-out infinite}
+  @keyframes coachPulse{0%,100%{box-shadow:0 0 0 0 var(--team)}50%{box-shadow:0 0 13px 2px var(--team)}}
+  .hunt .ord{color:#ffd166}
+  @media (prefers-reduced-motion:reduce){ .card.activeC{animation:none;box-shadow:0 0 10px 1px var(--team)} }
 
   /* The pitch gets a guaranteed share of width; the SVG letterboxes itself inside it */
   .grid{
@@ -216,6 +224,7 @@ let matchLen=300;      // game-time seconds until full-time resolution
 let stats, goalsLog, notes=[];
 let players=[], ball, score, conceded, scored, targets, clockSec, running=true, speed=1;
 let phase="regulation", out=[false,false,false], otGolden=false, scoreMode="points";
+let coached=[false,false,false], coachTarget=[null,null,null], activeCoach=null;
 let boostUntil=[0,0,0], momentumOn=true;
 let lastPossessTeam=null, lastPossessComment=-99, lastFatigueComment=0, lastColorComment=0;
 const feedEl=document.getElementById("feed"), feed=[];
@@ -238,6 +247,7 @@ function pick(a){return a[Math.floor(Math.random()*a.length)];}
 function resetMatch(){
   players=[]; score=[0,0,0]; conceded=[0,0,0]; scored=[0,0,0]; clockSec=0; feed.length=0;
   phase="regulation"; out=[false,false,false]; otGolden=false;
+  coached=[false,false,false]; coachTarget=[null,null,null]; activeCoach=null;
   stats={shots:[0,0,0],saves:[0,0,0],tackles:[0,0,0],poss:[0,0,0]};
   goalsLog=[];
   notes.forEach(n=>n.e.remove()); notes=[];
@@ -275,12 +285,14 @@ function computeTargets(){
   targets=[];
   for(let t=0;t<3;t++){
     if(out[t]){ targets[t]=null; continue; }
+    if(coached[t]&&coachTarget[t]!==null&&out[coachTarget[t]]) coachTarget[t]=null; // order died with the team
+    if(coached[t]&&coachTarget[t]!==null){ targets[t]=coachTarget[t]; continue; }   // orders are orders
     const others=aliveTeams().filter(o=>o!==t);
     if(!others.length){ targets[t]=null; continue; }
     others.sort((a,b)=>(rating(b)-rating(a))||(conceded[a]-conceded[b]));
     targets[t]=others[0];
   }
-  if(old){ for(let t=0;t<3;t++) if(targets[t]!==null&&old[t]!==targets[t]&&old[t]!==undefined)
+  if(old){ for(let t=0;t<3;t++) if(targets[t]!==null&&old[t]!==targets[t]&&old[t]!==undefined&&!coached[t])
     say(pick([
       `Tactical switch — ${tm(t)} turn their guns on ${tm(targets[t])}!`,
       `The alliance shifts: ${tm(t)} now hunting ${tm(targets[t])}.`,
@@ -662,6 +674,7 @@ function goalScored(concederTeam){
 // ---------- Full time, elimination, and the crown ----------
 function eliminateTeam(t){
   out[t]=true;
+  coached[t]=false; coachTarget[t]=null; if(activeCoach===t)activeCoach=null;
   players.forEach(p=>{ if(p.team===t){ p.out=true; if(ball.owner===p) ball.owner=null; }});
   if(ball.lastKicker&&ball.lastKicker.out) ball.isShot=false;
 }
@@ -778,17 +791,23 @@ function renderScore(){
       ?`conceded · ${scored[t]} scored`
       :`${scored[t]} scored · ${conceded[t]} conceded`;
     const huntLine=out[t]?`<b style="color:var(--ink-dim)">eliminated</b>`
+      :coached[t]?(coachTarget[t]!==null
+        ?`<span class="ord">📋 orders: hunt <b>${TEAMS[coachTarget[t]].short}</b></span>`
+        :`<span class="ord">📋 awaiting orders — tap a rival</span>`)
       :(hunt!==null?`hunting <b>${TEAMS[hunt].short}</b>`:"—");
     const div=document.createElement("div");
-    div.className="card"+(boosted?" hot":"")+(out[t]?" out":""); div.id="card"+t;
+    div.className="card"+(boosted?" hot":"")+(out[t]?" out":"")
+      +(coached[t]?" coached":"")+(activeCoach===t?" activeC":""); div.id="card"+t;
     div.style.setProperty("--team",TEAMS[t].color);
     div.style.setProperty("--hunt-color", hunt!==null?TEAMS[hunt].color:"inherit");
     div.style.setProperty("--stam-color", sc);
-    div.innerHTML=`<div class="name"><span class="dot"></span>${TEAMS[t].name}<span class="flame">🔥</span></div>
+    div.innerHTML=`<div class="name"><span class="dot"></span>${TEAMS[t].name}<span class="flame">🔥</span><button class="coachBtn" title="coach this team">${coached[t]?"🎯 MGR":"🎯"}</button></div>
       <div class="row"><span class="pts">${big}</span>
       <span class="con">${sub}</span></div>
       <div class="hunt">${huntLine}</div>
       <div class="stambar"><i id="stam${t}" style="width:${(avg*100).toFixed(0)}%"></i></div>`;
+    div.querySelector(".coachBtn").onclick=ev=>{ev.stopPropagation();toggleCoach(t);};
+    div.onclick=()=>cardTap(t);
     sb.appendChild(div);
   }
 }
@@ -1021,6 +1040,30 @@ document.getElementById("btnZoom").onclick=e=>{
   else { camX=ball.x; camY=ball.y; }   // start on the action
   draw();                              // apply immediately, even while paused
 };
+
+// ---------- Tap-to-coach ----------
+function toggleCoach(t){
+  if(out[t])return;
+  coached[t]=!coached[t];
+  if(coached[t]){
+    activeCoach=t;
+    say(`🎯 A new manager takes the ${tm(t)} bench! Tap a rival's card to give the order.`,true);
+  } else {
+    coachTarget[t]=null;
+    if(activeCoach===t){ const n=coached.findIndex(c=>c); activeCoach=n>=0?n:null; }
+    say(`${tm(t)} return to AI control.`,true);
+  }
+  computeTargets();
+}
+function cardTap(t){
+  if(activeCoach!==null && t!==activeCoach && !out[t] && coached[activeCoach] && !out[activeCoach]){
+    coachTarget[activeCoach]=t;
+    say(`📋 Orders from the bench: ${tm(activeCoach)} will hunt ${tm(t)}!`,true);
+    computeTargets();
+  } else if(coached[t] && activeCoach!==t){
+    activeCoach=t; renderScore();
+  }
+}
 
 // ---------- Match setup dialog ----------
 const setupEl=document.getElementById("setup");
