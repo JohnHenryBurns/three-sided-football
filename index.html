@@ -86,8 +86,23 @@
 
   /* Goal celebration overlay */
   #celebrate{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
-    background:rgba(6,10,8,.6);z-index:50}
+    background:rgba(6,10,8,.6);z-index:50;pointer-events:none}
   #celebrate.show{display:flex}
+  #celebrate .cele{pointer-events:auto}
+  #setup{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(6,10,8,.75);z-index:60}
+  #setup.show{display:flex}
+  .setupCard{border-color:var(--arg)}
+  .formrow{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-top:.6rem;font-size:.9rem}
+  .formrow label{font-size:.8rem}
+  .cele button{margin-top:.8rem;font-size:.9rem;border-color:var(--cele,var(--arg))}
+  .cele{max-height:88vh;overflow-y:auto}
+  .statsgrid{display:grid;grid-template-columns:auto repeat(4,minmax(2.2rem,auto));gap:.12rem .55rem;
+    font-size:.78rem;margin-top:.55rem;text-align:right;font-variant-numeric:tabular-nums}
+  .statsgrid .tn{text-align:left;font-weight:600}
+  .statsgrid .hd{color:var(--ink-dim);font-size:.68rem;letter-spacing:.08em}
+  .hl{font-size:.75rem;color:var(--ink-dim);margin-top:.45rem;line-height:1.55}
+  .potm{font-size:.85rem;color:#ffd166;margin-top:.45rem}
   .cele{background:var(--panel);border:3px solid var(--cele,#fff);border-radius:16px;
     padding:1.1rem 2rem;text-align:center;max-width:88vw;
     box-shadow:0 0 60px var(--cele,#fff);animation:pop .35s ease-out}
@@ -134,12 +149,7 @@
     <button id="btnReset">Reset</button>
     <button id="btnZoom">Zoom 1×</button>
     <label>Speed <input id="speed" type="range" min="0.5" max="3" step="0.25" value="1"><span id="speedVal">1×</span></label>
-    <label><input id="momToggle" type="checkbox" checked> Underdog fire</label>
     <label><input id="voiceToggle" type="checkbox"> Narrator</label>
-    <label>Rules <select id="modeSel">
-      <option value="points">±1 points</option>
-      <option value="conceded">Concessions</option>
-    </select></label>
   </div>
 </header>
 
@@ -155,6 +165,21 @@
 </div>
 
 <div id="celebrate"><div id="confettiBox"></div><div class="cele" id="celeCard"></div></div>
+
+<div id="setup"><div class="cele setupCard">
+  <div class="big">⚽ MATCH SETUP</div>
+  <div class="formrow"><label for="setRules">Scoring</label><select id="setRules">
+    <option value="points">±1 points (scorer +1, conceder −1)</option>
+    <option value="conceded">Classic — fewest conceded wins</option>
+  </select></div>
+  <div class="formrow"><label for="setLen">Match length</label><select id="setLen">
+    <option value="180">3 minutes</option>
+    <option value="300" selected>5 minutes</option>
+    <option value="600">10 minutes</option>
+  </select></div>
+  <div class="formrow"><label for="setMom">Underdog fire</label><input id="setMom" type="checkbox" checked></div>
+  <button id="btnStart">Kick off</button>
+</div></div>
 
 <script>
 "use strict";
@@ -186,7 +211,8 @@ const goalCenter=t=>{const e=EDGES[GOAL_EDGE[t]];return {x:e.mx,y:e.my};};
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
 // ---------- State ----------
-const MATCH_LEN=300;   // 5:00 of game time, then full-time resolution
+let matchLen=300;      // game-time seconds until full-time resolution
+let stats, goalsLog, notes=[];
 let players=[], ball, score, conceded, scored, targets, clockSec, running=true, speed=1;
 let phase="regulation", out=[false,false,false], otGolden=false, scoreMode="points";
 let boostUntil=[0,0,0], momentumOn=true;
@@ -211,11 +237,15 @@ function pick(a){return a[Math.floor(Math.random()*a.length)];}
 function resetMatch(){
   players=[]; score=[0,0,0]; conceded=[0,0,0]; scored=[0,0,0]; clockSec=0; feed.length=0;
   phase="regulation"; out=[false,false,false]; otGolden=false;
+  stats={shots:[0,0,0],saves:[0,0,0],tackles:[0,0,0],poss:[0,0,0]};
+  goalsLog=[];
+  notes.forEach(n=>n.e.remove()); notes=[];
+  pings.forEach(pg=>pg.e.remove()); pings=[];
   boostUntil=[0,0,0]; lastPossessTeam=null; lastPossessComment=-99; lastFatigueComment=0; lastColorComment=0;
   for(let t=0;t<3;t++) formation(t).forEach((f,i)=>players.push(
     {team:t,role:f.role,name:TEAMS[t].roster[i],x:f.x,y:f.y,vx:0,vy:0,stamina:1,
      k1:0.64+Math.random()*0.10, k2:0.82+Math.random()*0.16,  // unique spring constants
-     hx:0,hy:0}));                                             // smoothed heading for ball carry
+     hx:0,hy:0, goals:0,tackles:0,saves:0}));                                             // smoothed heading for ball carry
   ball={x:CX,y:CY,vx:0,vy:0,owner:null,lastTouch:null,lastKicker:null,isShot:false,noClaim:null,noClaimF:0};
   computeTargets();
   const first=Math.floor(Math.random()*3);
@@ -272,6 +302,8 @@ function leaderIdx(){
   return best;
 }
 
+function stam(p,d){ p.stamina=Math.max(0,Math.min(1,p.stamina+d)); }
+
 // ---------- Helpers ----------
 function clampInside(p,margin){
   for(const e of EDGES){
@@ -294,7 +326,8 @@ function kick(tx,ty,power,isShot){
   ball.vx=dx/d*power; ball.vy=dy/d*power;
   ball.lastTouch=o.team; ball.lastKicker=o; ball.isShot=!!isShot;
   ball.noClaim=o; ball.noClaimF=14; ball.owner=null;
-  if(isShot&&typeof spawnPing==="function"&&ballHalo) spawnPing(ball.x,ball.y,TEAMS[o.team].color);
+  if(isShot){ stats.shots[o.team]++; spawnNote(ball.x,ball.y-18,"shot!","#ffd166");
+    if(typeof spawnPing==="function"&&ballHalo) spawnPing(ball.x,ball.y,TEAMS[o.team].color); }
 }
 
 // ---------- AI ----------
@@ -419,6 +452,9 @@ function think(dt){
       if(dist(o,owner)<27 && Math.random()<tc*dt*60){
         const victim=owner;
         ball.owner=o; ball.lastTouch=o.team; ball.isShot=false;
+        stats.tackles[o.team]++; o.tackles++;
+        stam(o,+0.10); stam(victim,-0.12);
+        spawnNote(o.x,o.y-20,"tackle!","#fff");
         if(o.role!=="K" && Math.random()<0.28) say(pick([
           `${o.name} muscles ${victim.name} off the ball!`,
           `Crunching challenge — ${o.name} strips it from ${victim.name}.`,
@@ -455,6 +491,7 @@ function physics(dt){
   }
   if(ball.owner){
     const o=ball.owner, v=Math.hypot(o.vx,o.vy);
+    stats.poss[o.team]+=S;
     if(v>0.1){ o.hx=o.hx*0.85+(o.vx/v)*0.15; o.hy=o.hy*0.85+(o.vy/v)*0.15; }
     const hl=Math.hypot(o.hx,o.hy)||1;
     ball.x=o.x+(o.hx/hl)*13; ball.y=o.y+(o.hy/hl)*13;
@@ -483,13 +520,27 @@ function physics(dt){
       const reach=p.role==="K"?17:13;
       if(d<reach&&d<bd){bd=d;best=p;}});
     if(best){
-      const wasShot=ball.isShot, spd=Math.hypot(ball.vx,ball.vy), shooter=ball.lastKicker;
+      const wasShot=ball.isShot, spd=Math.hypot(ball.vx,ball.vy), kicker=ball.lastKicker;
       ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
-      if(wasShot && best.role==="K" && shooter && best.team!==shooter.team && spd>5 && Math.random()<0.5){
-        say(pick([
-          `<span class="goal">SAVE!</span> ${best.name} denies ${shooter.name}!`,
-          `What a stop by ${best.name} — ${shooter.name} can't believe it!`,
-          `${shooter.name} lets fly... ${best.name} gets a strong hand to it!`]),true);
+      if(wasShot && best.role==="K" && kicker && best.team!==kicker.team && spd>5){
+        // a save: keeper glory, shooter deflation
+        stats.saves[best.team]++; best.saves++;
+        stam(best,+0.12); stam(kicker,-0.05);
+        spawnNote(best.x,best.y-20,"SAVE!","#ffd166");
+        if(Math.random()<0.5) say(pick([
+          `<span class="goal">SAVE!</span> ${best.name} denies ${kicker.name}!`,
+          `What a stop by ${best.name} — ${kicker.name} can't believe it!`,
+          `${kicker.name} lets fly... ${best.name} gets a strong hand to it!`]),true);
+      } else if(kicker && spd>2.2 && best!==kicker){
+        if(best.team===kicker.team){
+          // completed pass: small lift for both
+          stam(kicker,+0.05); stam(best,+0.03);
+          if(Math.random()<0.22) spawnNote(best.x,best.y-20,"pass ✓","#cfe8cf");
+        } else if(!wasShot){
+          // interception: passer punished, thief energized
+          stam(kicker,-0.08); stam(best,+0.06);
+          spawnNote(best.x,best.y-20,"intercepted!","#ffb547");
+        }
       }
     }
   }
@@ -553,6 +604,8 @@ function goalScored(concederTeam){
   if(legit){ score[scorerTeam]++; scored[scorerTeam]++; }
   const keeper=players.find(p=>p.team===concederTeam&&p.role==="K");
   const name=legit?((scorer&&scorer.team===scorerTeam)?scorer.name:TEAMS[scorerTeam].name):null;
+  if(legit&&scorer&&scorer.team===scorerTeam){ scorer.goals++; stam(scorer,+0.2); }
+  goalsLog.push({t:clockSec,name:name||TEAMS[concederTeam].name,scorer:legit?scorerTeam:null,conceder:concederTeam,own:!legit,ot:phase==="overtime"});
 
   // ---- overtime rules: concede and you're out; golden goal decides it ----
   if(phase==="overtime"){
@@ -615,14 +668,48 @@ function crownChampion(t,how){
   phase="over";
   const order=[0,1,2].sort(rankCmp);
   const line=m=>scoreMode==="conceded"
-    ?`${TEAMS[m].short} ${conceded[m]} conceded`
+    ?`${TEAMS[m].short} ${conceded[m]}`
     :`${TEAMS[m].short} ${score[m]>0?"+":""}${score[m]}`;
   say(`<span class="goal">🏆 ${tm(t)} ARE CHAMPIONS OF THE HEX!</span>`,true);
-  showCelebration(TEAMS[t].color,"🏆 CHAMPIONS!",
-    `${tm(t)} take the title`,
-    `${order.map(line).join(" · ")}${how?" — "+how:""}`,
-    `Hit Reset for a rematch`);
+  // stats table
+  const totPoss=stats.poss.reduce((a,b)=>a+b,0)||1;
+  let grid=`<div class="statsgrid"><span class="tn hd"></span><span class="hd">G</span><span class="hd">Sv</span><span class="hd">Tk</span><span class="hd">Poss</span>`;
+  for(const m of order){
+    grid+=`<span class="tn" style="color:${TEAMS[m].color}">${TEAMS[m].short}</span>`+
+      `<span>${scored[m]}</span><span>${stats.saves[m]}</span><span>${stats.tackles[m]}</span>`+
+      `<span>${Math.round(100*stats.poss[m]/totPoss)}%</span>`;
+  }
+  grid+=`</div>`;
+  // highlights: every goal, in order
+  const mmss=x=>`${String(Math.floor(x/60)).padStart(2,"0")}:${String(Math.floor(x%60)).padStart(2,"0")}`;
+  const hl=goalsLog.length?`<div class="hl">`+goalsLog.map(g=>
+    g.own?`😱 ${mmss(g.t)} own goal — ${TEAMS[g.conceder].short}${g.ot?" (OT)":""}`
+         :`⚽ ${mmss(g.t)} ${g.name} (${TEAMS[g.scorer].short}) v ${TEAMS[g.conceder].short}${g.ot?" (OT)":""}`
+  ).join("<br>")+`</div>`:"";
+  // player of the match: goals 5, saves 3, tackles 1.5
+  let potm=null,pv=-1;
+  players.forEach(pl=>{const v=pl.goals*5+pl.saves*3+pl.tackles*1.5; if(v>pv){pv=v;potm=pl;}});
+  const bits=[]; if(potm.goals)bits.push(`${potm.goals} goal${potm.goals>1?"s":""}`);
+  if(potm.saves)bits.push(`${potm.saves} save${potm.saves>1?"s":""}`);
+  if(potm.tackles)bits.push(`${potm.tackles} tackle${potm.tackles>1?"s":""}`);
+  const potmLine=pv>0?`<div class="potm">⭐ Player of the Match: ${potm.name} (${TEAMS[potm.team].short}) — ${bits.join(", ")}</div>`:"";
+  celeCard.style.setProperty("--cele",TEAMS[t].color);
+  celeCard.innerHTML=`<div class="big">🏆 CHAMPIONS!</div>
+    <div class="who">${tm(t)} take the title</div>
+    <div class="sub">${order.map(line).join(" · ")}${how?" — "+how:""}</div>
+    ${grid}${hl}${potmLine}
+    <button id="btnRematch">Rematch</button>`;
+  confettiBox.innerHTML="";
+  const palette=[TEAMS[t].color,"#ffd166","#ffffff"];
+  for(let i=0;i<28;i++){
+    const c=document.createElement("span"); c.className="confetti";
+    c.style.left=(Math.random()*100)+"%"; c.style.background=palette[i%3];
+    c.style.animationDelay=(Math.random()*0.6)+"s";
+    confettiBox.appendChild(c);
+  }
+  celeEl.classList.add("show");
   celebrateUntil=Infinity; pendingKickoff=null;
+  document.getElementById("btnRematch").onclick=()=>{ hideCelebration(); showSetup(); };
 }
 function resolveFullTime(){
   // rank by mode metric, tiebreak on goals scored (FIFA-style)
@@ -821,6 +908,16 @@ function buildActors(){
   ownerLabel=el("text",{fill:"#fff","font-size":"28","text-anchor":"middle",
     "font-family":"inherit","paint-order":"stroke",stroke:"rgba(0,0,0,.65)","stroke-width":"4.5"});
 }
+let lastNoteAt={};
+function spawnNote(x,y,text,color){
+  const now=performance.now();
+  if(lastNoteAt[text]&&now-lastNoteAt[text]<450)return;   // per-label throttle
+  lastNoteAt[text]=now;
+  const e=el("text",{x,y,fill:color||"#fff","font-size":"17","text-anchor":"middle",
+    "font-family":"inherit","paint-order":"stroke",stroke:"rgba(0,0,0,.6)","stroke-width":"3.5"});
+  e.textContent=text;
+  notes.push({e,t0:now,x,y});
+}
 function spawnPing(x,y,color){
   pings.push({e:el("circle",{cx:x,cy:y,r:10,fill:"none",stroke:color||"#fff","stroke-width":3}),t0:performance.now()});
 }
@@ -854,6 +951,13 @@ function draw(){
     ballHalo.setAttribute("stroke",TEAMS[ball.owner.team].color);
     ballHalo.setAttribute("opacity",0.9);
   } else ballHalo.setAttribute("opacity",0);
+  // floating event annotations
+  for(let i=notes.length-1;i>=0;i--){
+    const n=notes[i], age=(nowMs-n.t0)/1100;
+    if(age>=1){ n.e.remove(); notes.splice(i,1); continue; }
+    n.e.setAttribute("y",(n.y-24*age).toFixed(1));
+    n.e.setAttribute("opacity",(0.95*(1-age)).toFixed(2));
+  }
   // expanding kick pings
   for(let i=pings.length-1;i>=0;i--){
     const pg=pings[i], age=(nowMs-pg.t0)/450;
@@ -887,7 +991,7 @@ function loop(now){
       updateBars();               // frozen frame while we celebrate
     } else {
       if(pendingKickoff!==null){ hideCelebration(); kickoff(pendingKickoff); pendingKickoff=null; }
-      if(phase==="regulation" && clockSec>=MATCH_LEN) resolveFullTime();
+      if(phase==="regulation" && clockSec>=matchLen) resolveFullTime();
       if(phase!=="over"){
         const step=dt*speed;
         clockSec+=step;
@@ -896,7 +1000,7 @@ function loop(now){
         think(step); physics(step); colorCommentary();
       }
       const mm=String(Math.floor(clockSec/60)).padStart(2,"0"), ss=String(Math.floor(clockSec%60)).padStart(2,"0");
-      const tot=String(Math.floor(MATCH_LEN/60)).padStart(2,"0")+":00";
+      const tot=String(Math.floor(matchLen/60)).padStart(2,"0")+":00";
       document.getElementById("clock").textContent=
         phase==="overtime"?`OT ${mm}:${ss}`:phase==="over"?"FT":`${mm}:${ss} / ${tot}`;
       updateBars(); draw();
@@ -917,18 +1021,37 @@ document.getElementById("btnZoom").onclick=e=>{
   draw();                              // apply immediately, even while paused
 };
 
+// ---------- Match setup dialog ----------
+const setupEl=document.getElementById("setup");
+function showSetup(){
+  running=false;
+  if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; }
+  hideCelebration(); pendingKickoff=null;
+  document.getElementById("btnPlay").textContent="Play";
+  setupEl.classList.add("show");
+}
+document.getElementById("btnStart").onclick=()=>{
+  scoreMode=document.getElementById("setRules").value;
+  matchLen=parseInt(document.getElementById("setLen").value,10);
+  momentumOn=document.getElementById("setMom").checked;
+  setupEl.classList.remove("show");
+  camX=CX; camY=CY;
+  resetMatch(); updateBars(); draw();
+  running=true;
+  document.getElementById("btnPlay").textContent="Pause";
+  say(scoreMode==="conceded"
+    ?`Classic Jorn rules today — fewest conceded after ${matchLen/60} minutes takes it.`
+    :`±1 rules — ${matchLen/60} minutes on the clock, tiebreaks by goals scored, then golden-concession overtime.`,true);
+};
+
 // ---------- Controls ----------
 document.getElementById("btnPlay").onclick=e=>{
   running=!running; e.target.textContent=running?"Pause":"Play";
 };
-document.getElementById("btnReset").onclick=()=>{ if(speechOK)speechSynthesis.cancel(); queuedUtter=0; hideCelebration(); pendingKickoff=null; camX=CX; camY=CY; resetMatch(); updateBars(); draw(); };
+document.getElementById("btnReset").onclick=()=>{ showSetup(); };
 const spd=document.getElementById("speed");
 spd.oninput=()=>{ speed=parseFloat(spd.value);
   document.getElementById("speedVal").textContent=speed+"×"; };
-document.getElementById("momToggle").onchange=e=>{
-  momentumOn=e.target.checked;
-  say(momentumOn?"Underdog fire is ON — score while trailing and your team gets a 20-second burst.":"Underdog fire is OFF.",true);
-};
 const vt=document.getElementById("voiceToggle");
 if(!speechOK){ vt.disabled=true; vt.parentElement.title="Speech not supported in this browser"; }
 vt.onchange=e=>{
@@ -937,19 +1060,12 @@ vt.onchange=e=>{
   else if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; }
 };
 
-document.getElementById("modeSel").onchange=e=>{
-  scoreMode=e.target.value;
-  computeTargets();
-  say(scoreMode==="conceded"
-    ?"Classic Jorn rules: fewest goals conceded wins. Defence is everything."
-    :"±1 rules: every goal is a two-point swing between scorer and conceder.",true);
-};
-
 // ---------- Go ----------
 buildPitch();
 resetMatch();
 buildActors();
 draw();
+showSetup();
 requestAnimationFrame(loop);
 </script>
 </body>
