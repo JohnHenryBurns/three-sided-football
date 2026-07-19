@@ -1008,7 +1008,8 @@ function draw(){
   // broadcast camera: pan with the ball when zoomed
   if(zoom>1){
     const tx=ball.x+ball.vx*8, ty=ball.y+ball.vy*8;   // look ahead of play
-    camX+=(tx-camX)*0.08; camY+=(ty-camY)*0.08;       // smooth chase, no snapping
+    const chase=zoom>=3?0.15:0.08;                     // tighter frame needs a faster camera op
+    camX+=(tx-camX)*chase; camY+=(ty-camY)*chase;
     const vw=900/zoom, vh=810/zoom;
     const cx=Math.max(vw/2,Math.min(900-vw/2,camX));
     const cy=Math.max(vh/2,Math.min(810-vh/2,camY));
@@ -1046,7 +1047,7 @@ function loop(now){
 
 // ---------- Camera ----------
 let zoom=1, camX=CX, camY=CY;
-const ZOOMS=[1,1.6,2.3];
+const ZOOMS=[1,1.6,2.3,3.5];
 document.getElementById("btnZoom").onclick=e=>{
   const i=(ZOOMS.indexOf(zoom)+1)%ZOOMS.length;
   zoom=ZOOMS[i];
