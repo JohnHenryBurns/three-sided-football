@@ -102,6 +102,9 @@
     background:rgba(6,10,8,.75);z-index:60}
   #setup.show{display:flex}
   .setupCard{border-color:var(--arg);min-width:min(22rem,90vw)}
+  .ghlink{display:block;margin-top:.8rem;font-size:.72rem;color:var(--ink-dim);
+    text-decoration:none;letter-spacing:.08em;text-transform:uppercase}
+  .ghlink:hover{color:var(--ink);text-decoration:underline}
   .setupCard .big{font-size:2rem}
   .formrow{display:flex;flex-direction:column;align-items:stretch;gap:.3rem;margin-top:.9rem;font-size:.95rem;text-align:left}
   .formrow label{font-size:.78rem;color:var(--ink-dim);letter-spacing:.08em}
@@ -191,6 +194,7 @@
   </select></div>
   <div class="formrow chk"><label for="setMom">Underdog fire</label><input id="setMom" type="checkbox" checked></div>
   <button id="btnStart">Kick off</button>
+  <a class="ghlink" href="https://github.com/JohnHenryBurns/three-sided-football" target="_blank" rel="noopener">⚙ view on GitHub</a>
 </div></div>
 
 <script>
