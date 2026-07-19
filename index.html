@@ -37,6 +37,9 @@
   label{font-size:.75rem;color:var(--ink-dim);letter-spacing:.05em;text-transform:uppercase;display:flex;align-items:center;gap:.3rem;white-space:nowrap}
   input[type=range]{accent-color:var(--arg);width:4.5rem;height:1.4rem}
   input[type=checkbox]{accent-color:var(--esp);width:1rem;height:1rem}
+  select{font-family:inherit;font-size:.78rem;background:var(--panel);color:var(--ink);
+    border:1px solid var(--panel-edge);border-radius:6px;padding:.2rem .3rem}
+  .card.out{opacity:.45;filter:grayscale(.6)}
 
   /* The pitch gets a guaranteed share of width; the SVG letterboxes itself inside it */
   .grid{
@@ -133,6 +136,10 @@
     <label>Speed <input id="speed" type="range" min="0.5" max="3" step="0.25" value="1"><span id="speedVal">1×</span></label>
     <label><input id="momToggle" type="checkbox" checked> Underdog fire</label>
     <label><input id="voiceToggle" type="checkbox"> Narrator</label>
+    <label>Rules <select id="modeSel">
+      <option value="points">±1 points</option>
+      <option value="conceded">Concessions</option>
+    </select></label>
   </div>
 </header>
 
@@ -179,7 +186,9 @@ const goalCenter=t=>{const e=EDGES[GOAL_EDGE[t]];return {x:e.mx,y:e.my};};
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
 // ---------- State ----------
-let players=[], ball, score, conceded, targets, clockSec, running=true, speed=1;
+const MATCH_LEN=300;   // 5:00 of game time, then full-time resolution
+let players=[], ball, score, conceded, scored, targets, clockSec, running=true, speed=1;
+let phase="regulation", out=[false,false,false], otGolden=false, scoreMode="points";
 let boostUntil=[0,0,0], momentumOn=true;
 let lastPossessTeam=null, lastPossessComment=-99, lastFatigueComment=0, lastColorComment=0;
 const feedEl=document.getElementById("feed"), feed=[];
@@ -200,7 +209,8 @@ function tm(t){return `<span class="tm" style="color:${TEAMS[t].color}">${TEAMS[
 function pick(a){return a[Math.floor(Math.random()*a.length)];}
 
 function resetMatch(){
-  players=[]; score=[0,0,0]; conceded=[0,0,0]; clockSec=0; feed.length=0;
+  players=[]; score=[0,0,0]; conceded=[0,0,0]; scored=[0,0,0]; clockSec=0; feed.length=0;
+  phase="regulation"; out=[false,false,false]; otGolden=false;
   boostUntil=[0,0,0]; lastPossessTeam=null; lastPossessComment=-99; lastFatigueComment=0; lastColorComment=0;
   for(let t=0;t<3;t++) formation(t).forEach((f,i)=>players.push(
     {team:t,role:f.role,name:TEAMS[t].roster[i],x:f.x,y:f.y,vx:0,vy:0,stamina:1,
@@ -222,16 +232,24 @@ function kickoff(toTeam){
   fwd.x=CX-8; fwd.y=CY; ball.owner=fwd; ball.lastTouch=toTeam;
 }
 
-// ---------- Diplomacy (hunt the leader — tournament-tested) ----------
+// ---------- Diplomacy & ranking ----------
+// rating: higher = doing better, under either scoring mode
+function rating(t){ return scoreMode==="conceded" ? -conceded[t] : score[t]; }
+// full ranking: rating first, then FIFA-style tiebreak on goals scored
+function rankCmp(a,b){ return (rating(b)-rating(a)) || (scored[b]-scored[a]); }
+function aliveTeams(){ return [0,1,2].filter(t=>!out[t]); }
+
 function computeTargets(){
   const old=targets?targets.slice():null;
   targets=[];
   for(let t=0;t<3;t++){
-    const others=[0,1,2].filter(o=>o!==t);
-    others.sort((a,b)=>(score[b]-score[a])||(conceded[a]-conceded[b]));
+    if(out[t]){ targets[t]=null; continue; }
+    const others=aliveTeams().filter(o=>o!==t);
+    if(!others.length){ targets[t]=null; continue; }
+    others.sort((a,b)=>(rating(b)-rating(a))||(conceded[a]-conceded[b]));
     targets[t]=others[0];
   }
-  if(old){ for(let t=0;t<3;t++) if(old[t]!==targets[t])
+  if(old){ for(let t=0;t<3;t++) if(targets[t]!==null&&old[t]!==targets[t]&&old[t]!==undefined)
     say(pick([
       `Tactical switch — ${tm(t)} turn their guns on ${tm(targets[t])}!`,
       `The alliance shifts: ${tm(t)} now hunting ${tm(targets[t])}.`,
@@ -248,8 +266,9 @@ function speedMult(p){
   return m;
 }
 function leaderIdx(){
-  let best=0;
-  for(let t=1;t<3;t++)if(score[t]>score[best]||(score[t]===score[best]&&conceded[t]<conceded[best]))best=t;
+  const alive=aliveTeams();
+  let best=alive[0]??0;
+  for(const t of alive) if(rankCmp(t,best)<0) best=t;
   return best;
 }
 
@@ -281,14 +300,15 @@ function kick(tx,ty,power,isShot){
 // ---------- AI ----------
 function think(dt){
   const owner=ball.owner;
-  const oppOf=t=>players.filter(p=>p.team!==t);
+  const oppOf=t=>players.filter(p=>p.team!==t&&!p.out);
   const chaser=[];
   for(let t=0;t<3;t++){
     let best=null,bd=1e9;
-    players.forEach(p=>{ if(p.team===t&&p.role!=="K"){const d=dist(p,ball); if(d<bd){bd=d;best=p;}}});
+    players.forEach(p=>{ if(p.team===t&&p.role!=="K"&&!p.out){const d=dist(p,ball); if(d<bd){bd=d;best=p;}}});
     chaser[t]=best;
   }
   players.forEach(p=>{
+    if(p.out||targets[p.team]===null)return;
     const own=goalCenter(p.team), tgt=goalCenter(targets[p.team]);
     if(p===owner){
       let near=null,nd=1e9;
@@ -331,7 +351,9 @@ function think(dt){
   // separation (gentler, timestep-scaled)
   const sepS=Math.min(1,dt*60);
   for(let i=0;i<players.length;i++)for(let j=i+1;j<players.length;j++){
-    const a=players[i],b=players[j],d=dist(a,b);
+    const a=players[i],b=players[j];
+    if(a.out||b.out)continue;
+    const d=dist(a,b);
     if(d<26&&d>0.01){const push=(26-d)/26*0.45*sepS, dx=(a.x-b.x)/d, dy=(a.y-b.y)/d;
       a.vx+=dx*push;a.vy+=dy*push;b.vx-=dx*push;b.vy-=dy*push;}
   }
@@ -340,7 +362,7 @@ function think(dt){
     if(owner.role==="K"){
       const og=goalCenter(owner.team);
       let best=null,bd=1e9;
-      players.forEach(m=>{ if(m.team===owner.team&&(m.role==="M"||m.role==="F")){
+      players.forEach(m=>{ if(m.team===owner.team&&!m.out&&(m.role==="M"||m.role==="F")){
         const d=dist(m,owner); if(d<bd){bd=d;best=m;}}});
       if(best){
         let tx=best.x+best.vx*10, ty=best.y+best.vy*10;
@@ -375,7 +397,7 @@ function think(dt){
     if(pressure<48 && Math.random()<0.10*dt*60){
       let best=null,bs=-1e9;
       players.forEach(m=>{
-        if(m.team!==owner.team||m===owner||m.role==="K")return;
+        if(m.team!==owner.team||m===owner||m.role==="K"||m.out)return;
         const d=dist(m,owner); if(d<60||d>270)return;
         const gain=dist(owner,tgt)-dist(m,tgt);
         let laneOk=true;
@@ -410,6 +432,7 @@ function think(dt){
 function physics(dt){
   const S=dt*60;
   players.forEach(p=>{
+    if(p.out)return;
     p.x+=p.vx*S; p.y+=p.vy*S; clampInside(p, p.role==="K"?12:14);
     const v=Math.hypot(p.vx,p.vy), effort=v/2.35;
     p.stamina-=effort*effort*0.0012*S;
@@ -421,6 +444,7 @@ function physics(dt){
   for(let pass=0;pass<2;pass++){
     for(let i=0;i<players.length;i++)for(let j=i+1;j<players.length;j++){
       const a=players[i],b=players[j];
+      if(a.out||b.out)continue;
       const dx=a.x-b.x, dy=a.y-b.y, d=Math.hypot(dx,dy);
       if(d<BODY&&d>0.01){
         const push=(BODY-d)/2, ux=dx/d, uy=dy/d;
@@ -451,7 +475,7 @@ function physics(dt){
     ball.vx*=Math.pow(0.985,S); ball.vy*=Math.pow(0.985,S);
     if(ball.noClaimF>0) ball.noClaimF-=S; else ball.noClaim=null;
     let best=null,bd=1e9;
-    players.forEach(p=>{ if(p===ball.noClaim&&ball.noClaimF>0)return;
+    players.forEach(p=>{ if(p.out)return; if(p===ball.noClaim&&ball.noClaimF>0)return;
       const sx=ball.x-px0, sy=ball.y-py0, sl=sx*sx+sy*sy;
       let t=sl>0?((p.x-px0)*sx+(p.y-py0)*sy)/sl:0;
       t=Math.max(0,Math.min(1,t));
@@ -475,7 +499,8 @@ function physics(dt){
     const d=(ball.x-e.p1.x)*e.nx+(ball.y-e.p1.y)*e.ny;
     if(d<7){
       const along=(ball.x-e.mx)*e.ux+(ball.y-e.my)*e.uy;
-      const inMouth=e.goal && Math.abs(along)<e.len*GOAL_HALF;
+      const gTeam=e.goal?GOAL_EDGE.indexOf(k):-1;
+      const inMouth=e.goal && !out[gTeam] && Math.abs(along)<e.len*GOAL_HALF;
       if(inMouth){
         if(d<-6){ goalScored(GOAL_EDGE.indexOf(k)); return; }
       } else {
@@ -523,32 +548,100 @@ function goalScored(concederTeam){
   const scorerTeam=ball.lastTouch;
   const scorer=ball.lastKicker;
   const wasLeader=leaderIdx();
+  const legit=(scorerTeam!==null && scorerTeam!==concederTeam);
   conceded[concederTeam]++; score[concederTeam]--;
+  if(legit){ score[scorerTeam]++; scored[scorerTeam]++; }
   const keeper=players.find(p=>p.team===concederTeam&&p.role==="K");
+  const name=legit?((scorer&&scorer.team===scorerTeam)?scorer.name:TEAMS[scorerTeam].name):null;
+
+  // ---- overtime rules: concede and you're out; golden goal decides it ----
+  if(phase==="overtime"){
+    if(otGolden || aliveTeams().length===2){
+      // two left: this goal settles it
+      const champ=legit?scorerTeam:aliveTeams().find(t=>t!==concederTeam);
+      say(`<span class="goal">⚽ GOLDEN GOAL!</span> ${name??tm(champ)} settles it!`,true);
+      crownChampion(champ, legit?`golden goal by ${name}`:`golden goal — own-goal heartbreak for ${TEAMS[concederTeam].name}`);
+      return;
+    }
+    // three left: the conceder is eliminated, survivors play golden goal
+    say(`<span class="goal">💀 ELIMINATED!</span> ${tm(concederTeam)} concede in overtime and they're OUT!`,true);
+    eliminateTeam(concederTeam);
+    otGolden=true;
+    const survivors=aliveTeams();
+    showCelebration(TEAMS[concederTeam].color,"💀 ELIMINATED!",
+      `${tm(concederTeam)} are out`,
+      `${legit?name+" delivers the killing blow":"an own goal ends it"} — ${tm(survivors[0])} v ${tm(survivors[1])}, next goal wins`,"");
+    say(`Golden goal! ${tm(survivors[0])} against ${tm(survivors[1])} — next goal takes the title!`,true);
+    computeTargets();
+    flash(concederTeam);
+    pendingKickoff=survivors[Math.floor(Math.random()*2)];
+    return;
+  }
+
+  // ---- regulation ----
   let caughtFire=false;
-  if(scorerTeam!==null && scorerTeam!==concederTeam){
-    score[scorerTeam]++;
-    const name=(scorer&&scorer.team===scorerTeam)?scorer.name:TEAMS[scorerTeam].name;
-    say(`<span class="goal">⚽ GOOOAL!</span> ${name} beats ${keeper.name} — ${tm(scorerTeam)} +1, ${tm(concederTeam)} −1!`,true);
+  if(legit){
+    const scoreline=scoreMode==="conceded"
+      ?`${tm(concederTeam)} now ${conceded[concederTeam]} conceded`
+      :`${tm(scorerTeam)} +1, ${tm(concederTeam)} −1`;
+    say(`<span class="goal">⚽ GOOOAL!</span> ${name} beats ${keeper.name} — ${scoreline}!`,true);
     if(momentumOn && scorerTeam!==wasLeader){
       boostUntil[scorerTeam]=clockSec+20;
       caughtFire=true;
       say(`${tm(scorerTeam)} catch fire! 🔥 The underdogs are flying for the next 20 seconds.`,true);
     }
     showCelebration(TEAMS[scorerTeam].color, "⚽ GOOOAL!",
-      `<b>${name}</b> — ${tm(scorerTeam)} +1`,
-      `beats ${keeper.name} · ${tm(concederTeam)} −1 (${conceded[concederTeam]} conceded)`,
+      `<b>${name}</b> — ${tm(scorerTeam)}`,
+      `beats ${keeper.name} · ${tm(concederTeam)} concede (${conceded[concederTeam]})`,
       caughtFire?`🔥 ${TEAMS[scorerTeam].name} catch fire — 20s boost!`:"");
   } else {
-    say(`<span class="goal">⚽ Own goal!</span> Chaos in the box and ${tm(concederTeam)} put it in their own net. −1.`,true);
+    say(`<span class="goal">⚽ Own goal!</span> Chaos in the box and ${tm(concederTeam)} put it in their own net.`,true);
     showCelebration(TEAMS[concederTeam].color, "😱 OWN GOAL!",
-      `${tm(concederTeam)} −1`,
+      `${tm(concederTeam)} concede`,
       `chaos in the box — it's in their own net (${conceded[concederTeam]} conceded)`, "");
   }
-  const scored=(scorerTeam!==null&&scorerTeam!==concederTeam)?scorerTeam:null;
   computeTargets();
-  flash(concederTeam); if(scored!==null) flash(scored);
+  flash(concederTeam); if(legit) flash(scorerTeam);
   pendingKickoff=concederTeam;   // kickoff happens after the celebration clears
+}
+
+// ---------- Full time, elimination, and the crown ----------
+function eliminateTeam(t){
+  out[t]=true;
+  players.forEach(p=>{ if(p.team===t){ p.out=true; if(ball.owner===p) ball.owner=null; }});
+  if(ball.lastKicker&&ball.lastKicker.out) ball.isShot=false;
+}
+function crownChampion(t,how){
+  phase="over";
+  const order=[0,1,2].sort(rankCmp);
+  const line=m=>scoreMode==="conceded"
+    ?`${TEAMS[m].short} ${conceded[m]} conceded`
+    :`${TEAMS[m].short} ${score[m]>0?"+":""}${score[m]}`;
+  say(`<span class="goal">🏆 ${tm(t)} ARE CHAMPIONS OF THE HEX!</span>`,true);
+  showCelebration(TEAMS[t].color,"🏆 CHAMPIONS!",
+    `${tm(t)} take the title`,
+    `${order.map(line).join(" · ")}${how?" — "+how:""}`,
+    `Hit Reset for a rematch`);
+  celebrateUntil=Infinity; pendingKickoff=null;
+}
+function resolveFullTime(){
+  // rank by mode metric, tiebreak on goals scored (FIFA-style)
+  const order=[0,1,2].sort(rankCmp);
+  const leaders=[0,1,2].filter(t=>rankCmp(t,order[0])===0);
+  if(leaders.length===1){ crownChampion(order[0],"at full time"); return; }
+  // dead level at the top: golden-concession overtime
+  phase="overtime";
+  [0,1,2].filter(t=>!leaders.includes(t)).forEach(t=>{
+    say(`Full time — ${tm(t)} are eliminated on the tiebreak.`,true);
+    eliminateTeam(t);
+  });
+  otGolden=(aliveTeams().length===2);
+  if(otGolden)
+    say(`<span class="goal">FULL TIME — dead level!</span> ${tm(leaders[0])} v ${tm(leaders[1])}: golden goal, next score wins the title!`,true);
+  else
+    say(`<span class="goal">FULL TIME — all three level!</span> Golden-concession overtime: concede and you're OUT.`,true);
+  computeTargets();
+  kickoff(leaders[Math.floor(Math.random()*leaders.length)]);
 }
 
 // ---------- Color commentary ----------
@@ -556,7 +649,7 @@ function colorCommentary(){
   // fatigue watch (~every 40s)
   if(clockSec-lastFatigueComment>40){
     let worst=0, wv=1;
-    for(let t=0;t<3;t++){
+    for(const t of aliveTeams()){
       const avg=players.filter(p=>p.team===t).reduce((s,p)=>s+p.stamina,0)/5;
       if(avg<wv){wv=avg;worst=t;}
     }
@@ -592,15 +685,21 @@ function renderScore(){
     const avg=players.length?players.filter(p=>p.team===t).reduce((s,p)=>s+p.stamina,0)/5:1;
     const sc=avg>0.6?"#7ec97e":avg>0.35?"#ffb547":"#ff6b6b";
     const boosted=momentumOn&&clockSec<boostUntil[t];
+    const big=scoreMode==="conceded"?conceded[t]:(score[t]>0?"+":"")+score[t];
+    const sub=scoreMode==="conceded"
+      ?`conceded · ${scored[t]} scored`
+      :`${scored[t]} scored · ${conceded[t]} conceded`;
+    const huntLine=out[t]?`<b style="color:var(--ink-dim)">eliminated</b>`
+      :(hunt!==null?`hunting <b>${TEAMS[hunt].short}</b>`:"—");
     const div=document.createElement("div");
-    div.className="card"+(boosted?" hot":""); div.id="card"+t;
+    div.className="card"+(boosted?" hot":"")+(out[t]?" out":""); div.id="card"+t;
     div.style.setProperty("--team",TEAMS[t].color);
     div.style.setProperty("--hunt-color", hunt!==null?TEAMS[hunt].color:"inherit");
     div.style.setProperty("--stam-color", sc);
     div.innerHTML=`<div class="name"><span class="dot"></span>${TEAMS[t].name}<span class="flame">🔥</span></div>
-      <div class="row"><span class="pts">${score[t]>0?"+":""}${score[t]}</span>
-      <span class="con">${conceded[t]} conceded</span></div>
-      <div class="hunt">hunting <b>${hunt!==null?TEAMS[hunt].short:"—"}</b></div>
+      <div class="row"><span class="pts">${big}</span>
+      <span class="con">${sub}</span></div>
+      <div class="hunt">${huntLine}</div>
       <div class="stambar"><i id="stam${t}" style="width:${(avg*100).toFixed(0)}%"></i></div>`;
     sb.appendChild(div);
   }
@@ -730,6 +829,8 @@ function draw(){
   const nowMs=performance.now();
   players.forEach((p,i)=>{
     const a=actorEls[i];
+    if(p.out){ a.g.setAttribute("opacity",0); return; }
+    a.g.setAttribute("opacity",1);
     a.g.setAttribute("transform",`translate(${p.x},${p.y})`);
     const frac=p.stamina;
     a.ring.setAttribute("stroke-dasharray",`${(frac*RING_C).toFixed(1)} ${RING_C.toFixed(1)}`);
@@ -786,13 +887,18 @@ function loop(now){
       updateBars();               // frozen frame while we celebrate
     } else {
       if(pendingKickoff!==null){ hideCelebration(); kickoff(pendingKickoff); pendingKickoff=null; }
-      const step=dt*speed;
-      clockSec+=step;
-      retargetTimer+=step;
-      if(retargetTimer>6){retargetTimer=0;computeTargets();}
-      think(step); physics(step); colorCommentary();
+      if(phase==="regulation" && clockSec>=MATCH_LEN) resolveFullTime();
+      if(phase!=="over"){
+        const step=dt*speed;
+        clockSec+=step;
+        retargetTimer+=step;
+        if(retargetTimer>6){retargetTimer=0;computeTargets();}
+        think(step); physics(step); colorCommentary();
+      }
       const mm=String(Math.floor(clockSec/60)).padStart(2,"0"), ss=String(Math.floor(clockSec%60)).padStart(2,"0");
-      document.getElementById("clock").textContent=`${mm}:${ss}`;
+      const tot=String(Math.floor(MATCH_LEN/60)).padStart(2,"0")+":00";
+      document.getElementById("clock").textContent=
+        phase==="overtime"?`OT ${mm}:${ss}`:phase==="over"?"FT":`${mm}:${ss} / ${tot}`;
       updateBars(); draw();
     }
   }
@@ -829,6 +935,14 @@ vt.onchange=e=>{
   voiceOn=e.target.checked;
   if(voiceOn) speak("Narrator on. Welcome to the hex — three teams, one ball, no permanent friends.");
   else if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; }
+};
+
+document.getElementById("modeSel").onchange=e=>{
+  scoreMode=e.target.value;
+  computeTargets();
+  say(scoreMode==="conceded"
+    ?"Classic Jorn rules: fewest goals conceded wins. Defence is everything."
+    :"±1 rules: every goal is a two-point swing between scorer and conceder.",true);
 };
 
 // ---------- Go ----------
