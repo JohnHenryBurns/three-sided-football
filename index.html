@@ -540,17 +540,17 @@ function think(dt){
           const left=players.filter(q=>q.team===o.team&&!q.out&&!q.sentOff).length;
           showNotice(col, card==="second"?"🟨🟥 SECOND YELLOW":"🟥 RED CARD",
             `${o.name} (${shortT})`,
-            `The offense: ${off}.${penTag}<br>OFF! The walk of shame begins — ${tm(o.team)} down to ${left} men.`, 3600);
+            `The offense: ${off}.${penTag}<br>OFF! The walk of shame begins — ${tm(o.team)} down to ${left} men.`, 5200);
           say(`🟥 <b>RED CARD!</b> ${o.name} sent off for ${off}. ${tm(o.team)} play on a man short!`,true);
         } else if(card==="yellow"){
           addStoppage(3);
           showNotice(col,"🟨 YELLOW CARD",`${o.name} (${shortT})`,
-            `The offense: ${off}. Into the book he goes.${penTag}`, 2800);
+            `The offense: ${off}. Into the book he goes.${penTag}`, 4200);
           say(`🟨 ${o.name} is booked — ${off}.`,true);
         } else if(inBox){
           showNotice(TEAMS[victim.team].color,"⚠️ PENALTY!",
             `${victim.name} is brought down in the box!`,
-            `${o.name} ${off} — the referee points to the spot.`, 2600);
+            `${o.name} ${off} — the referee points to the spot.`, 4600);
           say(`<b style="color:${TEAMS[victim.team].color}">PENALTY to ${tm(victim.team)}!</b>`,true);
         } else if(Math.random()<0.5){
           say(`Free kick — ${o.name} ${off}.`);
