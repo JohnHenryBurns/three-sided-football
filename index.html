@@ -62,10 +62,10 @@
   }
   /* broadcast HUD floats over the pitch */
   #hud{position:absolute;top:.35rem;left:.35rem;right:.35rem;z-index:5;
-    display:flex;gap:.35rem;justify-content:center;align-items:flex-start;flex-wrap:wrap;pointer-events:none}
+    display:flex;flex-direction:column;gap:.3rem;align-items:center;pointer-events:none}
   .hudclock{background:rgba(8,14,10,.78);border:1px solid var(--panel-edge);border-radius:8px;
-    padding:.28rem .45rem;font-size:.9rem;font-variant-numeric:tabular-nums;letter-spacing:.04em;
-    pointer-events:auto;align-self:stretch;display:flex;align-items:center;white-space:nowrap}
+    padding:.2rem .55rem;font-size:.82rem;font-variant-numeric:tabular-nums;letter-spacing:.04em;
+    pointer-events:auto;white-space:nowrap}
   .chips{display:flex;gap:.35rem;flex-wrap:wrap;justify-content:center}
   .chips .card{pointer-events:auto;background:rgba(8,14,10,.78);margin:0;padding:.2rem .4rem;
     border-radius:8px;min-width:4.4rem}
@@ -159,9 +159,9 @@
     body{overflow:auto}
     .grid{grid-template-columns:1fr; grid-auto-rows:auto}
     .stage{order:-1; height:60vh}
-    #hud{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;scrollbar-width:none;gap:.25rem}
-    .hudclock{font-size:.72rem;padding:.2rem .32rem}
-    .chips{flex-wrap:nowrap;gap:.25rem}
+    #hud{gap:.22rem}
+    .hudclock{font-size:.7rem;padding:.16rem .45rem}
+    .chips{flex-wrap:nowrap;gap:.25rem;max-width:100%;overflow-x:auto;scrollbar-width:none}
     .chips .card{min-width:3.5rem;padding:.14rem .3rem}
     .chips .card .con{display:none}
     .chips .card .pts{font-size:.9rem}
@@ -196,8 +196,8 @@
 <div class="grid">
   <div class="stage">
     <div id="hud">
-      <div class="hudclock" id="clock">00:00</div>
       <div id="scoreboard" class="chips" aria-label="Scoreboard"></div>
+      <div class="hudclock" id="clock">00:00</div>
     </div>
     <svg id="pitch" viewBox="0 0 900 810" role="img" aria-label="Hexagonal pitch, three teams"></svg>
   </div>
@@ -591,6 +591,8 @@ function physics(dt){
   const S=dt*60;
   players.forEach(p=>{
     if(p.out)return;
+    const pv=Math.hypot(p.vx,p.vy);
+    if(pv>0.15){ p.hx=p.hx*0.85+(p.vx/pv)*0.15; p.hy=p.hy*0.85+(p.vy/pv)*0.15; }
     p.x+=p.vx*S; p.y+=p.vy*S; clampInside(p, p.role==="K"?12:14);
     const v=Math.hypot(p.vx,p.vy), effort=v/2.35;
     p.stamina-=effort*effort*0.0012*S;
@@ -1146,7 +1148,10 @@ function buildActors(){
       el("line",{x1:-8,y1:0,x2:8,y2:0,stroke:"#cf1020","stroke-width":3.4},g);
       el("line",{x1:0,y1:-8,x2:0,y2:8,stroke:"#cf1020","stroke-width":3.4},g);
     }
-    actorEls.push({g,ring,boost:g.querySelector(".boostring")});
+    const R=p.role==="K"?13:12;
+    const nose=el("path",{d:`M${R+6},0 L${R-2},-4.5 L${R-2},4.5 Z`,
+      fill:TEAMS[p.team].accent,stroke:"rgba(0,0,0,.4)","stroke-width":1},g);
+    actorEls.push({g,ring,nose,boost:g.querySelector(".boostring")});
   });
   // fading trail (under the ball)
   for(let i=0;i<7;i++) trailEls.push(el("circle",{r:7-i*0.7,fill:"#fff",opacity:0}));
@@ -1184,6 +1189,7 @@ function draw(){
     if(p.out){ a.g.setAttribute("opacity",0); return; }
     a.g.setAttribute("opacity",1);
     a.g.setAttribute("transform",`translate(${p.x},${p.y})`);
+    a.nose.setAttribute("transform",`rotate(${(Math.atan2(p.hy,p.hx)*180/Math.PI).toFixed(1)})`);
     const frac=p.stamina;
     a.ring.setAttribute("stroke-dasharray",`${(frac*RING_C).toFixed(1)} ${RING_C.toFixed(1)}`);
     a.ring.setAttribute("stroke",frac>0.6?"#7ec97e":frac>0.35?"#ffb547":"#ff6b6b");
