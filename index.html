@@ -1094,6 +1094,18 @@ function buildPitch(){
   [1,3,5].forEach(k=>el("line",{x1:CX,y1:CY,x2:V[k].x,y2:V[k].y,
     stroke:"rgba(255,255,255,.28)","stroke-width":2,"stroke-dasharray":"10 8"}));
   el("circle",{cx:CX,cy:CY,r:70,fill:"none",stroke:"var(--chalk)","stroke-width":2.5});
+  // penalty areas: the 110 arc where fouls become spot kicks
+  GOAL_EDGE.forEach(k=>{
+    const e=EDGES[k];
+    let d="";
+    for(let i=0;i<=24;i++){
+      const th=Math.PI*i/24;
+      const x=e.mx+e.ux*110*Math.cos(th)+e.nx*110*Math.sin(th);
+      const y=e.my+e.uy*110*Math.cos(th)+e.ny*110*Math.sin(th);
+      d+=(i?"L":"M")+x.toFixed(1)+" "+y.toFixed(1);
+    }
+    el("path",{d,fill:"rgba(255,255,255,.03)",stroke:"var(--chalk)","stroke-width":2.2,opacity:.55});
+  });
   el("circle",{cx:CX,cy:CY,r:4,fill:"var(--chalk)"});
   for(let t=0;t<3;t++){
     const e=EDGES[GOAL_EDGE[t]], hw=e.len*GOAL_HALF;
