@@ -53,6 +53,7 @@ class Match {
     this.m={goals:0,own:0,shots:0,saves:0,tackles:0,turnovers:0,passOk:0,passTry:0,
       spells:[],curSpell:0,curTeam:null,dispossessSpatial:0};
   }
+  tac(t){ return this.o.teamFlags[t].tac||{tempo:.5,risk:.5,line:.5,press:.5,direct:.5,bunker:0}; }
   rating(t){return this.score[t];}
   rankCmp(a,b){return (this.rating(b)-this.rating(a))||(this.scored[b]-this.scored[a]);}
   wasTrailing(t){return [0,1,2].some(o=>o!==t&&this.rankCmp(o,t)<0);}
@@ -171,12 +172,14 @@ class Match {
         this.steer(p,e.mx+e.ux*along+e.nx*20,e.my+e.uy*along+e.ny*20,1.9);
         if(dist(p,b)<55&&(!owner||owner.team!==p.team))this.steer(p,b.x,b.y,2.3);
       } else if(p===chaser[p.team]&&(!owner||owner.team!==p.team)){
-        this.steer(p,b.x+b.vx*6,b.y+b.vy*6,2.35);
+        this.steer(p,b.x+b.vx*6,b.y+b.vy*6,2.15+0.4*this.tac(p.team).press);
       } else if(p.role==="D"){
         const ds=P.filter(q=>q.team===p.team&&q.role==="D");
         const idx=ds.indexOf(p);
-        let f=idx===0?0.38:0.62;
-        if(pinc)f=idx===0?0.28:0.48;           // bunker deeper under the pincer
+        const T=this.tac(p.team);
+        const lineShift=(T.line-0.5)*0.22;
+        let f=(idx===0?0.38:0.62)+lineShift;
+        if(pinc||T.bunker>0.5)f=(idx===0?0.28:0.48)+lineShift*0.5;   // bunker posture
         const e=EDGES[GOAL_EDGE[p.team]];
         let bx=own.x+(b.x-own.x)*f+e.ux*(idx===0?34:-34);
         let by=own.y+(b.y-own.y)*f+e.uy*(idx===0?34:-34);
@@ -284,21 +287,23 @@ class Match {
         }
       }
       {
+        const RK=this.tac(owner.team).risk;
         const open=pressure>60, smothered=pressure<32;
-        const shotChance=0.025*(open?1.5:smothered?0.55:1.0);
-        if(dGoal<175&&Math.random()<shotChance*dt*60){
+        const shotChance=0.025*(0.5+1.0*RK)*(open?1.5:smothered?0.55:1.0);
+        if(dGoal<(150+50*RK)&&Math.random()<shotChance*dt*60){
           const scatter=(open?0.55:smothered?1.5:1.0);
           const off=(Math.random()*2-1)*e.len*GOAL_HALF*scatter;
           this.kick(tgt.x+e.ux*off,tgt.y+e.uy*off,9.5+Math.random()*1.5,true);
           return;
         }
       }
-      if(pressure<48&&Math.random()<0.10*dt*60){
+      if(pressure<48&&Math.random()<(0.05+0.10*this.tac(owner.team).tempo)*dt*60){
         let best=null,bs=-1e9;
         P.forEach(m=>{
           if(m.team!==owner.team||m===owner||m.role==="K")return;
           const d=dist(m,owner);
-          const maxR=(this.offense(owner.team)==="direct")?330:270;
+          const DIR=this.tac(owner.team).direct;
+          const maxR=(this.offense(owner.team)==="direct")?330:(210+140*DIR);
           if(d<60||d>maxR)return;
           const gain=dist(owner,tgt)-dist(m,tgt);
           const off=this.offense(owner.team);
@@ -318,9 +323,9 @@ class Match {
           oppOf(owner.team).forEach(o=>{
             const t=((o.x-owner.x)*(m.x-owner.x)+(o.y-owner.y)*(m.y-owner.y))/(d*d);
             if(t>0.1&&t<0.9){const lx=owner.x+(m.x-owner.x)*t,ly=owner.y+(m.y-owner.y)*t;
-              if(Math.hypot(o.x-lx,o.y-ly)<24)laneOk=false;}
+              if(Math.hypot(o.x-lx,o.y-ly)<(30-12*this.tac(owner.team).risk))laneOk=false;}
           });
-          const s=gain+schemeBonus+openBonus+(laneOk?0:-500)+Math.random()*30;
+          const s=gain*(0.6+0.8*DIR)+schemeBonus+openBonus*(1.4-0.8*DIR)+(laneOk?0:-500)+Math.random()*30;
           if(s>bs){bs=s;best=m;}
         });
         if(best&&bs>-100){
@@ -337,7 +342,7 @@ class Match {
       const tackleR=this.o.dribble?26:27;
       const tackleBase=this.o.dribble?0.010:0.012;
       oppOf(owner.team).forEach(o=>{
-        let tc=tackleBase;
+        let tc=tackleBase*(0.6+0.8*this.tac(o.team).press);
         tc*=(0.55+0.45*o.stamina);
         tc*=(1.35-0.5*owner.stamina);
         if(this.clock<this.boostUntil[o.team])tc*=1.3;
@@ -551,6 +556,62 @@ function suite(label,flags,dribble,n,minutes){
 
 const N=parseInt(process.env.N||"16"), MIN=5;
 const FOCUS=process.env.FOCUS==="1";
+if(process.env.PRESETS==="1"){
+  const ATK={
+    TikiTaka:   {tempo:.9, risk:.3,  direct:.15},
+    RouteOne:   {tempo:.3, risk:.7,  direct:.95},
+    Swashbuckle:{tempo:.8, risk:.95, direct:.5 },
+    Probe:      {tempo:.35,risk:.25, direct:.3 },
+  };
+  const DEF={
+    Gegenpress: {line:.8, press:.95, bunker:0},
+    ParkTheBus: {line:.15,press:.2,  bunker:1},
+    Trap:       {line:.35,press:.6,  bunker:0},
+    BalancedD:  {line:.5, press:.5,  bunker:0},
+  };
+  const BAL={tempo:.5,risk:.5,line:.5,press:.5,direct:.5,bunker:0};
+  const perRot=parseInt(process.env.PERROT||"8");
+  const PART=parseInt(process.env.PART||"0"); // 0=all, 1=first 8 pairings, 2=last 8
+  console.log("pairing".padEnd(26),"win%","(chance 33.3)");
+  const grid={};
+  const pairs=[];
+  for(const an in ATK)for(const dn in DEF)pairs.push([an,dn]);
+  const slice=PART===1?pairs.slice(0,8):PART===2?pairs.slice(8):pairs;
+  for(const [an,dn] of slice){
+    const tac={...BAL,...ATK[an],...DEF[dn]};
+    let wins=0,games=0;
+    for(let rot=0;rot<3;rot++)for(let i=0;i<perRot;i++){
+      const tf=[{tac:{...BAL}},{tac:{...BAL}},{tac:{...BAL}}];
+      tf[rot]={tac:{...tac}};
+      const m=new Match({minutes:MIN,dribble:true,aerial:true,teamFlags:tf});m.run();
+      const order=[0,1,2].sort((a,b)=>m.rankCmp(a,b));
+      if(order[0]===rot)wins++;games++;
+    }
+    const w=+(100*wins/games).toFixed(1);
+    grid[an+"+"+dn]=w;
+    console.log((an+"+"+dn).padEnd(26),w);
+  }
+  process.exit(0);
+}
+if(process.env.DIALS==="1"){
+  function world(label,tac){
+    const rs=[];
+    for(let i=0;i<N;i++)rs.push(new Match({minutes:MIN,dribble:true,aerial:true,
+      teamFlags:[{tac:{...tac}},{tac:{...tac}},{tac:{...tac}}]}).run());
+    console.log(JSON.stringify({label,g:avg(rs,"goalsPerMin"),shots:avg(rs,"shotsPerMin"),
+      passOk:avg(rs,"passOkPerMin"),tackles:avg(rs,"tacklesPerMin"),
+      crosses:avg(rs,"crossesPerMin"),turnovers:avg(rs,"turnoversPerMin"),spell:avg(rs,"avgSpellSec")}));
+  }
+  const B={tempo:.5,risk:.5,line:.5,press:.5,direct:.5,bunker:0};
+  world("BALANCED (all .5)",B);
+  world("tempo LO",{...B,tempo:0});   world("tempo HI",{...B,tempo:1});
+  world("risk LO",{...B,risk:0});     world("risk HI",{...B,risk:1});
+  world("press LO",{...B,press:0});   world("press HI",{...B,press:1});
+  world("direct LO",{...B,direct:0}); world("direct HI",{...B,direct:1});
+  world("line LO",{...B,line:0});     world("line HI",{...B,line:1});
+  world("BUNKER all",{...B,bunker:1});
+  process.exit(0);
+}
 if(process.env.AERIAL==="1"){
   function suiteA(label,aerial){
     const rs=[];
