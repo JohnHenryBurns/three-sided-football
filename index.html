@@ -679,6 +679,7 @@ function physics(dt){
       for(let t=0;t<3;t++){ if(t===p.team)continue;
         const g=goalCenter(t);
         if(dist(ball,g)<110)continue;            // ball is in — the zone is open
+        if(ball.z>4&&dist(ball,g)<260&&((g.x-ball.x)*ball.vx+(g.y-ball.y)*ball.vy)>0)continue; // timed run: the cross is inbound
         const d=dist(p,g);
         if(d<112){ p.x=g.x+(p.x-g.x)/(d||1)*112; p.y=g.y+(p.y-g.y)/(d||1)*112; }
       }
@@ -739,7 +740,7 @@ function physics(dt){
       ball.z+=ball.zv*S; ball.zv-=0.14*S;
       if(ball.z<=0){
         ball.z=0; ball.zv=0;
-        const near=players.filter(p=>!p.out&&dist(p,ball)<50);
+        const near=players.filter(p=>!p.out&&dist(p,ball)<62);
         const teams=new Set(near.map(p=>p.team));
         if(near.length>=2&&teams.size>=2){
           // header duel — highest man wins
