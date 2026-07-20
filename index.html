@@ -265,7 +265,8 @@ function resetMatch(){
     {team:t,role:f.role,name:TEAMS[t].roster[i],x:f.x,y:f.y,vx:0,vy:0,stamina:1,
      k1:0.64+Math.random()*0.10, k2:0.82+Math.random()*0.16,  // unique spring constants
      hx:0,hy:0, goals:0,tackles:0,saves:0}));                                             // smoothed heading for ball carry
-  ball={x:CX,y:CY,vx:0,vy:0,owner:null,lastTouch:null,lastKicker:null,isShot:false,noClaim:null,noClaimF:0};
+  ball={x:CX,y:CY,vx:0,vy:0,owner:null,lastTouch:null,lastKicker:null,isShot:false,noClaim:null,noClaimF:0,
+    touchT:0,strayer:null,strayF:0};
   computeTargets();
   const first=Math.floor(Math.random()*3);
   kickoff(first);
@@ -277,6 +278,7 @@ function kickoff(toTeam){
   let i=0;
   for(let t=0;t<3;t++){ formation(t).forEach(f=>{const p=players[i++]; p.x=f.x;p.y=f.y;p.vx=0;p.vy=0;}); }
   ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
+  ball.touchT=0; ball.strayer=null; ball.strayF=0;
   const fwd=players.find(p=>p.team===toTeam&&p.role==="F");
   fwd.x=CX-8; fwd.y=CY; ball.owner=fwd; ball.lastTouch=toTeam;
   spawnNote(CX,CY-46,"kick-off!",TEAMS[toTeam].color,TEAMS[toTeam].accent);
@@ -468,11 +470,11 @@ function think(dt){
     }
     // tackles (fatigue and momentum affect steal odds; radius sits just outside body contact)
     oppOf(owner.team).forEach(o=>{
-      let tc=0.012;                          // ~4x rarer: contested carries last seconds, not frames
+      let tc=0.010;                          // shoulder contests; most dispossession is now positional
       tc*=(0.55+0.45*o.stamina);             // fresh tacklers bite harder
       tc*=(1.35-0.5*owner.stamina);          // gassed carriers are easier to rob
       if(momentumOn&&clockSec<boostUntil[o.team]) tc*=1.3;
-      if(dist(o,owner)<27 && Math.random()<tc*dt*60){
+      if(dist(o,owner)<26 && Math.random()<tc*dt*60){   // MUST stay > body radius 23
         const victim=owner;
         ball.owner=o; ball.lastTouch=o.team; ball.isShot=false;
         if(o.role==="K"){
@@ -521,9 +523,25 @@ function physics(dt){
     const o=ball.owner, v=Math.hypot(o.vx,o.vy);
     stats.poss[o.team]+=S;
     if(v>0.1){ o.hx=o.hx*0.85+(o.vx/v)*0.15; o.hy=o.hy*0.85+(o.vy/v)*0.15; }
-    const hl=Math.hypot(o.hx,o.hy)||1;
-    ball.x=o.x+(o.hx/hl)*13; ball.y=o.y+(o.hy/hl)*13;
-    ball.vx=o.vx; ball.vy=o.vy;
+    const hl=Math.hypot(o.hx,o.hy)||1, hx=o.hx/hl, hy=o.hy/hl;
+    // hybrid dribble: the ball is its own body, spring-following the carry point
+    const cpx=o.x+hx*15, cpy=o.y+hy*15;
+    ball.vx+=(cpx-ball.x)*0.08*S; ball.vy+=(cpy-ball.y)*0.08*S;
+    ball.vx*=Math.pow(0.90,S); ball.vy*=Math.pow(0.90,S);
+    ball.x+=ball.vx*S; ball.y+=ball.vy*S;
+    ball.touchT-=dt;
+    if(ball.touchT<=0 && dist(ball,o)<18){
+      // take a touch — long in space, short under pressure
+      let pr=1e9; players.forEach(q=>{ if(q.team!==o.team&&!q.out){const d=dist(q,o); if(d<pr)pr=d;}});
+      const long=pr>70;
+      ball.vx+=hx*(long?3.6:2.2); ball.vy+=hy*(long?3.6:2.2);
+      ball.touchT=long?0.75:0.45;
+    }
+    // heavy touch: the ball got away — it's anyone's now
+    if(dist(ball,o)>30){
+      ball.strayer=o; ball.strayF=54;
+      ball.owner=null; ball.noClaim=o; ball.noClaimF=8;
+    }
     if(o.team!==lastPossessTeam){
       if(clockSec-lastPossessComment>6 && lastPossessTeam!==null){
         lastPossessComment=clockSec;
@@ -539,6 +557,7 @@ function physics(dt){
     ball.x+=ball.vx*S; ball.y+=ball.vy*S;
     ball.vx*=Math.pow(0.985,S); ball.vy*=Math.pow(0.985,S);
     if(ball.noClaimF>0) ball.noClaimF-=S; else ball.noClaim=null;
+    if(ball.strayF>0) ball.strayF-=S; else ball.strayer=null;
     let best=null,bd=1e9;
     players.forEach(p=>{ if(p.out)return; if(p===ball.noClaim&&ball.noClaimF>0)return;
       const sx=ball.x-px0, sy=ball.y-py0, sl=sx*sx+sy*sy;
@@ -549,7 +568,19 @@ function physics(dt){
       if(d<reach&&d<bd){bd=d;best=p;}});
     if(best){
       const wasShot=ball.isShot, spd=Math.hypot(ball.vx,ball.vy), kicker=ball.lastKicker;
+      const strayer=(ball.strayF>0)?ball.strayer:null;
       ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
+      ball.touchT=0.3; ball.strayer=null; ball.strayF=0;
+      if(strayer && best.team!==strayer.team){
+        // won it off the dribbler's touch — positional dispossession
+        stam(best,+0.08); stam(strayer,-0.08);
+        if(best.role==="K"){
+          spawnNote(best.x,best.y-20,"smothered!",TEAMS[best.team].color,TEAMS[best.team].accent);
+        } else {
+          stats.tackles[best.team]++; best.tackles++;
+          spawnNote(best.x,best.y-20,"poked away!",TEAMS[best.team].color,TEAMS[best.team].accent);
+        }
+      } else
       if(wasShot && best.role==="K" && kicker && best.team!==kicker.team && spd>5){
         // a save: keeper glory, shooter deflation
         stats.saves[best.team]++; best.saves++;
