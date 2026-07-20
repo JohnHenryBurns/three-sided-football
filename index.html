@@ -126,6 +126,17 @@
   .ghlink{display:block;margin-top:.8rem;font-size:.72rem;color:var(--ink-dim);
     text-decoration:none;letter-spacing:.08em;text-transform:uppercase}
   .ghlink:hover{color:var(--ink);text-decoration:underline}
+  #coachMenu{position:fixed;inset:0;background:rgba(4,8,6,.62);backdrop-filter:blur(2px);
+    display:none;align-items:center;justify-content:center;z-index:70;padding:1rem}
+  #coachMenu.show{display:flex}
+  #cmCard{background:var(--panel);border:3px solid var(--cele,#fff);border-radius:16px;
+    padding:1.1rem 1.2rem;max-width:min(26rem,94vw);max-height:88vh;overflow-y:auto;text-align:center}
+  #cmCard .big2{font-size:1.2rem;letter-spacing:.1em;text-transform:uppercase;font-weight:600}
+  .cmSec{margin-top:.75rem;font-size:.64rem;letter-spacing:.16em;color:var(--ink-dim);text-transform:uppercase}
+  .cmRow{display:flex;gap:.35rem;flex-wrap:wrap;justify-content:center;margin-top:.32rem}
+  .cmBtn{font-size:.74rem;padding:.35rem .55rem}
+  .cmBtn.sel{border-color:var(--cele);color:#fff;background:rgba(255,255,255,.08);box-shadow:0 0 8px var(--cele)}
+  .cmBtn.go{border-color:var(--arg)}
   .setupCard .big{font-size:2rem}
   .formrow{display:flex;flex-direction:column;align-items:stretch;gap:.3rem;margin-top:.9rem;font-size:.95rem;text-align:left}
   .formrow label{font-size:.78rem;color:var(--ink-dim);letter-spacing:.08em}
@@ -232,6 +243,7 @@
   <button id="btnStart">Kick off</button>
   <a class="ghlink" href="https://github.com/JohnHenryBurns/three-sided-football" target="_blank" rel="noopener">⚙ view on GitHub</a>
 </div></div>
+<div id="coachMenu"><div id="cmCard"></div></div>
 
 <script>
 "use strict";
@@ -268,6 +280,18 @@ let stats, goalsLog, notes=[], resumeAt=0, goldenScorer=null;
 let players=[], ball, score, conceded, scored, targets, clockSec, running=true, speed=1;
 let phase="regulation", out=[false,false,false], otGolden=false, scoreMode="points";
 let coached=[false,false,false], coachTarget=[null,null,null], activeCoach=null;
+// ---------- Tactics: six lab-validated dials, bundled into identities ----------
+const ATK_PRESETS={Balanced:{tempo:.5,risk:.5,direct:.5},TikiTaka:{tempo:.9,risk:.3,direct:.15},
+  RouteOne:{tempo:.3,risk:.7,direct:.95},Swashbuckle:{tempo:.8,risk:.95,direct:.5},
+  Probe:{tempo:.35,risk:.25,direct:.3}};
+const DEF_PRESETS={Balanced:{line:.5,press:.5,bunker:0},Gegenpress:{line:.8,press:.95,bunker:0},
+  ParkTheBus:{line:.15,press:.2,bunker:1},Trap:{line:.35,press:.6,bunker:0}};
+const ATK_AB={Balanced:"BAL",TikiTaka:"TT",RouteOne:"R1",Swashbuckle:"SB",Probe:"PR"};
+const DEF_AB={Balanced:"BAL",Gegenpress:"GP",ParkTheBus:"BUS",Trap:"TRP"};
+let teamATK=["Balanced","Balanced","Balanced"], teamDEF=["Balanced","Balanced","Balanced"];
+let tac=[null,null,null], menuTeam=null;
+function applyPresets(t){ tac[t]={...ATK_PRESETS[teamATK[t]],...DEF_PRESETS[teamDEF[t]]}; }
+function T(t){ return tac[t]; }
 let boostUntil=[0,0,0], momentumOn=true;
 let lastPossessTeam=null, lastPossessComment=-99, lastFatigueComment=0, lastColorComment=0;
 const feedEl=document.getElementById("feed"), feed=[];
@@ -291,6 +315,9 @@ function resetMatch(){
   players=[]; score=[0,0,0]; conceded=[0,0,0]; scored=[0,0,0]; clockSec=0; feed.length=0;
   phase="regulation"; out=[false,false,false]; otGolden=false;
   coached=[false,false,false]; coachTarget=[null,null,null]; activeCoach=null;
+  teamATK=["Balanced","Balanced","Balanced"]; teamDEF=["Balanced","Balanced","Balanced"];
+  for(let t=0;t<3;t++) applyPresets(t);
+  menuTeam=null; document.getElementById("coachMenu")?.classList.remove("show");
   stats={shots:[0,0,0],saves:[0,0,0],tackles:[0,0,0],poss:[0,0,0]};
   goalsLog=[]; goldenScorer=null;
   goalEls.forEach(g=>g&&g.setAttribute("opacity",1));
@@ -427,15 +454,26 @@ function think(dt){
       steer(p, e.mx+e.ux*along+e.nx*20, e.my+e.uy*along+e.ny*20, 1.9);
       if(dist(p,ball)<55 && (!owner||owner.team!==p.team)) steer(p,ball.x,ball.y,2.3);
     } else if(p===chaser[p.team] && (!owner || owner.team!==p.team)){
-      steer(p, ball.x+ball.vx*6, ball.y+ball.vy*6, 2.35);
+      steer(p, ball.x+ball.vx*6, ball.y+ball.vy*6, 2.15+0.4*T(p.team).press);
     } else if(p.role==="D"){
       const ds=players.filter(q=>q.team===p.team&&q.role==="D");
-      const idx=ds.indexOf(p), f=idx===0?0.38:0.62;
+      const idx=ds.indexOf(p), TT=T(p.team), lineShift=(TT.line-0.5)*0.22;
+      let f=(idx===0?0.38:0.62)+lineShift;
+      if(TT.bunker>0.5) f=(idx===0?0.28:0.48)+lineShift*0.5;
       const bx=own.x+(ball.x-own.x)*f, by=own.y+(ball.y-own.y)*f;
       const e=EDGES[GOAL_EDGE[p.team]];
       steer(p, bx+e.ux*(idx===0?34:-34), by+e.uy*(idx===0?34:-34), 2.0);
     } else {
-      const f=p.role==="M"?0.45:0.72;
+      const TT=T(p.team);
+      if(TT.bunker>0.5&&p.role==="M"){    // bus: the mid drops in (partial — the refund)
+        steer(p, own.x+(ball.x-own.x)*0.62, own.y+(ball.y-own.y)*0.62, 2.0);
+        return;
+      }
+      if(TT.bunker>0.5&&p.role==="F"){    // lone outlet holds the counter station
+        steer(p,(own.x+tgt.x)/2,(own.y+tgt.y)/2,2.0);
+        return;
+      }
+      const f=p.role==="M"?0.45:(0.72+(TT.direct-0.5)*0.26);
       let sx=ball.x+(tgt.x-ball.x)*f, sy=ball.y+(tgt.y-ball.y)*f;
       const side=(p.role==="M"?1:-1);
       // fan out as play compresses near the target goal — width instead of pile-in
@@ -495,24 +533,29 @@ function think(dt){
         return;
       }
     }
-    if(dGoal<175 && Math.random()<0.025*dt*60){
-      const off=(Math.random()*2-1)*e.len*GOAL_HALF*1.0;
-      kick(tgt.x+e.ux*off, tgt.y+e.uy*off, 9.5+Math.random()*1.5, true);
-      return;
+    {
+      const RK=T(owner.team).risk;
+      if(dGoal<(150+50*RK) && Math.random()<0.025*(0.5+1.0*RK)*dt*60){
+        let sc=0.6+0.8*RK;                                   // patience = precision
+        if(T(targets[owner.team]).bunker>0.5) sc*=1.35;      // packed boxes deflect
+        const off=(Math.random()*2-1)*e.len*GOAL_HALF*sc;
+        kick(tgt.x+e.ux*off, tgt.y+e.uy*off, 9.5+Math.random()*1.5, true);
+        return;
+      }
     }
-    if(pressure<48 && Math.random()<0.10*dt*60){
+    if(pressure<48 && Math.random()<(0.05+0.10*T(owner.team).tempo)*dt*60){
       let best=null,bs=-1e9;
       players.forEach(m=>{
         if(m.team!==owner.team||m===owner||m.role==="K"||m.out)return;
-        const d=dist(m,owner); if(d<60||d>270)return;
+        const d=dist(m,owner); if(d<60||d>210+140*T(owner.team).direct)return;
         const gain=dist(owner,tgt)-dist(m,tgt);
         let laneOk=true;
         oppOf(owner.team).forEach(o=>{
           const t=((o.x-owner.x)*(m.x-owner.x)+(o.y-owner.y)*(m.y-owner.y))/(d*d);
           if(t>0.1&&t<0.9){const lx=owner.x+(m.x-owner.x)*t, ly=owner.y+(m.y-owner.y)*t;
-            if(Math.hypot(o.x-lx,o.y-ly)<24) laneOk=false;}
+            if(Math.hypot(o.x-lx,o.y-ly)<(30-12*T(owner.team).risk)+5*(T(o.team).press-0.5)*2) laneOk=false;}
         });
-        const s=gain+(laneOk?0:-500)+Math.random()*30;
+        const s=gain*(0.6+0.8*T(owner.team).direct)+(laneOk?0:-500)+Math.random()*30;
         if(s>bs){bs=s;best=m;}
       });
       if(best&&bs>-100){ kick(best.x+best.vx*8, best.y+best.vy*8, Math.min(9,dist(best,owner)*0.045+4)); return;}
@@ -523,7 +566,7 @@ function think(dt){
       if(suppress&&suppress.team===o.team&&clockSec<suppress.until)continue;
       if(dist(o,owner)>=28)continue;
       const inBox=dist(owner,goalCenter(o.team))<110;
-      const fc=0.0022*foulMult*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
+      const fc=0.0022*foulMult*(0.4+1.2*T(o.team).press)*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
       if(Math.random()<fc*dt*60){
         const victim=owner;
         spawnNote(victim.x,victim.y-24,"FOUL!","#ffd166");
@@ -571,7 +614,7 @@ function think(dt){
     // tackles (fatigue and momentum affect steal odds; radius sits just outside body contact)
     oppOf(owner.team).forEach(o=>{
       if(suppress&&suppress.team===o.team&&clockSec<suppress.until) return;
-      let tc=0.010;                          // shoulder contests; most dispossession is now positional
+      let tc=0.010*(0.6+0.8*T(o.team).press); // shoulder contests; pressing bites harder
       tc*=(0.55+0.45*o.stamina);             // fresh tacklers bite harder
       tc*=(1.35-0.5*owner.stamina);          // gassed carriers are easier to rob
       if(momentumOn&&clockSec<boostUntil[o.team]) tc*=1.3;
@@ -605,7 +648,7 @@ function physics(dt){
     p.x+=p.vx*S; p.y+=p.vy*S;
     if(!p.sentOff) clampInside(p, p.role==="K"?12:14);
     const v=Math.hypot(p.vx,p.vy), effort=v/2.35;
-    p.stamina-=effort*effort*0.0012*S;
+    p.stamina-=effort*effort*0.0012*S*(0.85+0.5*T(p.team).press);
     p.stamina+=0.0004*S;
     p.stamina=Math.max(0,Math.min(1,p.stamina));
   });
@@ -1027,9 +1070,7 @@ function renderScore(){
       ?`conceded · ${scored[t]} scored`
       :`${scored[t]} scored · ${conceded[t]} conceded`;
     const huntLine=out[t]?`<b style="color:var(--ink-dim)">OUT</b>`
-      :coached[t]?(coachTarget[t]!==null
-        ?`<span class="ord">📋 ▸ <b>${TEAMS[coachTarget[t]].short}</b></span>`
-        :`<span class="ord">📋 tap a rival</span>`)
+      :coached[t]?`<span class="ord">📋 ${ATK_AB[teamATK[t]]}·${DEF_AB[teamDEF[t]]} ▸ <b>${coachTarget[t]!==null?TEAMS[coachTarget[t]].short:"AUTO"}</b></span>`
       :(hunt!==null?`▸ <b>${TEAMS[hunt].short}</b>`:"—");
     const div=document.createElement("div");
     div.className="card"+(boosted?" hot":"")+(out[t]?" out":"")
@@ -1363,7 +1404,7 @@ function loop(now){
         }
         if(clockSec>=matchLen+stoppageLen) resolveFullTime();
       }
-      if(phase!=="over" && now>=resumeAt){
+      if(phase!=="over" && now>=resumeAt && menuTeam===null){
         const step=dt*speed;
         clockSec+=step;
         retargetTimer+=step;
@@ -1398,16 +1439,49 @@ document.getElementById("btnZoom").onclick=e=>{
 // ---------- Tap-to-coach ----------
 function toggleCoach(t){
   if(out[t])return;
-  coached[t]=!coached[t];
-  if(coached[t]){
-    activeCoach=t;
-    say(`🎯 A new manager takes the ${tm(t)} bench! Tap a rival's card to give the order.`,true);
-  } else {
-    coachTarget[t]=null;
+  if(!coached[t]){
+    coached[t]=true; activeCoach=t;
+    say(`🎯 A new manager takes the ${tm(t)} bench!`,true);
+  }
+  computeTargets(); renderScore();
+  openCoachMenu(t);
+}
+function openCoachMenu(t){
+  menuTeam=t;
+  const card=document.getElementById("cmCard");
+  card.style.setProperty("--cele",TEAMS[t].color);
+  const rivals=[0,1,2].filter(x=>x!==t&&!out[x]);
+  const btn=(txt,sel,attrs)=>`<button class="cmBtn${sel?" sel":""}" ${attrs}>${txt}</button>`;
+  card.innerHTML=`<div class="big2" style="color:${TEAMS[t].color}">${TEAMS[t].name} bench</div>
+    <div class="cmSec">Hunt</div><div class="cmRow">${
+      btn("Auto",coachTarget[t]===null,'data-h="auto"')+
+      rivals.map(r=>btn(TEAMS[r].short,coachTarget[t]===r,`data-h="${r}"`)).join("")}</div>
+    <div class="cmSec">Attack identity</div><div class="cmRow">${
+      Object.keys(ATK_PRESETS).map(k=>btn(k,teamATK[t]===k,`data-a="${k}"`)).join("")}</div>
+    <div class="cmSec">Defensive identity</div><div class="cmRow">${
+      Object.keys(DEF_PRESETS).map(k=>btn(k,teamDEF[t]===k,`data-d="${k}"`)).join("")}</div>
+    <div class="cmRow" style="margin-top:.8rem">
+      <button class="cmBtn" id="cmRelease">Release team</button>
+      <button class="cmBtn go" id="cmResume">Resume ▸</button></div>`;
+  card.querySelectorAll("[data-h]").forEach(b=>b.onclick=()=>{
+    coachTarget[t]=b.dataset.h==="auto"?null:parseInt(b.dataset.h);
+    computeTargets(); renderScore(); openCoachMenu(t); });
+  card.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>{
+    teamATK[t]=b.dataset.a; applyPresets(t); renderScore(); openCoachMenu(t); });
+  card.querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>{
+    teamDEF[t]=b.dataset.d; applyPresets(t); renderScore(); openCoachMenu(t); });
+  document.getElementById("cmRelease").onclick=()=>{
+    coached[t]=false; coachTarget[t]=null;
+    teamATK[t]="Balanced"; teamDEF[t]="Balanced"; applyPresets(t);
     if(activeCoach===t){ const n=coached.findIndex(c=>c); activeCoach=n>=0?n:null; }
     say(`${tm(t)} return to AI control.`,true);
-  }
-  computeTargets();
+    closeCoachMenu(); computeTargets(); renderScore(); };
+  document.getElementById("cmResume").onclick=closeCoachMenu;
+  document.getElementById("coachMenu").classList.add("show");
+}
+function closeCoachMenu(){
+  document.getElementById("coachMenu").classList.remove("show");
+  menuTeam=null; resumeAt=performance.now()+250;
 }
 function cardTap(t){
   if(activeCoach!==null && t!==activeCoach && !out[t] && coached[activeCoach] && !out[activeCoach]){
