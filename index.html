@@ -62,14 +62,14 @@
     padding:.3rem .55rem;font-size:1rem;font-variant-numeric:tabular-nums;letter-spacing:.06em;
     pointer-events:auto;align-self:stretch;display:flex;align-items:center}
   .chips{display:flex;gap:.35rem;flex-wrap:wrap;justify-content:center}
-  .chips .card{pointer-events:auto;background:rgba(8,14,10,.78);margin:0;padding:.25rem .45rem;
-    border-radius:8px;min-width:6.2rem}
+  .chips .card{pointer-events:auto;background:rgba(8,14,10,.78);margin:0;padding:.2rem .4rem;
+    border-radius:8px;min-width:4.4rem}
   .chips .card .name{font-size:.72rem;gap:.25rem}
-  .chips .card .pts{font-size:1.15rem}
-  .chips .card .con{font-size:.58rem}
+  .chips .card .pts{font-size:1.1rem}
+  .chips .card .con{font-size:.56rem}
   .chips .card .hunt{font-size:.62rem;margin-top:0}
-  .chips .card .stambar{margin-top:.2rem;height:.2rem}
-  .chips .card .row{margin-top:0;gap:.35rem}
+  .chips .card .stambar{margin-top:.18rem;height:.18rem}
+  .chips .card .row{margin-top:0;gap:.3rem}
   .chips .coachBtn{font-size:.58rem;padding:.08rem .3rem}
   aside{
     background:var(--panel); border:1px solid var(--panel-edge); border-radius:10px;
@@ -154,7 +154,12 @@
     body{overflow:auto}
     .grid{grid-template-columns:1fr; grid-auto-rows:auto}
     .stage{order:-1; height:60vh}
-    .chips .card{min-width:5.2rem}
+    #hud{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;scrollbar-width:none}
+    .hudclock{font-size:.8rem;padding:.22rem .4rem}
+    .chips{flex-wrap:nowrap}
+    .chips .card{min-width:3.9rem;padding:.16rem .32rem}
+    .chips .card .con{display:none}
+    .chips .card .pts{font-size:.95rem}
     aside.comm{max-height:32vh}
     header{padding:.25rem .5rem;gap:.4rem}
     h1 span{display:none}
@@ -894,18 +899,18 @@ function renderScore(){
     const sub=scoreMode==="conceded"
       ?`conceded · ${scored[t]} scored`
       :`${scored[t]} scored · ${conceded[t]} conceded`;
-    const huntLine=out[t]?`<b style="color:var(--ink-dim)">eliminated</b>`
+    const huntLine=out[t]?`<b style="color:var(--ink-dim)">OUT</b>`
       :coached[t]?(coachTarget[t]!==null
-        ?`<span class="ord">📋 orders: hunt <b>${TEAMS[coachTarget[t]].short}</b></span>`
-        :`<span class="ord">📋 awaiting orders — tap a rival</span>`)
-      :(hunt!==null?`hunting <b>${TEAMS[hunt].short}</b>`:"—");
+        ?`<span class="ord">📋 ▸ <b>${TEAMS[coachTarget[t]].short}</b></span>`
+        :`<span class="ord">📋 tap a rival</span>`)
+      :(hunt!==null?`▸ <b>${TEAMS[hunt].short}</b>`:"—");
     const div=document.createElement("div");
     div.className="card"+(boosted?" hot":"")+(out[t]?" out":"")
       +(coached[t]?" coached":"")+(activeCoach===t?" activeC":""); div.id="card"+t;
     div.style.setProperty("--team",TEAMS[t].color);
     div.style.setProperty("--hunt-color", hunt!==null?TEAMS[hunt].color:"inherit");
     div.style.setProperty("--stam-color", sc);
-    div.innerHTML=`<div class="name"><span class="dot"></span><span class="nm">${TEAMS[t].name}</span><span class="flame">🔥</span><button class="coachBtn" title="coach this team">${coached[t]?"🎯 MGR":"🎯"}</button></div>
+    div.innerHTML=`<div class="name"><span class="dot"></span><span class="nm">${TEAMS[t].short}</span><span class="flame">🔥</span><button class="coachBtn" title="coach this team">${coached[t]?"🎯 MGR":"🎯"}</button></div>
       <div class="row"><span class="pts">${big}</span>
       <span class="con">${sub}</span></div>
       <div class="hunt">${huntLine}</div>
@@ -1102,11 +1107,18 @@ function draw(){
     ownerLabel.textContent=ball.owner.name;
     ownerLabel.setAttribute("opacity",1);
   } else ownerLabel.setAttribute("opacity",0);
-  // broadcast camera: pan with the ball when zoomed
+  // broadcast camera: pin to the carrier (their motion is smooth), only chase the raw
+  // ball when it's genuinely loose; low-pass the target and ignore sub-10px jitter
   if(zoom>1){
-    const tx=ball.x+ball.vx*8, ty=ball.y+ball.vy*8;   // look ahead of play
-    const chase=zoom>=3?0.15:0.08;                     // tighter frame needs a faster camera op
-    camX+=(tx-camX)*chase; camY+=(ty-camY)*chase;
+    const f=ball.owner
+      ? {x:ball.owner.x+ball.owner.vx*10, y:ball.owner.y+ball.owner.vy*10}
+      : {x:ball.x+ball.vx*8, y:ball.y+ball.vy*8};
+    camTX+=(f.x-camTX)*0.10; camTY+=(f.y-camTY)*0.10;
+    const ddx=camTX-camX, ddy=camTY-camY, dd=Math.hypot(ddx,ddy);
+    if(dd>0.1){
+      const move=Math.max(0,dd-10)*(zoom>=3?0.12:0.07);   // soft deadband: micro-motion never pans
+      camX+=ddx/dd*move; camY+=ddy/dd*move;
+    }
     const vw=900/zoom, vh=810/zoom;
     const cx=Math.max(vw/2,Math.min(900-vw/2,camX));
     const cy=Math.max(vh/2,Math.min(810-vh/2,camY));
@@ -1143,14 +1155,14 @@ function loop(now){
 }
 
 // ---------- Camera ----------
-let zoom=2.3, camX=CX, camY=CY;
+let zoom=2.3, camX=CX, camY=CY, camTX=CX, camTY=CY;
 const ZOOMS=[1,1.6,2.3,3.5];
 document.getElementById("btnZoom").onclick=e=>{
   const i=(ZOOMS.indexOf(zoom)+1)%ZOOMS.length;
   zoom=ZOOMS[i];
   e.target.textContent=`Zoom ${zoom}×`;
   if(zoom===1) svg.setAttribute("viewBox","0 0 900 810");
-  else { camX=ball.x; camY=ball.y; }   // start on the action
+  else { camX=camTX=ball.x; camY=camTY=ball.y; }   // start on the action
   draw();                              // apply immediately, even while paused
 };
 
@@ -1192,7 +1204,7 @@ document.getElementById("btnStart").onclick=()=>{
   matchLen=parseInt(document.getElementById("setLen").value,10);
   momentumOn=document.getElementById("setMom").checked;
   setupEl.classList.remove("show");
-  camX=CX; camY=CY; resumeAt=0;
+  camX=camTX=CX; camY=camTY=CY; resumeAt=0;
   resetMatch(); updateBars(); draw();
   running=true;
   document.getElementById("btnPlay").textContent="Pause";
