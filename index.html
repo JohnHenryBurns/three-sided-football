@@ -546,8 +546,7 @@ function think(dt){
         const penTag=inBox?` <b style="color:#ffd166">AND IT'S A PENALTY!</b>`:"";
         if(card==="red"||card==="second"){
           addStoppage(3);
-          o.sentOff=true; o.redCard=true;
-          camFocusP=o; camFocusUntil=performance.now()+9500;   // popup + the trudge
+          o.sentOff=true; o.redCard=true; walkPending=o;   // the walk follows the popup
           const left=players.filter(q=>q.team===o.team&&!q.out&&!q.sentOff).length;
           showNotice(col, card==="second"?"🟨🟥 SECOND YELLOW":"🟥 RED CARD",
             `${o.name} (${shortT})`,
@@ -788,7 +787,7 @@ function physics(dt){
 let celebrateUntil=0, pendingKickoff=null;
 let suppress=null, pendingPenalty=null, penaltyShooter=null, penaltyGoalTeam=null;
 let stoppageLen=0, stoppageAnnounced=false, zoneRule=true, foulMult=1;
-let camFocusP=null, camFocusUntil=0;
+let camFocusP=null, camFocusUntil=0, walkOff=null, walkPending=null;
 function addStoppage(sec){ stoppageLen=Math.min(Math.min(65,matchLen*0.30), stoppageLen+sec); }
 const celeEl=document.getElementById("celebrate"), celeCard=document.getElementById("celeCard"),
       confettiBox=document.getElementById("confettiBox");
@@ -1341,7 +1340,23 @@ function loop(now){
         resumeAt=performance.now()+1200; }   // beat of stillness before play resumes
       else if(celebrateUntil>0&&celebrateUntil!==Infinity){
         hideCelebration();
-        if(pendingPenalty){ stagePenalty(); } else resumeAt=performance.now()+350;
+        if(walkPending){ walkOff=walkPending; walkPending=null; }
+        else if(pendingPenalty){ stagePenalty(); } else resumeAt=performance.now()+350;
+      }
+      if(walkOff){
+        // the walk of shame owns the stage: play holds, camera escorts him out
+        const q=walkOff; let wd=1e9,we=null;
+        for(const e2 of EDGES){ const d2=(q.x-e2.p1.x)*e2.nx+(q.y-e2.p1.y)*e2.ny;
+          if(d2<wd){wd=d2;we=e2;} }
+        q.x-=we.nx*1.5*dt*60; q.y-=we.ny*1.5*dt*60; q.vx=0; q.vy=0;
+        if(ball.owner===q) ball.owner=null;
+        camFocusP=q; camFocusUntil=performance.now()+400;
+        resumeAt=performance.now()+120;
+        if(wd<-10){
+          q.out=true; q.sentOff=false; walkOff=null; camFocusP=null;
+          say(`${q.name} disappears down the tunnel. ${tm(q.team)} regroup a man light.`);
+          if(pendingPenalty) stagePenalty(); else resumeAt=performance.now()+400;
+        }
       }
       if(phase==="regulation"){
         if(!stoppageAnnounced&&clockSec>=matchLen){
@@ -1356,15 +1371,7 @@ function loop(now){
         retargetTimer+=step;
         if(retargetTimer>6){retargetTimer=0;computeTargets();}
         think(step); physics(step); colorCommentary();
-        players.forEach(q=>{ if(q.sentOff&&!q.out){
-          let wd=1e9,we=null;
-          for(const e2 of EDGES){ const d2=(q.x-e2.p1.x)*e2.nx+(q.y-e2.p1.y)*e2.ny;
-            if(d2<wd){wd=d2;we=e2;} }
-          q.x-=we.nx*1.0*step*60; q.y-=we.ny*1.0*step*60; q.vx=0; q.vy=0;
-          if(ball.owner===q) ball.owner=null;
-          if(wd<-10){ q.out=true; q.sentOff=false;
-            say(`${q.name} disappears down the tunnel. ${tm(q.team)} regroup a man light.`); }
-        }});
+
       }
       const m=Math.floor(clockSec/60), ss=String(Math.floor(clockSec%60)).padStart(2,"0");
       document.getElementById("clock").textContent=
@@ -1431,6 +1438,7 @@ document.getElementById("btnStart").onclick=()=>{
   foulMult=parseFloat(document.getElementById("setRef").value);
   setupEl.classList.remove("show");
   camX=camTX=CX; camY=camTY=CY; resumeAt=0; camFocusP=null; camFocusUntil=0;
+  walkOff=null; walkPending=null;
   resetMatch(); updateBars(); draw();
   running=true; setPlayBtn();
   say(scoreMode==="conceded"
