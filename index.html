@@ -286,13 +286,16 @@ function resetMatch(){
   coached=[false,false,false]; coachTarget=[null,null,null]; activeCoach=null;
   stats={shots:[0,0,0],saves:[0,0,0],tackles:[0,0,0],poss:[0,0,0]};
   goalsLog=[]; goldenScorer=null;
+  suppress=null; pendingPenalty=null; penaltyShooter=null; penaltyGoalTeam=null;
+  stoppageAnnounced=false;
+  stoppageLen=Math.min(55,matchLen*0.2)*(0.85+Math.random()*0.3);
   notes.forEach(n=>n.e.remove()); notes=[];
   pings.forEach(pg=>pg.e.remove()); pings=[];
   boostUntil=[0,0,0]; lastPossessTeam=null; lastPossessComment=-99; lastFatigueComment=0; lastColorComment=0;
   for(let t=0;t<3;t++) formation(t).forEach((f,i)=>players.push(
     {team:t,role:f.role,name:TEAMS[t].roster[i],x:f.x,y:f.y,vx:0,vy:0,stamina:1,
      k1:0.64+Math.random()*0.10, k2:0.82+Math.random()*0.16,  // unique spring constants
-     hx:0,hy:0, goals:0,tackles:0,saves:0}));                                             // smoothed heading for ball carry
+     hx:0,hy:0, goals:0,tackles:0,saves:0, yellows:0,sentOff:false}));                                             // smoothed heading for ball carry
   ball={x:CX,y:CY,vx:0,vy:0,owner:null,lastTouch:null,lastKicker:null,isShot:false,noClaim:null,noClaimF:0,
     touchT:0,strayer:null,strayF:0,z:0,zv:0};
   computeTargets();
@@ -446,6 +449,14 @@ function think(dt){
   }
   // owner decisions
   if(owner){
+    if(penaltyShooter===owner){
+      penaltyShooter=null;
+      const e=EDGES[GOAL_EDGE[penaltyGoalTeam]], g=goalCenter(penaltyGoalTeam);
+      const off2=(Math.random()*2-1)*e.len*GOAL_HALF*1.0;
+      stats.shots[owner.team]++;
+      kick(g.x+e.ux*off2, g.y+e.uy*off2, 10.8, true);
+      return;
+    }
     if(owner.role==="K"){
       const og=goalCenter(owner.team);
       let best=null,bd=1e9;
@@ -498,8 +509,58 @@ function think(dt){
       });
       if(best&&bs>-100){ kick(best.x+best.vx*8, best.y+best.vy*8, Math.min(9,dist(best,owner)*0.045+4)); return;}
     }
+    // FOULS: clumsy or cynical challenges — aggression is now a priced behavior
+    for(const o of oppOf(owner.team)){
+      if(o.role==="K"||o.out)continue;
+      if(suppress&&suppress.team===o.team&&clockSec<suppress.until)continue;
+      if(dist(o,owner)>=28)continue;
+      const inBox=dist(owner,goalCenter(o.team))<110;
+      const fc=0.0022*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
+      if(Math.random()<fc*dt*60){
+        const victim=owner;
+        spawnNote(victim.x,victim.y-24,"FOUL!","#ffd166");
+        addStoppage(1.2);
+        const r=Math.random();
+        let card=null;
+        if(r<0.035) card="red";
+        else if(r<0.20) card=(o.yellows>=1)?"second":"yellow";
+        if(card==="yellow") o.yellows++;
+        const off=(card==="red"?pick(RED_OFFENSES):pick(YELLOW_OFFENSES)).replaceAll("{V}",victim.name);
+        const shortT=TEAMS[o.team].short, col=TEAMS[o.team].color;
+        if(inBox){
+          pendingPenalty={shooter:victim, conceder:o.team};
+          addStoppage(4);
+        } else {
+          suppress={team:o.team, until:clockSec+1.0};
+        }
+        const penTag=inBox?` <b style="color:#ffd166">AND IT'S A PENALTY!</b>`:"";
+        if(card==="red"||card==="second"){
+          addStoppage(3);
+          o.sentOff=true;
+          const left=players.filter(q=>q.team===o.team&&!q.out&&!q.sentOff).length;
+          showNotice(col, card==="second"?"🟨🟥 SECOND YELLOW":"🟥 RED CARD",
+            `${o.name} (${shortT})`,
+            `The offense: ${off}.${penTag}<br>OFF! The walk of shame begins — ${tm(o.team)} down to ${left} men.`, 3600);
+          say(`🟥 <b>RED CARD!</b> ${o.name} sent off for ${off}. ${tm(o.team)} play on a man short!`,true);
+        } else if(card==="yellow"){
+          addStoppage(3);
+          showNotice(col,"🟨 YELLOW CARD",`${o.name} (${shortT})`,
+            `The offense: ${off}. Into the book he goes.${penTag}`, 2800);
+          say(`🟨 ${o.name} is booked — ${off}.`,true);
+        } else if(inBox){
+          showNotice(TEAMS[victim.team].color,"⚠️ PENALTY!",
+            `${victim.name} is brought down in the box!`,
+            `${o.name} ${off} — the referee points to the spot.`, 2600);
+          say(`<b style="color:${TEAMS[victim.team].color}">PENALTY to ${tm(victim.team)}!</b>`,true);
+        } else if(Math.random()<0.5){
+          say(`Free kick — ${o.name} ${off}.`);
+        }
+        return;
+      }
+    }
     // tackles (fatigue and momentum affect steal odds; radius sits just outside body contact)
     oppOf(owner.team).forEach(o=>{
+      if(suppress&&suppress.team===o.team&&clockSec<suppress.until) return;
       let tc=0.010;                          // shoulder contests; most dispossession is now positional
       tc*=(0.55+0.45*o.stamina);             // fresh tacklers bite harder
       tc*=(1.35-0.5*owner.stamina);          // gassed carriers are easier to rob
@@ -622,7 +683,8 @@ function physics(dt){
     if(ball.noClaimF>0) ball.noClaimF-=S; else ball.noClaim=null;
     if(ball.strayF>0) ball.strayF-=S; else ball.strayer=null;
     let best=null,bd=1e9;
-    players.forEach(p=>{ if(p.out)return; if(p===ball.noClaim&&ball.noClaimF>0)return;
+    players.forEach(p=>{ if(p.out||p.sentOff)return; if(p===ball.noClaim&&ball.noClaimF>0)return;
+      if(suppress&&suppress.team===p.team&&clockSec<suppress.until)return;
       if(ball.z>(p.role==="K"?28:12))return;   // sailing over their heads
       const sx=ball.x-px0, sy=ball.y-py0, sl=sx*sx+sy*sy;
       let t=sl>0?((p.x-px0)*sx+(p.y-py0)*sy)/sl:0;
@@ -700,6 +762,9 @@ function physics(dt){
 
 // ---------- Goal celebration ----------
 let celebrateUntil=0, pendingKickoff=null;
+let suppress=null, pendingPenalty=null, penaltyShooter=null, penaltyGoalTeam=null;
+let stoppageLen=0, stoppageAnnounced=false;
+function addStoppage(sec){ stoppageLen=Math.min(Math.min(65,matchLen*0.30), stoppageLen+sec); }
 const celeEl=document.getElementById("celebrate"), celeCard=document.getElementById("celeCard"),
       confettiBox=document.getElementById("confettiBox");
 function showCelebration(color, big, whoHTML, subHTML, fireHTML){
@@ -721,6 +786,30 @@ function showCelebration(color, big, whoHTML, subHTML, fireHTML){
   celebrateUntil=performance.now()+4800;
 }
 function hideCelebration(){ celeEl.classList.remove("show"); confettiBox.innerHTML=""; celebrateUntil=0; }
+function showNotice(color,big,whoHTML,subHTML,dur){
+  celeCard.style.setProperty("--cele",color);
+  celeCard.innerHTML=`<div class="big">${big}</div><div class="who">${whoHTML}</div><div class="sub">${subHTML}</div>`;
+  confettiBox.innerHTML="";
+  celeEl.classList.add("show");
+  celebrateUntil=performance.now()+dur;
+}
+const YELLOW_OFFENSES=[
+  "cynically confiscated {V}'s shirt as a souvenir",
+  "arrived at the tackle three days late",
+  "performed a tactical hug on {V}",
+  "attempted to check {V}'s pockets for the ball",
+  "mistook {V}'s ankles for the ball — twice",
+  "described the referee's decision as 'creative fiction'",
+  "took {V} down, then briefly claimed to be the victim",
+  "treated the shoulder charge as a full-contact art form"];
+const RED_OFFENSES=[
+  "a two-footed lunge visible from space",
+  "rugby-tackled {V} out of pure nostalgia",
+  "attempted a full WWE clothesline — the crowd gasped",
+  "challenged {V} to a duel, glove and all",
+  "kicked everything except the ball, including the referee's patience",
+  "tried to deflate the ball while {V} was still dribbling it",
+  "picked {V} up and attempted to file him under 'lost property'"];
 
 function goalScored(concederTeam){
   const scorerTeam=ball.lastTouch;
@@ -1139,6 +1228,27 @@ function draw(){
   }
 }
 
+function stagePenalty(){
+  const pen=pendingPenalty; pendingPenalty=null;
+  const shooter=pen.shooter, conceder=pen.conceder;
+  if(out[conceder]||shooter.out) return;
+  const e=EDGES[GOAL_EDGE[conceder]], g=goalCenter(conceder);
+  const sx=g.x+e.nx*110, sy=g.y+e.ny*110;
+  ball.owner=shooter; ball.lastTouch=shooter.team; ball.lastKicker=shooter;
+  ball.x=sx; ball.y=sy; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+  ball.touchT=99;   // no dribble touches during the run-up
+  shooter.x=sx+e.nx*16; shooter.y=sy+e.ny*16; shooter.vx=0; shooter.vy=0;
+  const gk=players.find(q=>q.team===conceder&&q.role==="K"&&!q.out);
+  if(gk){ gk.x=g.x+e.nx*12; gk.y=g.y+e.ny*12; gk.vx=0; gk.vy=0; }
+  players.forEach(q=>{ if(q===shooter||q===gk||q.out)return;
+    const d=dist(q,g)||1;
+    if(d<170){ q.x=g.x+(q.x-g.x)/d*178; q.y=g.y+(q.y-g.y)/d*178; }});
+  penaltyShooter=shooter; penaltyGoalTeam=conceder;
+  spawnNote(sx,sy-28,"PENALTY!","#ffd166");
+  say(`${shooter.name} places the ball on the spot... the keeper crouches...`,true);
+  resumeAt=performance.now()+1000;
+}
+
 // ---------- Loop ----------
 let last=performance.now();
 function loop(now){
@@ -1149,17 +1259,37 @@ function loop(now){
     } else {
       if(pendingKickoff!==null){ hideCelebration(); kickoff(pendingKickoff); pendingKickoff=null;
         resumeAt=performance.now()+1200; }   // beat of stillness before play resumes
-      if(phase==="regulation" && clockSec>=matchLen) resolveFullTime();
+      else if(celebrateUntil>0&&celebrateUntil!==Infinity){
+        hideCelebration();
+        if(pendingPenalty){ stagePenalty(); } else resumeAt=performance.now()+350;
+      }
+      if(phase==="regulation"){
+        if(!stoppageAnnounced&&clockSec>=matchLen){
+          stoppageAnnounced=true;
+          say(`📋 The fourth official's board goes up: <b>+${Math.ceil(stoppageLen)}s</b> added on!`,true);
+        }
+        if(clockSec>=matchLen+stoppageLen) resolveFullTime();
+      }
       if(phase!=="over" && now>=resumeAt){
         const step=dt*speed;
         clockSec+=step;
         retargetTimer+=step;
         if(retargetTimer>6){retargetTimer=0;computeTargets();}
         think(step); physics(step); colorCommentary();
+        players.forEach(q=>{ if(q.sentOff&&!q.out){
+          const {wd,we}=wallDist(q);
+          q.x-=we.nx*1.6*step*60; q.y-=we.ny*1.6*step*60; q.vx=0; q.vy=0;
+          if(ball.owner===q) ball.owner=null;
+          if(wd<6){ q.out=true; q.sentOff=false;
+            say(`${q.name} disappears down the tunnel. ${tm(q.team)} regroup a man light.`); }
+        }});
       }
       const m=Math.floor(clockSec/60), ss=String(Math.floor(clockSec%60)).padStart(2,"0");
       document.getElementById("clock").textContent=
-        phase==="overtime"?`OT ${m}:${ss}`:phase==="over"?"FT":`${m}:${ss}/${Math.floor(matchLen/60)}:00`;
+        phase==="overtime"?`OT ${m}:${ss}`
+        :phase==="over"?"FT"
+        :clockSec>matchLen?`${Math.floor(matchLen/60)}:00 +${Math.floor(clockSec-matchLen)}s`
+        :`${m}:${ss}/${Math.floor(matchLen/60)}:00`;
       updateBars(); draw();
     }
   }
