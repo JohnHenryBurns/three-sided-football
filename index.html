@@ -498,7 +498,7 @@ function think(dt){
       if(momentumOn&&clockSec<boostUntil[o.team]) tc*=1.3;
       if(dist(o,owner)<26 && Math.random()<tc*dt*60){   // MUST stay > body radius 23
         const victim=owner;
-        ball.owner=o; ball.lastTouch=o.team; ball.isShot=false;
+        ball.owner=o; ball.lastTouch=o.team; ball.lastKicker=o; ball.isShot=false;
         if(o.role==="K"){
           // keeper smothering a dribbler is goalkeeping, not a tackle — no tackle credit
           spawnNote(o.x,o.y-20,"smothered!",TEAMS[o.team].color,TEAMS[o.team].accent);
@@ -627,6 +627,7 @@ function physics(dt){
       const strayer=(ball.strayF>0)?ball.strayer:null;
       ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
       ball.touchT=0.3; ball.strayer=null; ball.strayF=0;
+      ball.lastKicker=best;   // person-level attribution follows possession
       if(strayer && best.team!==strayer.team){
         // won it off the dribbler's touch — positional dispossession
         stam(best,+0.08); stam(strayer,-0.08);
@@ -715,7 +716,8 @@ function hideCelebration(){ celeEl.classList.remove("show"); confettiBox.innerHT
 
 function goalScored(concederTeam){
   const scorerTeam=ball.lastTouch;
-  const scorer=ball.lastKicker;
+  const scorer=(ball.owner&&ball.owner.team===scorerTeam)?ball.owner
+    :((ball.lastKicker&&ball.lastKicker.team===scorerTeam)?ball.lastKicker:null);
   const wasLeader=leaderIdx();
   // true underdog test: someone ranked STRICTLY above the scorer before this goal
   const wasTrailing=(scorerTeam!==null)&&[0,1,2].some(o=>!out[o]&&o!==scorerTeam&&rankCmp(o,scorerTeam)<0);
