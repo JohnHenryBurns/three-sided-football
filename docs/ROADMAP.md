@@ -53,3 +53,34 @@ Plus **callable plays**: bounded, legible contracts (give-and-go v2; kickoff set
 3. Tactics dials (AI defaults per situation; groundwork for the coach menu).
 4. Coach UI: team select at match setup, pause-menu tactics, play-calling. Tap-to-coach
    grows from target orders into the full bench.
+
+## Tactical presets: mix-and-match identities (not raw dials)
+
+Rather than exposing sliders, the coach menu offers **named preset cards on two axes**,
+one pick per axis, freely combinable. Each preset is a calibrated bundle of the dial values
+above — calibrated in the strategy lab so no pairing dominates.
+
+**Attack identities** (tempo / risk / directness bundles):
+- **Tiki-Taka** — high tempo, low risk, short passing. Death by a thousand touches.
+- **Route One** — direct, long range, high risk. Get it to the big man.
+- **Swashbuckle** — high tempo AND high risk. Goals at both ends, no apologies.
+- **The Probe** — patient, low risk. Make the bunker chase until its legs go.
+
+**Defense identities** (line / press / posture bundles):
+- **Gegenpress** — max press, high line. Win it back in 6 seconds or die trying.
+- **Park the Bus** — bunker posture, deep line, minimal press. You shall not pass.
+- **The Trap** — mid-block, press triggers on the wings. Invite them in, snap shut.
+- **Balanced** — the shipped defaults.
+
+Combinations produce recognizable footballing cultures for free: Tiki-Taka + Gegenpress
+(Barcelona-brain), Route One + Park the Bus (proper lower-league), The Probe + The Trap
+(tournament knockout cynicism), Swashbuckle + Gegenpress (chaos, but principled chaos).
+
+**Calibration requirement:** run the preset matrix (4×4 pairings, round-robin duels) in the
+strategy lab and tune bundle values until the win-rate matrix is reasonably flat — every
+identity viable, matchup texture without a dominant meta. Rock-paper-scissors edges are fine
+(press should punish probe; bus should frustrate route one); auto-wins are not.
+
+**Coach flow:** pick team at match setup → pause anytime for the coach menu → swap preset
+cards mid-match (with a short "instructions reaching the pitch" delay) → call bounded plays
+(give-and-go v2, kickoff set plays) as one-shot commands.
