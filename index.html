@@ -133,8 +133,11 @@
     padding:1.1rem 1.2rem;max-width:min(26rem,94vw);max-height:88vh;overflow-y:auto;text-align:center}
   #cmCard .big2{font-size:1.2rem;letter-spacing:.1em;text-transform:uppercase;font-weight:600}
   .cmSec{margin-top:.75rem;font-size:.64rem;letter-spacing:.16em;color:var(--ink-dim);text-transform:uppercase}
-  .cmRow{display:flex;gap:.35rem;flex-wrap:wrap;justify-content:center;margin-top:.32rem}
-  .cmBtn{font-size:.74rem;padding:.35rem .55rem}
+  .cmRow{display:grid;grid-template-columns:repeat(auto-fit,minmax(5rem,1fr));gap:.35rem;margin-top:.32rem}
+  .cmRow .cmBtn{width:100%;white-space:nowrap}
+  .cmFoot{grid-template-columns:1fr 1fr;margin-top:.9rem}
+  .cmDesc{font-size:.7rem;color:var(--ink-dim);margin-top:.3rem;min-height:1.2em;line-height:1.35}
+  .cmBtn{font-size:.72rem;padding:.38rem .3rem}
   .cmBtn.sel{border-color:var(--cele);color:#fff;background:rgba(255,255,255,.08);box-shadow:0 0 8px var(--cele)}
   .cmBtn.go{border-color:var(--arg)}
   .setupCard .big{font-size:2rem}
@@ -289,6 +292,19 @@ const DEF_PRESETS={Balanced:{line:.5,press:.5,bunker:0},Gegenpress:{line:.8,pres
 const ATK_AB={Balanced:"BAL",TikiTaka:"TT",RouteOne:"R1",Swashbuckle:"SB",Probe:"PR"};
 const DEF_AB={Balanced:"BAL",Gegenpress:"GP",ParkTheBus:"BUS",Trap:"TRP"};
 const AGG_PRESETS={Clean:{f:.55,t:.92},Firm:{f:1,t:1},Nasty:{f:1.8,t:1.18},Filthy:{f:2.8,t:1.38}};
+const ATK_D={Balanced:"No special instructions.",
+  TikiTaka:"Rapid short passing — death by a thousand touches.",
+  RouteOne:"Long balls over the press, straight to the striker.",
+  Swashbuckle:"Shoot on sight. Goals at both ends, no apologies.",
+  Probe:"Patient and precise — wait for the perfect chance."};
+const DEF_D={Balanced:"No special instructions.",
+  Gegenpress:"Hunt the ball high. Wins turnovers, burns legs, draws cards.",
+  ParkTheBus:"Everyone behind the ball. You shall not pass.",
+  Trap:"Sit mid, invite them in, snap shut on risky passes."};
+const AGG_D={Clean:"Soft challenges, spotless disciplinary record.",
+  Firm:"Standard football.",
+  Nasty:"Harder tackles, more fouls. The book awaits.",
+  Filthy:"Win the ball by any means. The referee is watching."};
 let teamATK=["Balanced","Balanced","Balanced"], teamDEF=["Balanced","Balanced","Balanced"],
     teamAGG=["Firm","Firm","Firm"];
 let tac=[null,null,null], menuTeam=null;
@@ -1457,17 +1473,24 @@ function openCoachMenu(t){
   card.style.setProperty("--cele",TEAMS[t].color);
   const rivals=[0,1,2].filter(x=>x!==t&&!out[x]);
   const btn=(txt,sel,attrs)=>`<button class="cmBtn${sel?" sel":""}" ${attrs}>${txt}</button>`;
+  const huntDesc=coachTarget[t]===null
+    ?"AI decides — every attack hunts the current leader."
+    :`Every attack targets ${TEAMS[coachTarget[t]].name}.`;
   card.innerHTML=`<div class="big2" style="color:${TEAMS[t].color}">${TEAMS[t].name} bench</div>
     <div class="cmSec">Hunt</div><div class="cmRow">${
       btn("Auto",coachTarget[t]===null,'data-h="auto"')+
       rivals.map(r=>btn(TEAMS[r].short,coachTarget[t]===r,`data-h="${r}"`)).join("")}</div>
+    <div class="cmDesc">${huntDesc}</div>
     <div class="cmSec">Attack identity</div><div class="cmRow">${
       Object.keys(ATK_PRESETS).map(k=>btn(k,teamATK[t]===k,`data-a="${k}"`)).join("")}</div>
+    <div class="cmDesc">${ATK_D[teamATK[t]]}</div>
     <div class="cmSec">Defensive identity</div><div class="cmRow">${
       Object.keys(DEF_PRESETS).map(k=>btn(k,teamDEF[t]===k,`data-d="${k}"`)).join("")}</div>
+    <div class="cmDesc">${DEF_D[teamDEF[t]]}</div>
     <div class="cmSec">Aggression</div><div class="cmRow">${
       Object.keys(AGG_PRESETS).map(k=>btn(k,teamAGG[t]===k,`data-g="${k}"`)).join("")}</div>
-    <div class="cmRow" style="margin-top:.8rem">
+    <div class="cmDesc">${AGG_D[teamAGG[t]]}</div>
+    <div class="cmRow cmFoot">
       <button class="cmBtn" id="cmRelease">Release team</button>
       <button class="cmBtn go" id="cmResume">Resume ▸</button></div>`;
   card.querySelectorAll("[data-h]").forEach(b=>b.onclick=()=>{
