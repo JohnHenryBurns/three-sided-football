@@ -405,6 +405,7 @@ class Match {
         for(let t=0;t<3;t++){ if(t===p.team)continue;
           const g=goalCenter(t);
           if(dist(b,g)<110)continue;              // ball is in — the zone is open
+          if(this.o.anticipate&&b.z>4&&dist(b,g)<260&&((g.x-b.x)*b.vx+(g.y-b.y)*b.vy)>0)continue; // timed run: cross is inbound
           const d=dist(p,g);
           if(d<112){ p.x=g.x+(p.x-g.x)/(d||1)*112; p.y=g.y+(p.y-g.y)/(d||1)*112; }
         }
@@ -456,7 +457,7 @@ class Match {
       b.vx*=Math.pow(0.985,S);b.vy*=Math.pow(0.985,S);
       if(b.z>0||b.zv>0){ b.z+=b.zv*S; b.zv-=0.14*S;
         if(b.z<=0){ b.z=0;b.zv=0;
-          const near=P.filter(p=>dist(p,b)<50);
+          const near=P.filter(p=>dist(p,b)<(this.o.duelR||50));
           const teams=new Set(near.map(p=>p.team));
           if(near.length>=2&&teams.size>=2&&this.o.aerial){
             this.m2.headers++;
@@ -632,6 +633,31 @@ if(process.env.ZONE==="1"){
     }
     console.log(JSON.stringify({cell:an+" vs Bus (zone rule)",AbeatsB:+(100*aWins/games).toFixed(1),was:{TikiTaka:60,RouteOne:53.3,Swashbuckle:58.3,Probe:62.5}[an]}));
   }
+  process.exit(0);
+}
+if(process.env.ZONE2==="1"){
+  const BAL={tempo:.5,risk:.5,line:.5,press:.5,direct:.5,bunker:0};
+  function wz(label,zoneRule,anticipate){
+    const rs=[];
+    for(let i=0;i<12;i++)rs.push(new Match({minutes:MIN,dribble:true,aerial:true,zoneRule,anticipate,
+      teamFlags:[{tac:{...BAL}},{tac:{...BAL}},{tac:{...BAL}}]}).run());
+    console.log(JSON.stringify({label,headers:avg(rs,"headersPerMin"),g:avg(rs,"goalsPerMin"),
+      crosses:avg(rs,"crossesPerMin"),shots:avg(rs,"shotsPerMin"),pens:avg(rs,"pensPerMatch")}));
+  }
+  wz("no offside rule",false,false);
+  wz("strict gate (shipped)",true,false);
+  wz("timed runs (anticipate)",true,true);
+  function wz2(label,duelR){
+    const B2={tempo:.5,risk:.5,line:.5,press:.5,direct:.5,bunker:0};
+    const rs=[];
+    for(let i=0;i<12;i++)rs.push(new Match({minutes:MIN,dribble:true,aerial:true,
+      zoneRule:true,anticipate:true,duelR,
+      teamFlags:[{tac:{...B2}},{tac:{...B2}},{tac:{...B2}}]}).run());
+    console.log(JSON.stringify({label,headers:avg(rs,"headersPerMin"),g:avg(rs,"goalsPerMin"),
+      pens:avg(rs,"pensPerMatch")}));
+  }
+  wz2("timed runs + duelR 62",62);
+  wz2("timed runs + duelR 72",72);
   process.exit(0);
 }
 if(process.env.FOULCHK==="1"){
