@@ -397,15 +397,15 @@ function kick(tx,ty,power,isShot){
 // ---------- AI ----------
 function think(dt){
   const owner=ball.owner;
-  const oppOf=t=>players.filter(p=>p.team!==t&&!p.out);
+  const oppOf=t=>players.filter(p=>p.team!==t&&!p.out&&!p.sentOff);
   const chaser=[];
   for(let t=0;t<3;t++){
     let best=null,bd=1e9;
-    players.forEach(p=>{ if(p.team===t&&p.role!=="K"&&!p.out){const d=dist(p,ball); if(d<bd){bd=d;best=p;}}});
+    players.forEach(p=>{ if(p.team===t&&p.role!=="K"&&!p.out&&!p.sentOff){const d=dist(p,ball); if(d<bd){bd=d;best=p;}}});
     chaser[t]=best;
   }
   players.forEach(p=>{
-    if(p.out||targets[p.team]===null)return;
+    if(p.out||p.sentOff||targets[p.team]===null)return;
     const own=goalCenter(p.team), tgt=goalCenter(targets[p.team]);
     if(p===owner){
       let near=null,nd=1e9;
@@ -599,7 +599,8 @@ function physics(dt){
     if(p.out)return;
     const pv=Math.hypot(p.vx,p.vy);
     if(pv>0.15){ p.hx=p.hx*0.85+(p.vx/pv)*0.15; p.hy=p.hy*0.85+(p.vy/pv)*0.15; }
-    p.x+=p.vx*S; p.y+=p.vy*S; clampInside(p, p.role==="K"?12:14);
+    p.x+=p.vx*S; p.y+=p.vy*S;
+    if(!p.sentOff) clampInside(p, p.role==="K"?12:14);
     const v=Math.hypot(p.vx,p.vy), effort=v/2.35;
     p.stamina-=effort*effort*0.0012*S;
     p.stamina+=0.0004*S;
@@ -627,7 +628,7 @@ function physics(dt){
         a.x+=ux*push; a.y+=uy*push; b.x-=ux*push; b.y-=uy*push;
       }
     }
-    players.forEach(p=>clampInside(p, p.role==="K"?12:14));
+    players.forEach(p=>{ if(!p.sentOff) clampInside(p, p.role==="K"?12:14); });
   }
   if(ball.owner){
     const o=ball.owner, v=Math.hypot(o.vx,o.vy);
@@ -1312,10 +1313,12 @@ function loop(now){
         if(retargetTimer>6){retargetTimer=0;computeTargets();}
         think(step); physics(step); colorCommentary();
         players.forEach(q=>{ if(q.sentOff&&!q.out){
-          const {wd,we}=wallDist(q);
+          let wd=1e9,we=null;
+          for(const e2 of EDGES){ const d2=(q.x-e2.p1.x)*e2.nx+(q.y-e2.p1.y)*e2.ny;
+            if(d2<wd){wd=d2;we=e2;} }
           q.x-=we.nx*1.6*step*60; q.y-=we.ny*1.6*step*60; q.vx=0; q.vy=0;
           if(ball.owner===q) ball.owner=null;
-          if(wd<6){ q.out=true; q.sentOff=false;
+          if(wd<-10){ q.out=true; q.sentOff=false;
             say(`${q.name} disappears down the tunnel. ${tm(q.team)} regroup a man light.`); }
         }});
       }
