@@ -1442,7 +1442,7 @@ document.getElementById("btnStart").onclick=()=>{
   say(scoreMode==="conceded"
     ?`Classic Jorn rules today — fewest conceded after ${matchLen/60} minute${matchLen>=120?"s":""} takes it.`
     :`±1 rules — ${matchLen/60} minute${matchLen>=120?"s":""} on the clock, tiebreaks by goals scored, then golden-concession overtime.`,true);
-  if(zoneRule) say(`🏒 Zone-entry rule: no attacker may enter the penalty area before the ball.`);
+  if(zoneRule) say(`Offsides enforced: no attacker may enter the penalty area before the ball.`);
   if(foulMult===0) say(`🤼 No referee today — anything goes.`);
   else if(foulMult>3) say(`🚨 <b>MAYHEM</b> rules — the referee has brought extra cards and a grudge.`);
   else if(foulMult>1) say(`🟨 The referee is in a mood tonight.`);
