@@ -35,6 +35,9 @@
   button:hover{border-color:var(--ink-dim)}
   button:focus-visible,input:focus-visible{outline:2px solid var(--arg);outline-offset:2px}
   label{font-size:.75rem;color:var(--ink-dim);letter-spacing:.05em;text-transform:uppercase;display:flex;align-items:center;gap:.3rem;white-space:nowrap}
+  button .ic{font-size:.95em}
+  button .lbl,button .val{margin-left:.3rem}
+  .icOnly{display:none}
   input[type=range]{accent-color:var(--arg);width:4.5rem;height:1.4rem}
   input[type=checkbox]{accent-color:var(--esp);width:1rem;height:1rem}
   select{font-family:inherit;font-size:.78rem;background:var(--panel);color:var(--ink);
@@ -59,8 +62,8 @@
   #hud{position:absolute;top:.35rem;left:.35rem;right:.35rem;z-index:5;
     display:flex;gap:.35rem;justify-content:center;align-items:flex-start;flex-wrap:wrap;pointer-events:none}
   .hudclock{background:rgba(8,14,10,.78);border:1px solid var(--panel-edge);border-radius:8px;
-    padding:.3rem .55rem;font-size:1rem;font-variant-numeric:tabular-nums;letter-spacing:.06em;
-    pointer-events:auto;align-self:stretch;display:flex;align-items:center}
+    padding:.28rem .45rem;font-size:.9rem;font-variant-numeric:tabular-nums;letter-spacing:.04em;
+    pointer-events:auto;align-self:stretch;display:flex;align-items:center;white-space:nowrap}
   .chips{display:flex;gap:.35rem;flex-wrap:wrap;justify-content:center}
   .chips .card{pointer-events:auto;background:rgba(8,14,10,.78);margin:0;padding:.2rem .4rem;
     border-radius:8px;min-width:4.4rem}
@@ -104,9 +107,9 @@
   .tm{font-weight:600}
 
   /* Momentum flame on the scorecard */
-  .flame{margin-left:auto;font-size:1.15rem;opacity:0;transition:opacity .3s}
+  .flame{display:none;margin-left:auto;font-size:1.05rem}
   .card.hot{box-shadow:0 0 14px rgba(255,181,71,.45)}
-  .card.hot .flame{opacity:1;animation:flick .6s infinite alternate}
+  .card.hot .flame{display:inline-block;animation:flick .6s infinite alternate}
   @keyframes flick{from{transform:scale(1) rotate(-4deg)}to{transform:scale(1.3) rotate(5deg)}}
 
   /* Goal celebration overlay */
@@ -154,16 +157,25 @@
     body{overflow:auto}
     .grid{grid-template-columns:1fr; grid-auto-rows:auto}
     .stage{order:-1; height:60vh}
-    #hud{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;scrollbar-width:none}
-    .hudclock{font-size:.8rem;padding:.22rem .4rem}
-    .chips{flex-wrap:nowrap}
-    .chips .card{min-width:3.9rem;padding:.16rem .32rem}
+    #hud{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;scrollbar-width:none;gap:.25rem}
+    .hudclock{font-size:.72rem;padding:.2rem .32rem}
+    .chips{flex-wrap:nowrap;gap:.25rem}
+    .chips .card{min-width:3.5rem;padding:.14rem .3rem}
     .chips .card .con{display:none}
-    .chips .card .pts{font-size:.95rem}
+    .chips .card .pts{font-size:.9rem}
+    .chips .card .name{font-size:.64rem}
+    .chips .card .hunt{font-size:.56rem}
+    .chips .coachBtn{padding:.05rem .22rem;font-size:.54rem}
     aside.comm{max-height:32vh}
-    header{padding:.25rem .5rem;gap:.4rem}
+    header{padding:.25rem .5rem;gap:.3rem;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+    h1{font-size:.8rem}
     h1 span{display:none}
-    button{padding:.3rem .6rem;min-height:1.8rem;font-size:.78rem}
+    .controls{gap:.3rem;flex-wrap:nowrap}
+    button{padding:.3rem .45rem;min-height:1.9rem;font-size:.82rem}
+    button .lbl{display:none}
+    button .lbl+.val,button .val{margin-left:.25rem}
+    label .lbl{display:none}
+    .icOnly{display:inline}
     label{font-size:.68rem}
   }
   @media (max-width:1100px){ h1 span{display:none} }
@@ -174,11 +186,11 @@
 <header>
   <h1>Three-Sided World Cup <span>/ ESP · ARG · ENG</span></h1>
   <div class="controls">
-    <button id="btnPlay">Pause</button>
-    <button id="btnReset">Reset</button>
-    <button id="btnZoom">Zoom 2.3×</button>
-    <label>Speed <input id="speed" type="range" min="0.5" max="3" step="0.25" value="1"><span id="speedVal">1×</span></label>
-    <label><input id="voiceToggle" type="checkbox"> Narrator</label>
+    <button id="btnPlay" title="Pause / Play"><span class="ic">⏸</span><span class="lbl">Pause</span></button>
+    <button id="btnReset" title="Reset match"><span class="ic">↺</span><span class="lbl">Reset</span></button>
+    <button id="btnZoom" title="Zoom"><span class="ic">🔍</span><span class="val" id="zoomVal">2.3×</span></button>
+    <button id="btnSpeed" title="Speed"><span class="ic">⏩</span><span class="val" id="speedVal">1×</span></button>
+    <label title="Spoken narrator"><input id="voiceToggle" type="checkbox"> <span class="lbl">Narrator</span><span class="ic icOnly">🎙</span></label>
   </div>
 </header>
 
@@ -495,7 +507,7 @@ function think(dt){
       if(momentumOn&&clockSec<boostUntil[o.team]) tc*=1.3;
       if(dist(o,owner)<26 && Math.random()<tc*dt*60){   // MUST stay > body radius 23
         const victim=owner;
-        ball.owner=o; ball.lastTouch=o.team; ball.isShot=false;
+        ball.owner=o; ball.lastTouch=o.team; ball.lastKicker=o; ball.isShot=false;
         if(o.role==="K"){
           // keeper smothering a dribbler is goalkeeping, not a tackle — no tackle credit
           spawnNote(o.x,o.y-20,"smothered!",TEAMS[o.team].color,TEAMS[o.team].accent);
@@ -624,6 +636,7 @@ function physics(dt){
       const strayer=(ball.strayF>0)?ball.strayer:null;
       ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
       ball.touchT=0.3; ball.strayer=null; ball.strayF=0;
+      ball.lastKicker=best;   // person-level attribution follows possession
       if(strayer && best.team!==strayer.team){
         // won it off the dribbler's touch — positional dispossession
         stam(best,+0.08); stam(strayer,-0.08);
@@ -712,7 +725,8 @@ function hideCelebration(){ celeEl.classList.remove("show"); confettiBox.innerHT
 
 function goalScored(concederTeam){
   const scorerTeam=ball.lastTouch;
-  const scorer=ball.lastKicker;
+  const scorer=(ball.owner&&ball.owner.team===scorerTeam)?ball.owner
+    :((ball.lastKicker&&ball.lastKicker.team===scorerTeam)?ball.lastKicker:null);
   const wasLeader=leaderIdx();
   // true underdog test: someone ranked STRICTLY above the scorer before this goal
   const wasTrailing=(scorerTeam!==null)&&[0,1,2].some(o=>!out[o]&&o!==scorerTeam&&rankCmp(o,scorerTeam)<0);
@@ -1144,10 +1158,9 @@ function loop(now){
         if(retargetTimer>6){retargetTimer=0;computeTargets();}
         think(step); physics(step); colorCommentary();
       }
-      const mm=String(Math.floor(clockSec/60)).padStart(2,"0"), ss=String(Math.floor(clockSec%60)).padStart(2,"0");
-      const tot=String(Math.floor(matchLen/60)).padStart(2,"0")+":00";
+      const m=Math.floor(clockSec/60), ss=String(Math.floor(clockSec%60)).padStart(2,"0");
       document.getElementById("clock").textContent=
-        phase==="overtime"?`OT ${mm}:${ss}`:phase==="over"?"FT":`${mm}:${ss} / ${tot}`;
+        phase==="overtime"?`OT ${m}:${ss}`:phase==="over"?"FT":`${m}:${ss}/${Math.floor(matchLen/60)}:00`;
       updateBars(); draw();
     }
   }
@@ -1160,7 +1173,7 @@ const ZOOMS=[1,1.6,2.3,3.5];
 document.getElementById("btnZoom").onclick=e=>{
   const i=(ZOOMS.indexOf(zoom)+1)%ZOOMS.length;
   zoom=ZOOMS[i];
-  e.target.textContent=`Zoom ${zoom}×`;
+  document.getElementById("zoomVal").textContent=zoom+"×";
   if(zoom===1) svg.setAttribute("viewBox","0 0 900 810");
   else { camX=camTX=ball.x; camY=camTY=ball.y; }   // start on the action
   draw();                              // apply immediately, even while paused
@@ -1196,7 +1209,7 @@ function showSetup(){
   running=false;
   if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; }
   hideCelebration(); pendingKickoff=null;
-  document.getElementById("btnPlay").textContent="Play";
+  setPlayBtn();
   setupEl.classList.add("show");
 }
 document.getElementById("btnStart").onclick=()=>{
@@ -1206,21 +1219,25 @@ document.getElementById("btnStart").onclick=()=>{
   setupEl.classList.remove("show");
   camX=camTX=CX; camY=camTY=CY; resumeAt=0;
   resetMatch(); updateBars(); draw();
-  running=true;
-  document.getElementById("btnPlay").textContent="Pause";
+  running=true; setPlayBtn();
   say(scoreMode==="conceded"
     ?`Classic Jorn rules today — fewest conceded after ${matchLen/60} minute${matchLen>=120?"s":""} takes it.`
     :`±1 rules — ${matchLen/60} minute${matchLen>=120?"s":""} on the clock, tiebreaks by goals scored, then golden-concession overtime.`,true);
 };
 
 // ---------- Controls ----------
-document.getElementById("btnPlay").onclick=e=>{
-  running=!running; e.target.textContent=running?"Pause":"Play";
-};
+document.getElementById("btnPlay").onclick=()=>{ running=!running; setPlayBtn(); };
 document.getElementById("btnReset").onclick=()=>{ showSetup(); };
-const spd=document.getElementById("speed");
-spd.oninput=()=>{ speed=parseFloat(spd.value);
-  document.getElementById("speedVal").textContent=speed+"×"; };
+const SPEEDS=[0.5,1,1.5,2,3];
+document.getElementById("btnSpeed").onclick=()=>{
+  const i=(SPEEDS.indexOf(speed)+1)%SPEEDS.length;
+  speed=SPEEDS[i===-1?1:i];
+  document.getElementById("speedVal").textContent=speed+"×";
+};
+function setPlayBtn(){
+  document.querySelector("#btnPlay .ic").textContent=running?"⏸":"▶";
+  document.querySelector("#btnPlay .lbl").textContent=running?"Pause":"Play";
+}
 const vt=document.getElementById("voiceToggle");
 if(!speechOK){ vt.disabled=true; vt.parentElement.title="Speech not supported in this browser"; }
 vt.onchange=e=>{
