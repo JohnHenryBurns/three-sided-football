@@ -400,6 +400,16 @@ class Match {
       p.stamina+=0.0004*S;
       p.stamina=Math.max(0,Math.min(1,p.stamina));
     });
+    if(this.o.zoneRule){
+      for(const p of P){ if(p.out)continue;
+        for(let t=0;t<3;t++){ if(t===p.team)continue;
+          const g=goalCenter(t);
+          if(dist(b,g)<110)continue;              // ball is in — the zone is open
+          const d=dist(p,g);
+          if(d<112){ p.x=g.x+(p.x-g.x)/(d||1)*112; p.y=g.y+(p.y-g.y)/(d||1)*112; }
+        }
+      }
+    }
     const BODY=23;
     for(let pass=0;pass<2;pass++){
       for(let i=0;i<P.length;i++)for(let j=i+1;j<P.length;j++){
@@ -594,6 +604,36 @@ function suite(label,flags,dribble,n,minutes){
 
 const N=parseInt(process.env.N||"16"), MIN=5;
 const FOCUS=process.env.FOCUS==="1";
+if(process.env.ZONE==="1"){
+  const BAL={tempo:.5,risk:.5,line:.5,press:.5,direct:.5,bunker:0};
+  function wz(label,zoneRule){
+    const rs=[];
+    for(let i=0;i<12;i++)rs.push(new Match({minutes:MIN,dribble:true,aerial:true,zoneRule,
+      teamFlags:[{tac:{...BAL}},{tac:{...BAL}},{tac:{...BAL}}]}).run());
+    console.log(JSON.stringify({label,g:avg(rs,"goalsPerMin"),shots:avg(rs,"shotsPerMin"),
+      headers:avg(rs,"headersPerMin"),crosses:avg(rs,"crossesPerMin"),pens:avg(rs,"pensPerMatch"),
+      spell:avg(rs,"avgSpellSec"),saves:avg(rs,"savesPerMin")}));
+  }
+  wz("no zone rule",false);
+  wz("ZONE RULE ON",true);
+  // does the rule refund the Bus? rerun its worst matchups with the rule active
+  const ATK={TikiTaka:{tempo:.9,risk:.3,direct:.15},RouteOne:{tempo:.3,risk:.7,direct:.95},
+    Swashbuckle:{tempo:.8,risk:.95,direct:.5},Probe:{tempo:.35,risk:.25,direct:.3}};
+  const BUS={line:.15,press:.2,bunker:1};
+  for(const an in ATK){
+    let aWins=0,games=0;
+    for(let rot=0;rot<3;rot++)for(let i=0;i<8;i++){
+      const posA=rot,posB=(rot+1)%3;
+      const tf=[{tac:{...BAL}},{tac:{...BAL}},{tac:{...BAL}}];
+      tf[posA]={tac:{...BAL,...ATK[an]}};
+      tf[posB]={tac:{...BAL,...BUS}};
+      const m=new Match({minutes:MIN,dribble:true,aerial:true,zoneRule:true,teamFlags:tf});m.run();
+      if(m.rankCmp(posA,posB)<0)aWins++;games++;
+    }
+    console.log(JSON.stringify({cell:an+" vs Bus (zone rule)",AbeatsB:+(100*aWins/games).toFixed(1),was:{TikiTaka:60,RouteOne:53.3,Swashbuckle:58.3,Probe:62.5}[an]}));
+  }
+  process.exit(0);
+}
 if(process.env.FOULCHK==="1"){
   const BAL={tempo:.5,risk:.5,line:.5,press:.5,direct:.5,bunker:0};
   function w2(label,tac){
