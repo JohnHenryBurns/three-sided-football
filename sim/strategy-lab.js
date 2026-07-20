@@ -291,9 +291,11 @@ class Match {
         const open=pressure>60, smothered=pressure<32;
         const shotChance=0.025*(0.5+1.0*RK)*(open?1.5:smothered?0.55:1.0);
         if(dGoal<(150+50*RK)&&Math.random()<shotChance*dt*60){
-          const scatter=(open?0.55:smothered?1.5:1.0);
-          const off=(Math.random()*2-1)*e.len*GOAL_HALF*scatter;
-          this.kick(tgt.x+e.ux*off,tgt.y+e.uy*off,9.5+Math.random()*1.5,true);
+          let scatter=(open?0.55:smothered?1.5:1.0)*(0.6+0.8*RK);   // patience = precision
+          // a bunkered box deflects and crowds every strike
+          if(this.tac(this.targets[owner.team]).bunker>0.5) scatter*=1.35;
+          const off2=(Math.random()*2-1)*e.len*GOAL_HALF*scatter;
+          this.kick(tgt.x+e.ux*off2,tgt.y+e.uy*off2,9.5+Math.random()*1.5,true);
           return;
         }
       }
@@ -323,7 +325,8 @@ class Match {
           oppOf(owner.team).forEach(o=>{
             const t=((o.x-owner.x)*(m.x-owner.x)+(o.y-owner.y)*(m.y-owner.y))/(d*d);
             if(t>0.1&&t<0.9){const lx=owner.x+(m.x-owner.x)*t,ly=owner.y+(m.y-owner.y)*t;
-              if(Math.hypot(o.x-lx,o.y-ly)<(30-12*this.tac(owner.team).risk))laneOk=false;}
+              const blockR=(30-12*this.tac(owner.team).risk)+5*(this.tac(o.team).press-0.5)*2;
+              if(Math.hypot(o.x-lx,o.y-ly)<blockR)laneOk=false;}
           });
           const s=gain*(0.6+0.8*DIR)+schemeBonus+openBonus*(1.4-0.8*DIR)+(laneOk?0:-500)+Math.random()*30;
           if(s>bs){bs=s;best=m;}
@@ -556,6 +559,43 @@ function suite(label,flags,dribble,n,minutes){
 
 const N=parseInt(process.env.N||"16"), MIN=5;
 const FOCUS=process.env.FOCUS==="1";
+if(process.env.H2H==="1"){
+  // COUNTER matrix: attack identity (team A) vs defense identity (team B), third team neutral.
+  // Cell = % of matches A finishes above B. 50 = neutral, >50 = attack beats that defense.
+  const ATK={
+    TikiTaka:   {tempo:.9, risk:.3,  direct:.15},
+    RouteOne:   {tempo:.3, risk:.7,  direct:.95},
+    Swashbuckle:{tempo:.8, risk:.95, direct:.5 },
+    Probe:      {tempo:.35,risk:.25, direct:.3 },
+  };
+  const DEF={
+    Gegenpress: {line:.8, press:.95, bunker:0},
+    ParkTheBus: {line:.15,press:.2,  bunker:1},
+    Trap:       {line:.35,press:.6,  bunker:0},
+    BalancedD:  {line:.5, press:.5,  bunker:0},
+  };
+  const BAL={tempo:.5,risk:.5,line:.5,press:.5,direct:.5,bunker:0};
+  const perRot=parseInt(process.env.PERROT||"10");
+  const PART=parseInt(process.env.PART||"0");
+  const pairs=[];
+  for(const an in ATK)for(const dn in DEF)pairs.push([an,dn]);
+  const slice=PART===1?pairs.slice(0,8):PART===2?pairs.slice(8):pairs;
+  console.log("attack vs defense".padEnd(30),"A-beats-B% (chance 50)");
+  for(const [an,dn] of slice){
+    let aWins=0,games=0;
+    for(let rot=0;rot<3;rot++)for(let i=0;i<perRot;i++){
+      const posA=rot, posB=(rot+1)%3;
+      const tf=[{tac:{...BAL}},{tac:{...BAL}},{tac:{...BAL}}];
+      tf[posA]={tac:{...BAL,...ATK[an]}};
+      tf[posB]={tac:{...BAL,...DEF[dn]}};
+      const m=new Match({minutes:MIN,dribble:true,aerial:true,teamFlags:tf});m.run();
+      if(m.rankCmp(posA,posB)<0)aWins++;   // A ranks above B
+      games++;
+    }
+    console.log((an+" vs "+dn).padEnd(30),+(100*aWins/games).toFixed(1));
+  }
+  process.exit(0);
+}
 if(process.env.PRESETS==="1"){
   const ATK={
     TikiTaka:   {tempo:.9, risk:.3,  direct:.15},
