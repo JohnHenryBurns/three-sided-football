@@ -52,9 +52,25 @@
   /* The pitch gets a guaranteed share of width; the SVG letterboxes itself inside it */
   .grid{
     flex:1; min-height:0;
-    display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.7fr) minmax(0,1.25fr);
+    display:grid; grid-template-columns:minmax(0,2.2fr) minmax(0,1fr);
     gap:.5rem; padding:.5rem; width:100%; margin:0 auto;
   }
+  /* broadcast HUD floats over the pitch */
+  #hud{position:absolute;top:.35rem;left:.35rem;right:.35rem;z-index:5;
+    display:flex;gap:.35rem;justify-content:center;align-items:flex-start;flex-wrap:wrap;pointer-events:none}
+  .hudclock{background:rgba(8,14,10,.78);border:1px solid var(--panel-edge);border-radius:8px;
+    padding:.3rem .55rem;font-size:1rem;font-variant-numeric:tabular-nums;letter-spacing:.06em;
+    pointer-events:auto;align-self:stretch;display:flex;align-items:center}
+  .chips{display:flex;gap:.35rem;flex-wrap:wrap;justify-content:center}
+  .chips .card{pointer-events:auto;background:rgba(8,14,10,.78);margin:0;padding:.25rem .45rem;
+    border-radius:8px;min-width:6.2rem}
+  .chips .card .name{font-size:.72rem;gap:.25rem}
+  .chips .card .pts{font-size:1.15rem}
+  .chips .card .con{font-size:.58rem}
+  .chips .card .hunt{font-size:.62rem;margin-top:0}
+  .chips .card .stambar{margin-top:.2rem;height:.2rem}
+  .chips .card .row{margin-top:0;gap:.35rem}
+  .chips .coachBtn{font-size:.58rem;padding:.08rem .3rem}
   aside{
     background:var(--panel); border:1px solid var(--panel-edge); border-radius:10px;
     padding:.5rem; overflow-y:auto; min-height:0;
@@ -132,19 +148,13 @@
   @keyframes fall{to{transform:translateY(120vh) rotate(680deg);opacity:.65}}
   @media (prefers-reduced-motion:reduce){ .cele{animation:none} .card.hot .flame{animation:none} .confetti{display:none} }
 
-  /* Portrait phones: stack, pitch on top at fixed height, three compact cards across */
+  /* Portrait phones: stack, pitch on top with the HUD overlaid */
   @media (orientation:portrait){
     .cele{padding:1.2rem 1.1rem}
     body{overflow:auto}
     .grid{grid-template-columns:1fr; grid-auto-rows:auto}
-    .stage{order:-1; height:52vh}
-    aside.scores{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.3rem;overflow:hidden}
-    .card{margin-bottom:0;padding:.3rem .4rem;min-width:0}
-    .card .name{font-size:.78rem}
-    .coachBtn{font-size:.6rem;padding:.1rem .3rem}
-    .card .pts{font-size:1.25rem}
-    .card .con{font-size:.62rem}
-    .card .hunt{font-size:.68rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .stage{order:-1; height:60vh}
+    .chips .card{min-width:5.2rem}
     aside.comm{max-height:32vh}
     header{padding:.25rem .5rem;gap:.4rem}
     h1 span{display:none}
@@ -158,7 +168,6 @@
 <body>
 <header>
   <h1>Three-Sided World Cup <span>/ ESP · ARG · ENG</span></h1>
-  <div class="clock" id="clock">00:00</div>
   <div class="controls">
     <button id="btnPlay">Pause</button>
     <button id="btnReset">Reset</button>
@@ -169,8 +178,11 @@
 </header>
 
 <div class="grid">
-  <aside class="scores" id="scoreboard" aria-label="Scoreboard"></aside>
   <div class="stage">
+    <div id="hud">
+      <div class="hudclock" id="clock">00:00</div>
+      <div id="scoreboard" class="chips" aria-label="Scoreboard"></div>
+    </div>
     <svg id="pitch" viewBox="0 0 900 810" role="img" aria-label="Hexagonal pitch, three teams"></svg>
   </div>
   <aside class="comm" aria-label="Commentary">
@@ -266,7 +278,7 @@ function resetMatch(){
      k1:0.64+Math.random()*0.10, k2:0.82+Math.random()*0.16,  // unique spring constants
      hx:0,hy:0, goals:0,tackles:0,saves:0}));                                             // smoothed heading for ball carry
   ball={x:CX,y:CY,vx:0,vy:0,owner:null,lastTouch:null,lastKicker:null,isShot:false,noClaim:null,noClaimF:0,
-    touchT:0,strayer:null,strayF:0};
+    touchT:0,strayer:null,strayF:0,z:0,zv:0};
   computeTargets();
   const first=Math.floor(Math.random()*3);
   kickoff(first);
@@ -278,7 +290,7 @@ function kickoff(toTeam){
   let i=0;
   for(let t=0;t<3;t++){ formation(t).forEach(f=>{const p=players[i++]; p.x=f.x;p.y=f.y;p.vx=0;p.vy=0;}); }
   ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
-  ball.touchT=0; ball.strayer=null; ball.strayF=0;
+  ball.touchT=0; ball.strayer=null; ball.strayF=0; ball.z=0; ball.zv=0;
   const fwd=players.find(p=>p.team===toTeam&&p.role==="F");
   fwd.x=CX-8; fwd.y=CY; ball.owner=fwd; ball.lastTouch=toTeam;
   spawnNote(CX,CY-46,"kick-off!",TEAMS[toTeam].color,TEAMS[toTeam].accent);
@@ -350,6 +362,8 @@ function kick(tx,ty,power,isShot){
   ball.vx=dx/d*power; ball.vy=dy/d*power;
   ball.lastTouch=o.team; ball.lastKicker=o; ball.isShot=!!isShot;
   ball.noClaim=o; ball.noClaimF=14; ball.owner=null;
+  ball.z=0; ball.zv=0;
+  if(!isShot && d>235){ ball.zv=3.0; }   // long balls travel through the air
   if(isShot){ stats.shots[o.team]++; spawnNote(ball.x,ball.y-18,"shot!","#ffd166");
     if(typeof spawnPing==="function"&&ballHalo) spawnPing(ball.x,ball.y,TEAMS[o.team].color); }
 }
@@ -556,10 +570,44 @@ function physics(dt){
     const px0=ball.x, py0=ball.y;
     ball.x+=ball.vx*S; ball.y+=ball.vy*S;
     ball.vx*=Math.pow(0.985,S); ball.vy*=Math.pow(0.985,S);
+    // flight and landing
+    if(ball.z>0||ball.zv>0){
+      ball.z+=ball.zv*S; ball.zv-=0.14*S;
+      if(ball.z<=0){
+        ball.z=0; ball.zv=0;
+        const near=players.filter(p=>!p.out&&dist(p,ball)<50);
+        const teams=new Set(near.map(p=>p.team));
+        if(near.length>=2&&teams.size>=2){
+          // header duel — highest man wins
+          let win=null,wt=0;
+          near.forEach(p=>{const w=(1/(dist(p,ball)+8))*(0.6+0.8*Math.random()); if(w>wt){wt=w;win=p;}});
+          const tgt2=goalCenter(targets[win.team]??win.team);
+          ball.lastTouch=win.team; ball.lastKicker=win;
+          spawnNote(ball.x,ball.y-24,"header!",TEAMS[win.team].color,TEAMS[win.team].accent);
+          if(Math.random()<0.4) say(pick([
+            `${win.name} rises highest!`,
+            `Up goes ${win.name} — wins it in the air!`,
+            `${win.name} climbs above the crowd!`]));
+          if(targets[win.team]!==null&&dist(ball,tgt2)<160&&win.role!=="K"){
+            const e2=EDGES[GOAL_EDGE[targets[win.team]]];
+            const off2=(Math.random()*2-1)*e2.len*GOAL_HALF*1.35;
+            const ddx=tgt2.x+e2.ux*off2-ball.x, ddy=tgt2.y+e2.uy*off2-ball.y, dl2=Math.hypot(ddx,ddy)||1;
+            ball.vx=ddx/dl2*8.5; ball.vy=ddy/dl2*8.5; ball.isShot=true;
+            stats.shots[win.team]++;
+            spawnPing(ball.x,ball.y,TEAMS[win.team].color);
+          } else {
+            const ddx=tgt2.x-ball.x, ddy=tgt2.y-ball.y, dl2=Math.hypot(ddx,ddy)||1;
+            ball.vx=ddx/dl2*5; ball.vy=ddy/dl2*5;
+          }
+          ball.noClaim=win; ball.noClaimF=10;
+        }
+      }
+    }
     if(ball.noClaimF>0) ball.noClaimF-=S; else ball.noClaim=null;
     if(ball.strayF>0) ball.strayF-=S; else ball.strayer=null;
     let best=null,bd=1e9;
     players.forEach(p=>{ if(p.out)return; if(p===ball.noClaim&&ball.noClaimF>0)return;
+      if(ball.z>(p.role==="K"?28:12))return;   // sailing over their heads
       const sx=ball.x-px0, sy=ball.y-py0, sl=sx*sx+sy*sy;
       let t=sl>0?((p.x-px0)*sx+(p.y-py0)*sy)/sl:0;
       t=Math.max(0,Math.min(1,t));
@@ -612,7 +660,10 @@ function physics(dt){
       const gTeam=e.goal?GOAL_EDGE.indexOf(k):-1;
       const inMouth=e.goal && !out[gTeam] && Math.abs(along)<e.len*GOAL_HALF;
       if(inMouth){
-        if(d<-6){ goalScored(GOAL_EDGE.indexOf(k)); return; }
+        if(d<-6){
+          if(ball.z<28){ goalScored(GOAL_EDGE.indexOf(k)); return; }
+          else if(ball.isShot){ spawnNote(ball.x,ball.y-20,"over the bar!","#ffd166"); ball.isShot=false; }
+        }
       } else {
         if(ball.isShot && ball.lastKicker){
           say(pick([
@@ -951,7 +1002,7 @@ function buildPitch(){
   }
 }
 
-let actorEls=[], ballEl, ballHalo, ownerLabel, trailEls=[], trailPts=[], pings=[];
+let actorEls=[], ballEl, ballHalo, ballShadow, ownerLabel, trailEls=[], trailPts=[], pings=[];
 function buildActors(){
   players.forEach(p=>{
     const g=el("g",{});
@@ -969,10 +1020,11 @@ function buildActors(){
   });
   // fading trail (under the ball)
   for(let i=0;i<7;i++) trailEls.push(el("circle",{r:7-i*0.7,fill:"#fff",opacity:0}));
+  // ground shadow rendered separately so the ball can leave the floor
+  ballShadow=el("circle",{r:10,fill:"rgba(0,0,0,.3)"});
   // the ball: classic black-pattern panels + a possession halo in the owner's color
   const bg=el("g",{});
   ballHalo=el("circle",{r:14,fill:"none","stroke-width":3.2,opacity:0},bg);
-  el("circle",{r:10,fill:"rgba(0,0,0,.3)",cy:3},bg);
   el("circle",{r:9,fill:"#fff",stroke:"#222","stroke-width":2},bg);
   el("circle",{r:3.2,fill:"#111"},bg);
   for(let k=0;k<5;k++){const a=k*2*Math.PI/5-Math.PI/2;
@@ -1018,7 +1070,11 @@ function draw(){
     c.setAttribute("cx",pt.x);c.setAttribute("cy",pt.y);
     c.setAttribute("opacity",bspd>4.5?(0.4*(1-i/7)).toFixed(2):0);
   });
-  ballEl.setAttribute("transform",`translate(${ball.x},${ball.y})`);
+  const lift=ball.z*0.55;
+  ballEl.setAttribute("transform",`translate(${ball.x},${ball.y-lift})${ball.z>2?` scale(${(1+ball.z*0.012).toFixed(3)})`:""}`);
+  ballShadow.setAttribute("cx",ball.x); ballShadow.setAttribute("cy",ball.y+3);
+  ballShadow.setAttribute("r",(10-Math.min(5,ball.z*0.12)).toFixed(1));
+  ballShadow.setAttribute("opacity",(0.3-Math.min(0.2,ball.z*0.005)).toFixed(2));
   // possession halo in the owner's color
   if(ball.owner){
     ballHalo.setAttribute("stroke",TEAMS[ball.owner.team].color);
