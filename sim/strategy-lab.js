@@ -43,7 +43,8 @@ class Match {
       {team:t,role:f.role,x:f.x,y:f.y,vx:0,vy:0,stamina:1,
        k1:0.64+Math.random()*0.10,k2:0.82+Math.random()*0.16,hx:1,hy:0}));
     this.ball={x:CX,y:CY,vx:0,vy:0,owner:null,lastTouch:null,lastKicker:null,isShot:false,
-      noClaim:null,noClaimF:0,touchT:0};
+      noClaim:null,noClaimF:0,touchT:0,z:0,zv:0};
+    this.m2={headers:0,crosses:0};
     this.play=null; // give-and-go contract {passer,receiver,until}
     this.offSeed=[Math.random()*9,Math.random()*9,Math.random()*9];
     this.computeTargets();
@@ -112,6 +113,8 @@ class Match {
     b.vx=dx/d*power;b.vy=dy/d*power;
     b.lastTouch=o.team;b.lastKicker=o;b.isShot=!!isShot;
     b.noClaim=o;b.noClaimF=14;b.owner=null;
+    b.z=0;b.zv=0;
+    if(this.o.aerial&&!isShot&&d>235){ b.zv=3.0; this.m2.crosses++; }
     if(isShot)this.m.shots++;
   }
   wallDist(p){
@@ -400,9 +403,33 @@ class Match {
       const px0=b.x,py0=b.y;
       b.x+=b.vx*S;b.y+=b.vy*S;
       b.vx*=Math.pow(0.985,S);b.vy*=Math.pow(0.985,S);
+      if(b.z>0||b.zv>0){ b.z+=b.zv*S; b.zv-=0.14*S;
+        if(b.z<=0){ b.z=0;b.zv=0;
+          const near=P.filter(p=>dist(p,b)<50);
+          const teams=new Set(near.map(p=>p.team));
+          if(near.length>=2&&teams.size>=2&&this.o.aerial){
+            this.m2.headers++;
+            let win=null,wt=0;
+            near.forEach(p=>{const w=(1/(dist(p,b)+8))*(0.6+0.8*Math.random());if(w>wt){wt=w;win=p;}});
+            const tgt2=goalCenter(this.targets[win.team]);
+            b.lastTouch=win.team;b.lastKicker=win;
+            if(dist(b,tgt2)<160&&win.role!=="K"){
+              const e2=EDGES[GOAL_EDGE[this.targets[win.team]]];
+              const off2=(Math.random()*2-1)*e2.len*GOAL_HALF*1.35;
+              const ddx=tgt2.x+e2.ux*off2-b.x,ddy=tgt2.y+e2.uy*off2-b.y,dl2=Math.hypot(ddx,ddy)||1;
+              b.vx=ddx/dl2*8.5;b.vy=ddy/dl2*8.5;b.isShot=true;this.m.shots++;
+            } else {
+              const ddx=tgt2.x-b.x,ddy=tgt2.y-b.y,dl2=Math.hypot(ddx,ddy)||1;
+              b.vx=ddx/dl2*5;b.vy=ddy/dl2*5;
+            }
+            b.noClaim=win;b.noClaimF=10;
+          }
+        }
+      }
       if(b.noClaimF>0)b.noClaimF-=S;else b.noClaim=null;
       let best=null,bd=1e9;
       P.forEach(p=>{if(p===b.noClaim&&b.noClaimF>0)return;
+        if(b.z>(p.role==="K"?28:12))return;
         const sx=b.x-px0,sy=b.y-py0,sl=sx*sx+sy*sy;
         let t=sl>0?((p.x-px0)*sx+(p.y-py0)*sy)/sl:0;
         t=Math.max(0,Math.min(1,t));
@@ -437,7 +464,7 @@ class Match {
         const along=(b.x-e.mx)*e.ux+(b.y-e.my)*e.uy;
         const inMouth=e.goal&&Math.abs(along)<e.len*GOAL_HALF;
         if(inMouth){
-          if(d<-6){this.goal(GOAL_EDGE.indexOf(k));return;}
+          if(d<-6){ if(b.z<28){this.goal(GOAL_EDGE.indexOf(k));return;} }
         }else{
           b.x+=e.nx*(7-d);b.y+=e.ny*(7-d);
           const vn=b.vx*e.nx+b.vy*e.ny;
@@ -496,6 +523,8 @@ class Match {
       spatialPerMin:+(this.m.dispossessSpatial/min).toFixed(1),
       carriedIn:this.m.carriedIn||0,
       avgSpellSec:+(sp.length?sp.reduce((a,b)=>a+b,0)/sp.length:0).toFixed(2),
+      headersPerMin:+(this.m2.headers/min).toFixed(2),
+      crossesPerMin:+(this.m2.crosses/min).toFixed(2),
       passOkPerMin:+(this.m.passOk/min).toFixed(1),
       score:[...this.score],
     };
@@ -522,6 +551,19 @@ function suite(label,flags,dribble,n,minutes){
 
 const N=parseInt(process.env.N||"16"), MIN=5;
 const FOCUS=process.env.FOCUS==="1";
+if(process.env.AERIAL==="1"){
+  function suiteA(label,aerial){
+    const rs=[];
+    for(let i=0;i<N;i++)rs.push(new Match({minutes:MIN,dribble:true,aerial,
+      teamFlags:[{aware:false,plays:true},{aware:false,plays:true},{aware:false,plays:true}]}).run());
+    console.log(JSON.stringify({label,goalsPerMin:avg(rs,"goalsPerMin"),own:avg(rs,"ownPerMatch"),
+      turnovers:avg(rs,"turnoversPerMin"),headers:avg(rs,"headersPerMin"),crosses:avg(rs,"crossesPerMin"),
+      passOk:avg(rs,"passOkPerMin"),shots:avg(rs,"shotsPerMin"),saves:avg(rs,"savesPerMin")}));
+  }
+  suiteA("dribble+plays (ground only)",false);
+  suiteA("dribble+plays +AERIAL",true);
+  process.exit(0);
+}
 console.log("=== PERMUTATIONS (same features for all teams) ===");
 if(FOCUS){
   suite("aware-world (marking, no offense)",{aware:true,plays:false,offense:false},false,N,MIN);
