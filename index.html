@@ -293,6 +293,7 @@ function resetMatch(){
   coached=[false,false,false]; coachTarget=[null,null,null]; activeCoach=null;
   stats={shots:[0,0,0],saves:[0,0,0],tackles:[0,0,0],poss:[0,0,0]};
   goalsLog=[]; goldenScorer=null;
+  goalEls.forEach(g=>g&&g.setAttribute("opacity",1));
   suppress=null; pendingPenalty=null; penaltyShooter=null; penaltyGoalTeam=null;
   stoppageAnnounced=false;
   stoppageLen=Math.min(55,matchLen*0.2)*(0.85+Math.random()*0.3);
@@ -905,6 +906,7 @@ function goalScored(concederTeam){
 // ---------- Full time, elimination, and the crown ----------
 function eliminateTeam(t){
   out[t]=true;
+  if(goalEls[t]) goalEls[t].setAttribute("opacity",.3);   // the goal seals
   coached[t]=false; coachTarget[t]=null; if(activeCoach===t)activeCoach=null;
   players.forEach(p=>{ if(p.team===t){ p.out=true; if(ball.owner===p) ball.owner=null; }});
   if(ball.lastKicker&&ball.lastKicker.out) ball.isShot=false;
@@ -1108,6 +1110,9 @@ function buildPitch(){
   const grad=el("radialGradient",{id:"turf",cx:"50%",cy:"46%",r:"75%"},defs);
   el("stop",{offset:"0%","stop-color":"#236b41"},grad);
   el("stop",{offset:"100%","stop-color":"#174b2d"},grad);
+  const pat=el("pattern",{id:"net",width:"7",height:"7",patternUnits:"userSpaceOnUse",
+    patternTransform:"rotate(45)"},defs);
+  el("path",{d:"M0 0H7M0 0V7",stroke:"rgba(255,255,255,.5)","stroke-width":1,fill:"none"},pat);
   const hexPts=V.map(v=>`${v.x},${v.y}`).join(" ");
   el("polygon",{points:hexPts,fill:"url(#turf)",stroke:"var(--chalk)","stroke-width":3});
   // "mowing" bands: nested hexes with alternating tint
@@ -1134,18 +1139,37 @@ function buildPitch(){
   for(let t=0;t<3;t++){
     const e=EDGES[GOAL_EDGE[t]], hw=e.len*GOAL_HALF;
     const x1=e.mx-e.ux*hw, y1=e.my-e.uy*hw, x2=e.mx+e.ux*hw, y2=e.my+e.uy*hw;
-    el("line",{x1,y1,x2,y2,stroke:TEAMS[t].color,"stroke-width":9,"stroke-linecap":"round",opacity:.95});
-    el("line",{x1,y1,x2,y2,stroke:TEAMS[t].color,"stroke-width":22,"stroke-linecap":"round",opacity:.18});
+    const gg=el("g",{}); goalEls[t]=gg;
+    // recessed goal: back frame narrower than the mouth for a hint of depth
+    const depth=17, bhw=hw*0.84;
+    const bx1=e.mx-e.nx*depth-e.ux*bhw, by1=e.my-e.ny*depth-e.uy*bhw;
+    const bx2=e.mx-e.nx*depth+e.ux*bhw, by2=e.my-e.ny*depth+e.uy*bhw;
+    const cavity=`M${x1} ${y1} L${x2} ${y2} L${bx2} ${by2} L${bx1} ${by1} Z`;
+    el("path",{d:cavity,fill:"rgba(0,0,0,.45)"},gg);                    // the dark of the goal
+    el("path",{d:cavity,fill:"url(#net)",opacity:.85},gg);              // diamond mesh
+    el("path",{d:cavity,fill:"none",stroke:"rgba(255,255,255,.45)","stroke-width":1.6},gg);
+    // stanchion cords from posts to back frame corners
+    el("line",{x1:x1,y1:y1,x2:bx1,y2:by1,stroke:"rgba(255,255,255,.55)","stroke-width":2},gg);
+    el("line",{x1:x2,y1:y2,x2:bx2,y2:by2,stroke:"rgba(255,255,255,.55)","stroke-width":2},gg);
+    // team glow washing out of the mouth onto the turf
+    el("line",{x1:x1+e.nx*6,y1:y1+e.ny*6,x2:x2+e.nx*6,y2:y2+e.ny*6,
+      stroke:TEAMS[t].color,"stroke-width":16,"stroke-linecap":"round",opacity:.20},gg);
+    // goal line: team color under a crisp chalk stripe
+    el("line",{x1,y1,x2,y2,stroke:TEAMS[t].color,"stroke-width":7,"stroke-linecap":"round",opacity:.95},gg);
+    el("line",{x1,y1,x2,y2,stroke:"#fff","stroke-width":2.4,opacity:.92},gg);
+    // posts
+    el("circle",{cx:x1,cy:y1,r:4.4,fill:"#f5f5f5",stroke:"#161616","stroke-width":1.7},gg);
+    el("circle",{cx:x2,cy:y2,r:4.4,fill:"#f5f5f5",stroke:"#161616","stroke-width":1.7},gg);
+    // the D and team label ride along so elimination dims the whole goal
     el("path",{d:`M ${x1+e.nx*4} ${y1+e.ny*4} A ${hw*1.25} ${hw*1.25} 0 0 1 ${x2+e.nx*4} ${y2+e.ny*4}`,
-      fill:"none",stroke:"rgba(255,255,255,.5)","stroke-width":2});
-    // team label near goal
+      fill:"none",stroke:"rgba(255,255,255,.5)","stroke-width":2},gg);
     el("text",{x:e.mx+e.nx*48,y:e.my+e.ny*48,fill:"rgba(255,255,255,.55)",
       "font-size":"30","text-anchor":"middle","letter-spacing":"3",
-      "font-family":"inherit"}).textContent=TEAMS[t].short;
+      "font-family":"inherit"},gg).textContent=TEAMS[t].short;
   }
 }
 
-let actorEls=[], ballEl, ballHalo, ballShadow, ownerLabel, walkLabel, trailEls=[], trailPts=[], pings=[];
+let actorEls=[], ballEl, ballHalo, ballShadow, ownerLabel, walkLabel, trailEls=[], trailPts=[], pings=[], goalEls=[];
 function buildActors(){
   players.forEach(p=>{
     const g=el("g",{});
