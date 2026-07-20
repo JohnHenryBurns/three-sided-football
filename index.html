@@ -62,10 +62,10 @@
   }
   /* broadcast HUD floats over the pitch */
   #hud{position:absolute;top:.35rem;left:.35rem;right:.35rem;z-index:5;
-    display:flex;gap:.35rem;justify-content:center;align-items:flex-start;flex-wrap:wrap;pointer-events:none}
+    display:flex;flex-direction:column;gap:.3rem;align-items:center;pointer-events:none}
   .hudclock{background:rgba(8,14,10,.78);border:1px solid var(--panel-edge);border-radius:8px;
-    padding:.28rem .45rem;font-size:.9rem;font-variant-numeric:tabular-nums;letter-spacing:.04em;
-    pointer-events:auto;align-self:stretch;display:flex;align-items:center;white-space:nowrap}
+    padding:.2rem .55rem;font-size:.82rem;font-variant-numeric:tabular-nums;letter-spacing:.04em;
+    pointer-events:auto;white-space:nowrap}
   .chips{display:flex;gap:.35rem;flex-wrap:wrap;justify-content:center}
   .chips .card{pointer-events:auto;background:rgba(8,14,10,.78);margin:0;padding:.2rem .4rem;
     border-radius:8px;min-width:4.4rem}
@@ -159,9 +159,9 @@
     body{overflow:auto}
     .grid{grid-template-columns:1fr; grid-auto-rows:auto}
     .stage{order:-1; height:60vh}
-    #hud{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;scrollbar-width:none;gap:.25rem}
-    .hudclock{font-size:.72rem;padding:.2rem .32rem}
-    .chips{flex-wrap:nowrap;gap:.25rem}
+    #hud{gap:.22rem}
+    .hudclock{font-size:.7rem;padding:.16rem .45rem}
+    .chips{flex-wrap:nowrap;gap:.25rem;max-width:100%;overflow-x:auto;scrollbar-width:none}
     .chips .card{min-width:3.5rem;padding:.14rem .3rem}
     .chips .card .con{display:none}
     .chips .card .pts{font-size:.9rem}
@@ -196,8 +196,8 @@
 <div class="grid">
   <div class="stage">
     <div id="hud">
-      <div class="hudclock" id="clock">00:00</div>
       <div id="scoreboard" class="chips" aria-label="Scoreboard"></div>
+      <div class="hudclock" id="clock">00:00</div>
     </div>
     <svg id="pitch" viewBox="0 0 900 810" role="img" aria-label="Hexagonal pitch, three teams"></svg>
   </div>
@@ -222,6 +222,7 @@
     <option value="600">10 minutes</option>
   </select></div>
   <div class="formrow chk"><label for="setMom">Underdog fire</label><input id="setMom" type="checkbox" checked></div>
+  <div class="formrow chk"><label for="setZone" title="Attackers can't enter the penalty area before the ball">Zone-entry rule</label><input id="setZone" type="checkbox" checked></div>
   <button id="btnStart">Kick off</button>
   <a class="ghlink" href="https://github.com/JohnHenryBurns/three-sided-football" target="_blank" rel="noopener">⚙ view on GitHub</a>
 </div></div>
@@ -286,13 +287,16 @@ function resetMatch(){
   coached=[false,false,false]; coachTarget=[null,null,null]; activeCoach=null;
   stats={shots:[0,0,0],saves:[0,0,0],tackles:[0,0,0],poss:[0,0,0]};
   goalsLog=[]; goldenScorer=null;
+  suppress=null; pendingPenalty=null; penaltyShooter=null; penaltyGoalTeam=null;
+  stoppageAnnounced=false;
+  stoppageLen=Math.min(55,matchLen*0.2)*(0.85+Math.random()*0.3);
   notes.forEach(n=>n.e.remove()); notes=[];
   pings.forEach(pg=>pg.e.remove()); pings=[];
   boostUntil=[0,0,0]; lastPossessTeam=null; lastPossessComment=-99; lastFatigueComment=0; lastColorComment=0;
   for(let t=0;t<3;t++) formation(t).forEach((f,i)=>players.push(
     {team:t,role:f.role,name:TEAMS[t].roster[i],x:f.x,y:f.y,vx:0,vy:0,stamina:1,
      k1:0.64+Math.random()*0.10, k2:0.82+Math.random()*0.16,  // unique spring constants
-     hx:0,hy:0, goals:0,tackles:0,saves:0}));                                             // smoothed heading for ball carry
+     hx:0,hy:0, goals:0,tackles:0,saves:0, yellows:0,sentOff:false}));                                             // smoothed heading for ball carry
   ball={x:CX,y:CY,vx:0,vy:0,owner:null,lastTouch:null,lastKicker:null,isShot:false,noClaim:null,noClaimF:0,
     touchT:0,strayer:null,strayF:0,z:0,zv:0};
   computeTargets();
@@ -446,6 +450,14 @@ function think(dt){
   }
   // owner decisions
   if(owner){
+    if(penaltyShooter===owner){
+      penaltyShooter=null;
+      const e=EDGES[GOAL_EDGE[penaltyGoalTeam]], g=goalCenter(penaltyGoalTeam);
+      const off2=(Math.random()*2-1)*e.len*GOAL_HALF*1.0;
+      stats.shots[owner.team]++;
+      kick(g.x+e.ux*off2, g.y+e.uy*off2, 10.8, true);
+      return;
+    }
     if(owner.role==="K"){
       const og=goalCenter(owner.team);
       let best=null,bd=1e9;
@@ -498,8 +510,58 @@ function think(dt){
       });
       if(best&&bs>-100){ kick(best.x+best.vx*8, best.y+best.vy*8, Math.min(9,dist(best,owner)*0.045+4)); return;}
     }
+    // FOULS: clumsy or cynical challenges — aggression is now a priced behavior
+    for(const o of oppOf(owner.team)){
+      if(o.role==="K"||o.out)continue;
+      if(suppress&&suppress.team===o.team&&clockSec<suppress.until)continue;
+      if(dist(o,owner)>=28)continue;
+      const inBox=dist(owner,goalCenter(o.team))<110;
+      const fc=0.0022*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
+      if(Math.random()<fc*dt*60){
+        const victim=owner;
+        spawnNote(victim.x,victim.y-24,"FOUL!","#ffd166");
+        addStoppage(1.2);
+        const r=Math.random();
+        let card=null;
+        if(r<0.035) card="red";
+        else if(r<0.20) card=(o.yellows>=1)?"second":"yellow";
+        if(card==="yellow") o.yellows++;
+        const off=(card==="red"?pick(RED_OFFENSES):pick(YELLOW_OFFENSES)).replaceAll("{V}",victim.name);
+        const shortT=TEAMS[o.team].short, col=TEAMS[o.team].color;
+        if(inBox){
+          pendingPenalty={shooter:victim, conceder:o.team};
+          addStoppage(4);
+        } else {
+          suppress={team:o.team, until:clockSec+1.0};
+        }
+        const penTag=inBox?` <b style="color:#ffd166">AND IT'S A PENALTY!</b>`:"";
+        if(card==="red"||card==="second"){
+          addStoppage(3);
+          o.sentOff=true;
+          const left=players.filter(q=>q.team===o.team&&!q.out&&!q.sentOff).length;
+          showNotice(col, card==="second"?"🟨🟥 SECOND YELLOW":"🟥 RED CARD",
+            `${o.name} (${shortT})`,
+            `The offense: ${off}.${penTag}<br>OFF! The walk of shame begins — ${tm(o.team)} down to ${left} men.`, 5200);
+          say(`🟥 <b>RED CARD!</b> ${o.name} sent off for ${off}. ${tm(o.team)} play on a man short!`,true);
+        } else if(card==="yellow"){
+          addStoppage(3);
+          showNotice(col,"🟨 YELLOW CARD",`${o.name} (${shortT})`,
+            `The offense: ${off}. Into the book he goes.${penTag}`, 4200);
+          say(`🟨 ${o.name} is booked — ${off}.`,true);
+        } else if(inBox){
+          showNotice(TEAMS[victim.team].color,"⚠️ PENALTY!",
+            `${victim.name} is brought down in the box!`,
+            `${o.name} ${off} — the referee points to the spot.`, 4600);
+          say(`<b style="color:${TEAMS[victim.team].color}">PENALTY to ${tm(victim.team)}!</b>`,true);
+        } else if(Math.random()<0.5){
+          say(`Free kick — ${o.name} ${off}.`);
+        }
+        return;
+      }
+    }
     // tackles (fatigue and momentum affect steal odds; radius sits just outside body contact)
     oppOf(owner.team).forEach(o=>{
+      if(suppress&&suppress.team===o.team&&clockSec<suppress.until) return;
       let tc=0.010;                          // shoulder contests; most dispossession is now positional
       tc*=(0.55+0.45*o.stamina);             // fresh tacklers bite harder
       tc*=(1.35-0.5*owner.stamina);          // gassed carriers are easier to rob
@@ -529,6 +591,8 @@ function physics(dt){
   const S=dt*60;
   players.forEach(p=>{
     if(p.out)return;
+    const pv=Math.hypot(p.vx,p.vy);
+    if(pv>0.15){ p.hx=p.hx*0.85+(p.vx/pv)*0.15; p.hy=p.hy*0.85+(p.vy/pv)*0.15; }
     p.x+=p.vx*S; p.y+=p.vy*S; clampInside(p, p.role==="K"?12:14);
     const v=Math.hypot(p.vx,p.vy), effort=v/2.35;
     p.stamina-=effort*effort*0.0012*S;
@@ -536,6 +600,16 @@ function physics(dt){
     p.stamina=Math.max(0,Math.min(1,p.stamina));
   });
   // hard body collision: players are solid — resolve overlaps positionally (2 passes)
+  if(zoneRule){
+    players.forEach(p=>{ if(p.out||p.sentOff)return;
+      for(let t=0;t<3;t++){ if(t===p.team)continue;
+        const g=goalCenter(t);
+        if(dist(ball,g)<110)continue;            // ball is in — the zone is open
+        const d=dist(p,g);
+        if(d<112){ p.x=g.x+(p.x-g.x)/(d||1)*112; p.y=g.y+(p.y-g.y)/(d||1)*112; }
+      }
+    });
+  }
   const BODY=23;
   for(let pass=0;pass<2;pass++){
     for(let i=0;i<players.length;i++)for(let j=i+1;j<players.length;j++){
@@ -622,7 +696,8 @@ function physics(dt){
     if(ball.noClaimF>0) ball.noClaimF-=S; else ball.noClaim=null;
     if(ball.strayF>0) ball.strayF-=S; else ball.strayer=null;
     let best=null,bd=1e9;
-    players.forEach(p=>{ if(p.out)return; if(p===ball.noClaim&&ball.noClaimF>0)return;
+    players.forEach(p=>{ if(p.out||p.sentOff)return; if(p===ball.noClaim&&ball.noClaimF>0)return;
+      if(suppress&&suppress.team===p.team&&clockSec<suppress.until)return;
       if(ball.z>(p.role==="K"?28:12))return;   // sailing over their heads
       const sx=ball.x-px0, sy=ball.y-py0, sl=sx*sx+sy*sy;
       let t=sl>0?((p.x-px0)*sx+(p.y-py0)*sy)/sl:0;
@@ -700,6 +775,9 @@ function physics(dt){
 
 // ---------- Goal celebration ----------
 let celebrateUntil=0, pendingKickoff=null;
+let suppress=null, pendingPenalty=null, penaltyShooter=null, penaltyGoalTeam=null;
+let stoppageLen=0, stoppageAnnounced=false, zoneRule=true;
+function addStoppage(sec){ stoppageLen=Math.min(Math.min(65,matchLen*0.30), stoppageLen+sec); }
 const celeEl=document.getElementById("celebrate"), celeCard=document.getElementById("celeCard"),
       confettiBox=document.getElementById("confettiBox");
 function showCelebration(color, big, whoHTML, subHTML, fireHTML){
@@ -721,6 +799,30 @@ function showCelebration(color, big, whoHTML, subHTML, fireHTML){
   celebrateUntil=performance.now()+4800;
 }
 function hideCelebration(){ celeEl.classList.remove("show"); confettiBox.innerHTML=""; celebrateUntil=0; }
+function showNotice(color,big,whoHTML,subHTML,dur){
+  celeCard.style.setProperty("--cele",color);
+  celeCard.innerHTML=`<div class="big">${big}</div><div class="who">${whoHTML}</div><div class="sub">${subHTML}</div>`;
+  confettiBox.innerHTML="";
+  celeEl.classList.add("show");
+  celebrateUntil=performance.now()+dur;
+}
+const YELLOW_OFFENSES=[
+  "cynically confiscated {V}'s shirt as a souvenir",
+  "arrived at the tackle three days late",
+  "performed a tactical hug on {V}",
+  "attempted to check {V}'s pockets for the ball",
+  "mistook {V}'s ankles for the ball — twice",
+  "described the referee's decision as 'creative fiction'",
+  "took {V} down, then briefly claimed to be the victim",
+  "treated the shoulder charge as a full-contact art form"];
+const RED_OFFENSES=[
+  "a two-footed lunge visible from space",
+  "rugby-tackled {V} out of pure nostalgia",
+  "attempted a full WWE clothesline — the crowd gasped",
+  "challenged {V} to a duel, glove and all",
+  "kicked everything except the ball, including the referee's patience",
+  "tried to deflate the ball while {V} was still dribbling it",
+  "picked {V} up and attempted to file him under 'lost property'"];
 
 function goalScored(concederTeam){
   const scorerTeam=ball.lastTouch;
@@ -1005,6 +1107,18 @@ function buildPitch(){
   [1,3,5].forEach(k=>el("line",{x1:CX,y1:CY,x2:V[k].x,y2:V[k].y,
     stroke:"rgba(255,255,255,.28)","stroke-width":2,"stroke-dasharray":"10 8"}));
   el("circle",{cx:CX,cy:CY,r:70,fill:"none",stroke:"var(--chalk)","stroke-width":2.5});
+  // penalty areas: the 110 arc where fouls become spot kicks
+  GOAL_EDGE.forEach(k=>{
+    const e=EDGES[k];
+    let d="";
+    for(let i=0;i<=24;i++){
+      const th=Math.PI*i/24;
+      const x=e.mx+e.ux*110*Math.cos(th)+e.nx*110*Math.sin(th);
+      const y=e.my+e.uy*110*Math.cos(th)+e.ny*110*Math.sin(th);
+      d+=(i?"L":"M")+x.toFixed(1)+" "+y.toFixed(1);
+    }
+    el("path",{d,fill:"rgba(255,255,255,.03)",stroke:"var(--chalk)","stroke-width":2.2,opacity:.55});
+  });
   el("circle",{cx:CX,cy:CY,r:4,fill:"var(--chalk)"});
   for(let t=0;t<3;t++){
     const e=EDGES[GOAL_EDGE[t]], hw=e.len*GOAL_HALF;
@@ -1034,7 +1148,10 @@ function buildActors(){
       el("line",{x1:-8,y1:0,x2:8,y2:0,stroke:"#cf1020","stroke-width":3.4},g);
       el("line",{x1:0,y1:-8,x2:0,y2:8,stroke:"#cf1020","stroke-width":3.4},g);
     }
-    actorEls.push({g,ring,boost:g.querySelector(".boostring")});
+    const R=p.role==="K"?13:12;
+    const nose=el("path",{d:`M${R+6},0 L${R-2},-4.5 L${R-2},4.5 Z`,
+      fill:TEAMS[p.team].accent,stroke:"rgba(0,0,0,.4)","stroke-width":1},g);
+    actorEls.push({g,ring,nose,boost:g.querySelector(".boostring")});
   });
   // fading trail (under the ball)
   for(let i=0;i<7;i++) trailEls.push(el("circle",{r:7-i*0.7,fill:"#fff",opacity:0}));
@@ -1072,6 +1189,7 @@ function draw(){
     if(p.out){ a.g.setAttribute("opacity",0); return; }
     a.g.setAttribute("opacity",1);
     a.g.setAttribute("transform",`translate(${p.x},${p.y})`);
+    a.nose.setAttribute("transform",`rotate(${(Math.atan2(p.hy,p.hx)*180/Math.PI).toFixed(1)})`);
     const frac=p.stamina;
     a.ring.setAttribute("stroke-dasharray",`${(frac*RING_C).toFixed(1)} ${RING_C.toFixed(1)}`);
     a.ring.setAttribute("stroke",frac>0.6?"#7ec97e":frac>0.35?"#ffb547":"#ff6b6b");
@@ -1139,6 +1257,27 @@ function draw(){
   }
 }
 
+function stagePenalty(){
+  const pen=pendingPenalty; pendingPenalty=null;
+  const shooter=pen.shooter, conceder=pen.conceder;
+  if(out[conceder]||shooter.out) return;
+  const e=EDGES[GOAL_EDGE[conceder]], g=goalCenter(conceder);
+  const sx=g.x+e.nx*110, sy=g.y+e.ny*110;
+  ball.owner=shooter; ball.lastTouch=shooter.team; ball.lastKicker=shooter;
+  ball.x=sx; ball.y=sy; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+  ball.touchT=99;   // no dribble touches during the run-up
+  shooter.x=sx+e.nx*16; shooter.y=sy+e.ny*16; shooter.vx=0; shooter.vy=0;
+  const gk=players.find(q=>q.team===conceder&&q.role==="K"&&!q.out);
+  if(gk){ gk.x=g.x+e.nx*12; gk.y=g.y+e.ny*12; gk.vx=0; gk.vy=0; }
+  players.forEach(q=>{ if(q===shooter||q===gk||q.out)return;
+    const d=dist(q,g)||1;
+    if(d<170){ q.x=g.x+(q.x-g.x)/d*178; q.y=g.y+(q.y-g.y)/d*178; }});
+  penaltyShooter=shooter; penaltyGoalTeam=conceder;
+  spawnNote(sx,sy-28,"PENALTY!","#ffd166");
+  say(`${shooter.name} places the ball on the spot... the keeper crouches...`,true);
+  resumeAt=performance.now()+1000;
+}
+
 // ---------- Loop ----------
 let last=performance.now();
 function loop(now){
@@ -1149,17 +1288,37 @@ function loop(now){
     } else {
       if(pendingKickoff!==null){ hideCelebration(); kickoff(pendingKickoff); pendingKickoff=null;
         resumeAt=performance.now()+1200; }   // beat of stillness before play resumes
-      if(phase==="regulation" && clockSec>=matchLen) resolveFullTime();
+      else if(celebrateUntil>0&&celebrateUntil!==Infinity){
+        hideCelebration();
+        if(pendingPenalty){ stagePenalty(); } else resumeAt=performance.now()+350;
+      }
+      if(phase==="regulation"){
+        if(!stoppageAnnounced&&clockSec>=matchLen){
+          stoppageAnnounced=true;
+          say(`📋 The fourth official's board goes up: <b>+${Math.ceil(stoppageLen)}s</b> added on!`,true);
+        }
+        if(clockSec>=matchLen+stoppageLen) resolveFullTime();
+      }
       if(phase!=="over" && now>=resumeAt){
         const step=dt*speed;
         clockSec+=step;
         retargetTimer+=step;
         if(retargetTimer>6){retargetTimer=0;computeTargets();}
         think(step); physics(step); colorCommentary();
+        players.forEach(q=>{ if(q.sentOff&&!q.out){
+          const {wd,we}=wallDist(q);
+          q.x-=we.nx*1.6*step*60; q.y-=we.ny*1.6*step*60; q.vx=0; q.vy=0;
+          if(ball.owner===q) ball.owner=null;
+          if(wd<6){ q.out=true; q.sentOff=false;
+            say(`${q.name} disappears down the tunnel. ${tm(q.team)} regroup a man light.`); }
+        }});
       }
       const m=Math.floor(clockSec/60), ss=String(Math.floor(clockSec%60)).padStart(2,"0");
       document.getElementById("clock").textContent=
-        phase==="overtime"?`OT ${m}:${ss}`:phase==="over"?"FT":`${m}:${ss}/${Math.floor(matchLen/60)}:00`;
+        phase==="overtime"?`OT ${m}:${ss}`
+        :phase==="over"?"FT"
+        :clockSec>matchLen?`${Math.floor(matchLen/60)}:00 +${Math.floor(clockSec-matchLen)}s`
+        :`${m}:${ss}/${Math.floor(matchLen/60)}:00`;
       updateBars(); draw();
     }
   }
@@ -1215,6 +1374,7 @@ document.getElementById("btnStart").onclick=()=>{
   scoreMode=document.getElementById("setRules").value;
   matchLen=parseInt(document.getElementById("setLen").value,10);
   momentumOn=document.getElementById("setMom").checked;
+  zoneRule=document.getElementById("setZone").checked;
   setupEl.classList.remove("show");
   camX=camTX=CX; camY=camTY=CY; resumeAt=0;
   resetMatch(); updateBars(); draw();
@@ -1222,6 +1382,7 @@ document.getElementById("btnStart").onclick=()=>{
   say(scoreMode==="conceded"
     ?`Classic Jorn rules today — fewest conceded after ${matchLen/60} minute${matchLen>=120?"s":""} takes it.`
     :`±1 rules — ${matchLen/60} minute${matchLen>=120?"s":""} on the clock, tiebreaks by goals scored, then golden-concession overtime.`,true);
+  if(zoneRule) say(`🏒 Zone-entry rule: no attacker may enter the penalty area before the ball.`);
 };
 
 // ---------- Controls ----------
