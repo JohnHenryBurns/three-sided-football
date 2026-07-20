@@ -528,9 +528,11 @@ function think(dt){
         spawnNote(victim.x,victim.y-24,"FOUL!","#ffd166");
         addStoppage(1.2);
         const r=Math.random();
+        const redP=0.035*(0.5+0.5*foulMult);   // stricter referees reach for red
+        const yelP=0.20*(0.6+0.4*foulMult);
         let card=null;
-        if(r<0.035) card="red";
-        else if(r<0.20) card=(o.yellows>=1)?"second":"yellow";
+        if(r<redP) card="red";
+        else if(r<redP+yelP) card=(o.yellows>=1)?"second":"yellow";
         if(card==="yellow") o.yellows++;
         const off=(card==="red"?pick(RED_OFFENSES):pick(YELLOW_OFFENSES)).replaceAll("{V}",victim.name);
         const shortT=TEAMS[o.team].short, col=TEAMS[o.team].color;
