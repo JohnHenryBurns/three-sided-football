@@ -288,7 +288,9 @@ const DEF_PRESETS={Balanced:{line:.5,press:.5,bunker:0},Gegenpress:{line:.8,pres
   ParkTheBus:{line:.15,press:.2,bunker:1},Trap:{line:.35,press:.6,bunker:0}};
 const ATK_AB={Balanced:"BAL",TikiTaka:"TT",RouteOne:"R1",Swashbuckle:"SB",Probe:"PR"};
 const DEF_AB={Balanced:"BAL",Gegenpress:"GP",ParkTheBus:"BUS",Trap:"TRP"};
-let teamATK=["Balanced","Balanced","Balanced"], teamDEF=["Balanced","Balanced","Balanced"];
+const AGG_PRESETS={Clean:{f:.55,t:.92},Firm:{f:1,t:1},Nasty:{f:1.8,t:1.18},Filthy:{f:2.8,t:1.38}};
+let teamATK=["Balanced","Balanced","Balanced"], teamDEF=["Balanced","Balanced","Balanced"],
+    teamAGG=["Firm","Firm","Firm"];
 let tac=[null,null,null], menuTeam=null;
 function applyPresets(t){ tac[t]={...ATK_PRESETS[teamATK[t]],...DEF_PRESETS[teamDEF[t]]}; }
 function T(t){ return tac[t]; }
@@ -316,6 +318,7 @@ function resetMatch(){
   phase="regulation"; out=[false,false,false]; otGolden=false;
   coached=[false,false,false]; coachTarget=[null,null,null]; activeCoach=null;
   teamATK=["Balanced","Balanced","Balanced"]; teamDEF=["Balanced","Balanced","Balanced"];
+  teamAGG=["Firm","Firm","Firm"];
   for(let t=0;t<3;t++) applyPresets(t);
   menuTeam=null; document.getElementById("coachMenu")?.classList.remove("show");
   stats={shots:[0,0,0],saves:[0,0,0],tackles:[0,0,0],poss:[0,0,0]};
@@ -566,7 +569,8 @@ function think(dt){
       if(suppress&&suppress.team===o.team&&clockSec<suppress.until)continue;
       if(dist(o,owner)>=28)continue;
       const inBox=dist(owner,goalCenter(o.team))<110;
-      const fc=0.0022*foulMult*(0.4+1.2*T(o.team).press)*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
+      const fc=0.0022*foulMult*AGG_PRESETS[teamAGG[o.team]].f
+        *(0.4+1.2*T(o.team).press)*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
       if(Math.random()<fc*dt*60){
         const victim=owner;
         spawnNote(victim.x,victim.y-24,"FOUL!","#ffd166");
@@ -578,7 +582,8 @@ function think(dt){
         if(r<redP) card="red";
         else if(r<redP+yelP) card=(o.yellows>=1)?"second":"yellow";
         if(card==="yellow") o.yellows++;
-        const off=(card==="red"?pick(RED_OFFENSES):pick(YELLOW_OFFENSES)).replaceAll("{V}",victim.name);
+        let off=(card==="red"?pick(RED_OFFENSES):pick(YELLOW_OFFENSES)).replaceAll("{V}",victim.name);
+        if(AGG_PRESETS[teamAGG[o.team]].f>1.5&&coached[o.team]) off+=" — entirely on the manager's instructions";
         const shortT=TEAMS[o.team].short, col=TEAMS[o.team].color;
         if(inBox){
           pendingPenalty={shooter:victim, conceder:o.team};
@@ -614,7 +619,7 @@ function think(dt){
     // tackles (fatigue and momentum affect steal odds; radius sits just outside body contact)
     oppOf(owner.team).forEach(o=>{
       if(suppress&&suppress.team===o.team&&clockSec<suppress.until) return;
-      let tc=0.010*(0.6+0.8*T(o.team).press); // shoulder contests; pressing bites harder
+      let tc=0.010*(0.6+0.8*T(o.team).press)*AGG_PRESETS[teamAGG[o.team]].t; // aggression bites harder
       tc*=(0.55+0.45*o.stamina);             // fresh tacklers bite harder
       tc*=(1.35-0.5*owner.stamina);          // gassed carriers are easier to rob
       if(momentumOn&&clockSec<boostUntil[o.team]) tc*=1.3;
@@ -1460,6 +1465,8 @@ function openCoachMenu(t){
       Object.keys(ATK_PRESETS).map(k=>btn(k,teamATK[t]===k,`data-a="${k}"`)).join("")}</div>
     <div class="cmSec">Defensive identity</div><div class="cmRow">${
       Object.keys(DEF_PRESETS).map(k=>btn(k,teamDEF[t]===k,`data-d="${k}"`)).join("")}</div>
+    <div class="cmSec">Aggression</div><div class="cmRow">${
+      Object.keys(AGG_PRESETS).map(k=>btn(k,teamAGG[t]===k,`data-g="${k}"`)).join("")}</div>
     <div class="cmRow" style="margin-top:.8rem">
       <button class="cmBtn" id="cmRelease">Release team</button>
       <button class="cmBtn go" id="cmResume">Resume ▸</button></div>`;
@@ -1470,9 +1477,11 @@ function openCoachMenu(t){
     teamATK[t]=b.dataset.a; applyPresets(t); renderScore(); openCoachMenu(t); });
   card.querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>{
     teamDEF[t]=b.dataset.d; applyPresets(t); renderScore(); openCoachMenu(t); });
+  card.querySelectorAll("[data-g]").forEach(b=>b.onclick=()=>{
+    teamAGG[t]=b.dataset.g; renderScore(); openCoachMenu(t); });
   document.getElementById("cmRelease").onclick=()=>{
     coached[t]=false; coachTarget[t]=null;
-    teamATK[t]="Balanced"; teamDEF[t]="Balanced"; applyPresets(t);
+    teamATK[t]="Balanced"; teamDEF[t]="Balanced"; teamAGG[t]="Firm"; applyPresets(t);
     if(activeCoach===t){ const n=coached.findIndex(c=>c); activeCoach=n>=0?n:null; }
     say(`${tm(t)} return to AI control.`,true);
     closeCoachMenu(); computeTargets(); renderScore(); };
