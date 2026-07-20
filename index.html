@@ -543,7 +543,8 @@ function think(dt){
         const penTag=inBox?` <b style="color:#ffd166">AND IT'S A PENALTY!</b>`:"";
         if(card==="red"||card==="second"){
           addStoppage(3);
-          o.sentOff=true;
+          o.sentOff=true; o.redCard=true;
+          camFocusP=o; camFocusUntil=performance.now()+9500;   // popup + the trudge
           const left=players.filter(q=>q.team===o.team&&!q.out&&!q.sentOff).length;
           showNotice(col, card==="second"?"🟨🟥 SECOND YELLOW":"🟥 RED CARD",
             `${o.name} (${shortT})`,
@@ -784,6 +785,7 @@ function physics(dt){
 let celebrateUntil=0, pendingKickoff=null;
 let suppress=null, pendingPenalty=null, penaltyShooter=null, penaltyGoalTeam=null;
 let stoppageLen=0, stoppageAnnounced=false, zoneRule=true, foulMult=1;
+let camFocusP=null, camFocusUntil=0;
 function addStoppage(sec){ stoppageLen=Math.min(Math.min(65,matchLen*0.30), stoppageLen+sec); }
 const celeEl=document.getElementById("celebrate"), celeCard=document.getElementById("celeCard"),
       confettiBox=document.getElementById("confettiBox");
@@ -1141,7 +1143,7 @@ function buildPitch(){
   }
 }
 
-let actorEls=[], ballEl, ballHalo, ballShadow, ownerLabel, trailEls=[], trailPts=[], pings=[];
+let actorEls=[], ballEl, ballHalo, ballShadow, ownerLabel, walkLabel, trailEls=[], trailPts=[], pings=[];
 function buildActors(){
   players.forEach(p=>{
     const g=el("g",{});
@@ -1158,7 +1160,9 @@ function buildActors(){
     const R=p.role==="K"?13:12;
     const nose=el("path",{d:`M${R+6},0 L${R-2},-4.5 L${R-2},4.5 Z`,
       fill:TEAMS[p.team].accent,stroke:"rgba(0,0,0,.4)","stroke-width":1},g);
-    actorEls.push({g,ring,nose,boost:g.querySelector(".boostring")});
+    const pip=el("rect",{x:7,y:-19,width:6.5,height:9.5,rx:1.5,
+      fill:"#ffd166",stroke:"rgba(0,0,0,.5)","stroke-width":1,opacity:0},g);
+    actorEls.push({g,ring,nose,pip,boost:g.querySelector(".boostring")});
   });
   // fading trail (under the ball)
   for(let i=0;i<7;i++) trailEls.push(el("circle",{r:7-i*0.7,fill:"#fff",opacity:0}));
@@ -1172,6 +1176,8 @@ function buildActors(){
   for(let k=0;k<5;k++){const a=k*2*Math.PI/5-Math.PI/2;
     el("circle",{r:1.8,cx:6.2*Math.cos(a),cy:6.2*Math.sin(a),fill:"#111"},bg);}
   ballEl=bg;
+  walkLabel=el("text",{fill:"#fff","font-size":"17","font-weight":"600","text-anchor":"middle",
+    "paint-order":"stroke",stroke:"rgba(0,0,0,.7)","stroke-width":"4",opacity:0});
   ownerLabel=el("text",{fill:"#fff","font-size":"28","text-anchor":"middle",
     "font-family":"inherit","paint-order":"stroke",stroke:"rgba(0,0,0,.65)","stroke-width":"4.5"});
 }
@@ -1197,6 +1203,9 @@ function draw(){
     a.g.setAttribute("opacity",1);
     a.g.setAttribute("transform",`translate(${p.x},${p.y})`);
     a.nose.setAttribute("transform",`rotate(${(Math.atan2(p.hy,p.hx)*180/Math.PI).toFixed(1)})`);
+    if(p.redCard){ a.pip.setAttribute("fill","#e11d2e"); a.pip.setAttribute("opacity",1); }
+    else if(p.yellows>0){ a.pip.setAttribute("fill","#ffd166"); a.pip.setAttribute("opacity",1); }
+    else a.pip.setAttribute("opacity",0);
     const frac=p.stamina;
     a.ring.setAttribute("stroke-dasharray",`${(frac*RING_C).toFixed(1)} ${RING_C.toFixed(1)}`);
     a.ring.setAttribute("stroke",frac>0.6?"#7ec97e":frac>0.35?"#ffb547":"#ff6b6b");
@@ -1213,6 +1222,12 @@ function draw(){
     c.setAttribute("cx",pt.x);c.setAttribute("cy",pt.y);
     c.setAttribute("opacity",bspd>4.5?(0.4*(1-i/7)).toFixed(2):0);
   });
+  const walker=players.find(q=>q.sentOff&&!q.out);
+  if(walker){
+    walkLabel.setAttribute("x",walker.x); walkLabel.setAttribute("y",walker.y-30);
+    walkLabel.textContent=`🟥 ${walker.name}`;
+    walkLabel.setAttribute("opacity",1);
+  } else walkLabel.setAttribute("opacity",0);
   const lift=ball.z*0.55;
   ballEl.setAttribute("transform",`translate(${ball.x},${ball.y-lift})${ball.z>2?` scale(${(1+ball.z*0.012).toFixed(3)})`:""}`);
   ballShadow.setAttribute("cx",ball.x); ballShadow.setAttribute("cy",ball.y+3);
@@ -1242,13 +1257,16 @@ function draw(){
   if(ball.owner){
     ownerLabel.setAttribute("x",ball.owner.x);
     ownerLabel.setAttribute("y",ball.owner.y-26);
-    ownerLabel.textContent=ball.owner.name;
+    ownerLabel.textContent=(ball.owner.redCard?"🟥 ":ball.owner.yellows>0?"🟨 ":"")+ball.owner.name;
     ownerLabel.setAttribute("opacity",1);
   } else ownerLabel.setAttribute("opacity",0);
   // broadcast camera: pin to the carrier (their motion is smooth), only chase the raw
   // ball when it's genuinely loose; low-pass the target and ignore sub-10px jitter
   if(zoom>1){
-    const f=ball.owner
+    if(camFocusP&&(camFocusP.out||performance.now()>=camFocusUntil)){ camFocusP=null; }
+    const f=camFocusP
+      ? {x:camFocusP.x, y:camFocusP.y}
+      : ball.owner
       ? {x:ball.owner.x+ball.owner.vx*10, y:ball.owner.y+ball.owner.vy*10}
       : {x:ball.x+ball.vx*8, y:ball.y+ball.vy*8};
     camTX+=(f.x-camTX)*0.10; camTY+=(f.y-camTY)*0.10;
@@ -1316,7 +1334,7 @@ function loop(now){
           let wd=1e9,we=null;
           for(const e2 of EDGES){ const d2=(q.x-e2.p1.x)*e2.nx+(q.y-e2.p1.y)*e2.ny;
             if(d2<wd){wd=d2;we=e2;} }
-          q.x-=we.nx*1.6*step*60; q.y-=we.ny*1.6*step*60; q.vx=0; q.vy=0;
+          q.x-=we.nx*1.0*step*60; q.y-=we.ny*1.0*step*60; q.vx=0; q.vy=0;
           if(ball.owner===q) ball.owner=null;
           if(wd<-10){ q.out=true; q.sentOff=false;
             say(`${q.name} disappears down the tunnel. ${tm(q.team)} regroup a man light.`); }
@@ -1386,7 +1404,7 @@ document.getElementById("btnStart").onclick=()=>{
   zoneRule=document.getElementById("setZone").checked;
   foulMult=parseFloat(document.getElementById("setRef").value);
   setupEl.classList.remove("show");
-  camX=camTX=CX; camY=camTY=CY; resumeAt=0;
+  camX=camTX=CX; camY=camTY=CY; resumeAt=0; camFocusP=null; camFocusUntil=0;
   resetMatch(); updateBars(); draw();
   running=true; setPlayBtn();
   say(scoreMode==="conceded"
