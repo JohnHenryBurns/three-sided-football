@@ -223,6 +223,12 @@
   </select></div>
   <div class="formrow chk"><label for="setMom">Underdog fire</label><input id="setMom" type="checkbox" checked></div>
   <div class="formrow chk"><label for="setZone" title="Attackers can't enter the penalty area before the ball">Zone-entry rule</label><input id="setZone" type="checkbox" checked></div>
+  <div class="formrow"><label for="setRef">Referee</label><select id="setRef">
+    <option value="0">Off — let them play</option>
+    <option value="1" selected>Balanced</option>
+    <option value="1.8">Aggressive</option>
+    <option value="3.5">MAYHEM</option>
+  </select></div>
   <button id="btnStart">Kick off</button>
   <a class="ghlink" href="https://github.com/JohnHenryBurns/three-sided-football" target="_blank" rel="noopener">⚙ view on GitHub</a>
 </div></div>
@@ -516,7 +522,7 @@ function think(dt){
       if(suppress&&suppress.team===o.team&&clockSec<suppress.until)continue;
       if(dist(o,owner)>=28)continue;
       const inBox=dist(owner,goalCenter(o.team))<110;
-      const fc=0.0022*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
+      const fc=0.0022*foulMult*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
       if(Math.random()<fc*dt*60){
         const victim=owner;
         spawnNote(victim.x,victim.y-24,"FOUL!","#ffd166");
@@ -776,7 +782,7 @@ function physics(dt){
 // ---------- Goal celebration ----------
 let celebrateUntil=0, pendingKickoff=null;
 let suppress=null, pendingPenalty=null, penaltyShooter=null, penaltyGoalTeam=null;
-let stoppageLen=0, stoppageAnnounced=false, zoneRule=true;
+let stoppageLen=0, stoppageAnnounced=false, zoneRule=true, foulMult=1;
 function addStoppage(sec){ stoppageLen=Math.min(Math.min(65,matchLen*0.30), stoppageLen+sec); }
 const celeEl=document.getElementById("celebrate"), celeCard=document.getElementById("celeCard"),
       confettiBox=document.getElementById("confettiBox");
@@ -1375,6 +1381,7 @@ document.getElementById("btnStart").onclick=()=>{
   matchLen=parseInt(document.getElementById("setLen").value,10);
   momentumOn=document.getElementById("setMom").checked;
   zoneRule=document.getElementById("setZone").checked;
+  foulMult=parseFloat(document.getElementById("setRef").value);
   setupEl.classList.remove("show");
   camX=camTX=CX; camY=camTY=CY; resumeAt=0;
   resetMatch(); updateBars(); draw();
@@ -1383,6 +1390,9 @@ document.getElementById("btnStart").onclick=()=>{
     ?`Classic Jorn rules today — fewest conceded after ${matchLen/60} minute${matchLen>=120?"s":""} takes it.`
     :`±1 rules — ${matchLen/60} minute${matchLen>=120?"s":""} on the clock, tiebreaks by goals scored, then golden-concession overtime.`,true);
   if(zoneRule) say(`🏒 Zone-entry rule: no attacker may enter the penalty area before the ball.`);
+  if(foulMult===0) say(`🤼 No referee today — anything goes.`);
+  else if(foulMult>3) say(`🚨 <b>MAYHEM</b> rules — the referee has brought extra cards and a grudge.`);
+  else if(foulMult>1) say(`🟨 The referee is in a mood tonight.`);
 };
 
 // ---------- Controls ----------
