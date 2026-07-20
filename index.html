@@ -35,6 +35,9 @@
   button:hover{border-color:var(--ink-dim)}
   button:focus-visible,input:focus-visible{outline:2px solid var(--arg);outline-offset:2px}
   label{font-size:.75rem;color:var(--ink-dim);letter-spacing:.05em;text-transform:uppercase;display:flex;align-items:center;gap:.3rem;white-space:nowrap}
+  button .ic{font-size:.95em}
+  button .lbl,button .val{margin-left:.3rem}
+  .icOnly{display:none}
   input[type=range]{accent-color:var(--arg);width:4.5rem;height:1.4rem}
   input[type=checkbox]{accent-color:var(--esp);width:1rem;height:1rem}
   select{font-family:inherit;font-size:.78rem;background:var(--panel);color:var(--ink);
@@ -164,9 +167,15 @@
     .chips .card .hunt{font-size:.56rem}
     .chips .coachBtn{padding:.05rem .22rem;font-size:.54rem}
     aside.comm{max-height:32vh}
-    header{padding:.25rem .5rem;gap:.4rem}
+    header{padding:.25rem .5rem;gap:.3rem;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+    h1{font-size:.8rem}
     h1 span{display:none}
-    button{padding:.3rem .6rem;min-height:1.8rem;font-size:.78rem}
+    .controls{gap:.3rem;flex-wrap:nowrap}
+    button{padding:.3rem .45rem;min-height:1.9rem;font-size:.82rem}
+    button .lbl{display:none}
+    button .lbl+.val,button .val{margin-left:.25rem}
+    label .lbl{display:none}
+    .icOnly{display:inline}
     label{font-size:.68rem}
   }
   @media (max-width:1100px){ h1 span{display:none} }
@@ -177,11 +186,11 @@
 <header>
   <h1>Three-Sided World Cup <span>/ ESP · ARG · ENG</span></h1>
   <div class="controls">
-    <button id="btnPlay">Pause</button>
-    <button id="btnReset">Reset</button>
-    <button id="btnZoom">Zoom 2.3×</button>
-    <label>Speed <input id="speed" type="range" min="0.5" max="3" step="0.25" value="1"><span id="speedVal">1×</span></label>
-    <label><input id="voiceToggle" type="checkbox"> Narrator</label>
+    <button id="btnPlay" title="Pause / Play"><span class="ic">⏸</span><span class="lbl">Pause</span></button>
+    <button id="btnReset" title="Reset match"><span class="ic">↺</span><span class="lbl">Reset</span></button>
+    <button id="btnZoom" title="Zoom"><span class="ic">🔍</span><span class="val" id="zoomVal">2.3×</span></button>
+    <button id="btnSpeed" title="Speed"><span class="ic">⏩</span><span class="val" id="speedVal">1×</span></button>
+    <label title="Spoken narrator"><input id="voiceToggle" type="checkbox"> <span class="lbl">Narrator</span><span class="ic icOnly">🎙</span></label>
   </div>
 </header>
 
@@ -1164,7 +1173,7 @@ const ZOOMS=[1,1.6,2.3,3.5];
 document.getElementById("btnZoom").onclick=e=>{
   const i=(ZOOMS.indexOf(zoom)+1)%ZOOMS.length;
   zoom=ZOOMS[i];
-  e.target.textContent=`Zoom ${zoom}×`;
+  document.getElementById("zoomVal").textContent=zoom+"×";
   if(zoom===1) svg.setAttribute("viewBox","0 0 900 810");
   else { camX=camTX=ball.x; camY=camTY=ball.y; }   // start on the action
   draw();                              // apply immediately, even while paused
@@ -1200,7 +1209,7 @@ function showSetup(){
   running=false;
   if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; }
   hideCelebration(); pendingKickoff=null;
-  document.getElementById("btnPlay").textContent="Play";
+  setPlayBtn();
   setupEl.classList.add("show");
 }
 document.getElementById("btnStart").onclick=()=>{
@@ -1210,21 +1219,25 @@ document.getElementById("btnStart").onclick=()=>{
   setupEl.classList.remove("show");
   camX=camTX=CX; camY=camTY=CY; resumeAt=0;
   resetMatch(); updateBars(); draw();
-  running=true;
-  document.getElementById("btnPlay").textContent="Pause";
+  running=true; setPlayBtn();
   say(scoreMode==="conceded"
     ?`Classic Jorn rules today — fewest conceded after ${matchLen/60} minute${matchLen>=120?"s":""} takes it.`
     :`±1 rules — ${matchLen/60} minute${matchLen>=120?"s":""} on the clock, tiebreaks by goals scored, then golden-concession overtime.`,true);
 };
 
 // ---------- Controls ----------
-document.getElementById("btnPlay").onclick=e=>{
-  running=!running; e.target.textContent=running?"Pause":"Play";
-};
+document.getElementById("btnPlay").onclick=()=>{ running=!running; setPlayBtn(); };
 document.getElementById("btnReset").onclick=()=>{ showSetup(); };
-const spd=document.getElementById("speed");
-spd.oninput=()=>{ speed=parseFloat(spd.value);
-  document.getElementById("speedVal").textContent=speed+"×"; };
+const SPEEDS=[0.5,1,1.5,2,3];
+document.getElementById("btnSpeed").onclick=()=>{
+  const i=(SPEEDS.indexOf(speed)+1)%SPEEDS.length;
+  speed=SPEEDS[i===-1?1:i];
+  document.getElementById("speedVal").textContent=speed+"×";
+};
+function setPlayBtn(){
+  document.querySelector("#btnPlay .ic").textContent=running?"⏸":"▶";
+  document.querySelector("#btnPlay .lbl").textContent=running?"Pause":"Play";
+}
 const vt=document.getElementById("voiceToggle");
 if(!speechOK){ vt.disabled=true; vt.parentElement.title="Speech not supported in this browser"; }
 vt.onchange=e=>{
