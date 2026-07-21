@@ -166,7 +166,7 @@
     letter-spacing:.06em;font-weight:600}
   .tpBarBg{flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.13)}
   .tpBarF{height:100%;border-radius:3px}
-  #countdown{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+  #countdown{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
     z-index:70;pointer-events:none;font-weight:900;font-size:7rem;color:#fff;
     text-shadow:0 4px 22px rgba(0,0,0,.75)}
   #countdown.show{display:flex}
@@ -246,6 +246,7 @@
 
 <div class="grid">
   <div class="stage">
+    <div id="countdown"></div>
     <div id="hud">
       <div id="scoreboard" class="chips" aria-label="Scoreboard"></div>
       <div class="hudclock" id="clock">00:00</div>
@@ -288,7 +289,6 @@
 </div></div>
 <div id="coachMenu"><div id="cmCard"></div></div>
 <div id="teamPick"><div id="tpCard"></div></div>
-<div id="countdown"></div>
 
 <script>
 "use strict";
