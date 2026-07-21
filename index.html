@@ -312,12 +312,12 @@ const TEAM_LIBRARY=[
   {name:"France", short:"FRA", color:"#28418f", accent:"#e63946",
    roster:["Maignan","Saliba","Koundé","Tchouaméni","Mbappé"],
    third:"#f5f5f5", motif:{t:"vbands",c:["#28418f","#f5f5f5","#e63946"]},
-   id:{atk:"Swashbuckle",def:"Trap",agg:"Firm"}, star:"Mbappé",
+   nudge:{line:.28}, id:{atk:"Swashbuckle",def:"Trap",agg:"Firm"}, star:"Mbappé",
    blurb:"Invites you forward, then breaks your heart at full sprint."},
   {name:"Netherlands", short:"NED", color:"#ff7a1a", accent:"#f5f5f5",
    roster:["Verbruggen","Van Dijk","De Ligt","Frenkie de Jong","Gakpo"],
    third:"#28418f", motif:{t:"hbands3",c:["#c8102e","#f5f5f5","#28418f"]},
-   id:{atk:"TikiTaka",def:"Gegenpress",agg:"Firm"}, star:"Van Dijk",
+   nudge:{line:.9}, id:{atk:"TikiTaka",def:"Gegenpress",agg:"Firm"}, star:"Van Dijk",
    blurb:"Total football, high line, higher self-regard."},
   {name:"Mexico", short:"MEX", color:"#1d8a4e", accent:"#f5f5f5",
    roster:["Ochoa","Montes","Araujo","Edson Álvarez","Santiago Giménez"],
@@ -327,17 +327,17 @@ const TEAM_LIBRARY=[
   {name:"Japan", short:"JPN", color:"#f5f0e8", accent:"#d7003a",
    roster:["Zion Suzuki","Tomiyasu","Itakura","Kamada","Mitoma"],
    third:"#b3002d", motif:{t:"disc",c:["#d7003a"]},
-   id:{atk:"TikiTaka",def:"Gegenpress",agg:"Clean"}, star:"Mitoma",
+   nudge:{tempo:.95}, id:{atk:"TikiTaka",def:"Gegenpress",agg:"Clean"}, star:"Mitoma",
    blurb:"Relentless tempo, immaculate manners, zero mercy."},
   {name:"Portugal", short:"POR", color:"#a91d45", accent:"#1d8a4e",
    roster:["Diogo Costa","Rúben Dias","Cancelo","Vitinha","Ronaldo"],
    third:"#1d8a4e", motif:{t:"vsplit",c:["#1d8a4e","#c8102e","#f7c948"]},
-   id:{atk:"Swashbuckle",def:"Trap",agg:"Firm"}, star:"Ronaldo",
+   nudge:{risk:1.0}, id:{atk:"Swashbuckle",def:"Trap",agg:"Firm"}, star:"Ronaldo",
    blurb:"Flair everywhere, and a 41-year-old who still believes."},
   {name:"USA", short:"USA", color:"#2a4d9b", accent:"#f0f0f0",
    roster:["Turner","Richards","Robinson","McKennie","Pulisic"],
    third:"#d22d3d", motif:{t:"stars",c:["#f0f0f0","#d22d3d"]},
-   id:{atk:"Balanced",def:"Gegenpress",agg:"Firm"}, star:"Pulisic",
+   nudge:{direct:.65}, id:{atk:"Balanced",def:"Gegenpress",agg:"Firm"}, star:"Pulisic",
    blurb:"Grit, lungs, and a nation that just learned the rules."},
 ];
 let selTeams=[0,1,2];
@@ -401,8 +401,12 @@ const AGG_D={Clean:"Soft challenges, spotless disciplinary record.",
   Filthy:"Win the ball by any means. The referee is watching."};
 let teamATK=["Balanced","Balanced","Balanced"], teamDEF=["Balanced","Balanced","Balanced"],
     teamAGG=["Firm","Firm","Firm"];
-let tac=[null,null,null], menuTeam=null;
-function applyPresets(t){ tac[t]={...ATK_PRESETS[teamATK[t]],...DEF_PRESETS[teamDEF[t]]}; }
+let tac=[null,null,null], menuTeam=null, coalAlly=[false,false,false];
+function applyPresets(t){
+  tac[t]={...ATK_PRESETS[teamATK[t]],...DEF_PRESETS[teamDEF[t]]};
+  const L=TEAMS[t];
+  if(L&&L.nudge&&teamATK[t]===L.id.atk&&teamDEF[t]===L.id.def) Object.assign(tac[t],L.nudge);
+}
 function fieldersLeft(t){ return players.filter(q=>q.team===t&&!q.out&&!q.sentOff&&q.role!=="K").length; }
 function allied(a,b){ return a!==b&&targets[a]!==null&&targets[a]===targets[b]&&targets[a]!==b&&targets[b]!==a; }
 function T(t){ return tac[t]; }
@@ -568,6 +572,7 @@ function think(dt){
   const owner=ball.owner;
   const holdActive=performance.now()<restartHold;   // restart staging: ball dead, positioning live
   const FL=[fieldersLeft(0),fieldersLeft(1),fieldersLeft(2)];   // cached: avoids per-player array filters
+  for(let a2=0;a2<3;a2++) coalAlly[a2]=allied(a2,(a2+1)%3)||allied(a2,(a2+2)%3);
   const oppOf=t=>players.filter(p=>p.team!==t&&!p.out&&!p.sentOff);
   const chaser=[];
   for(let t=0;t<3;t++){
@@ -829,7 +834,7 @@ function think(dt){
       if(dist(o,owner)>=28)continue;
       const inBox=dist(owner,goalCenter(o.team))<110;
       const fc=(holdActive?0:0.0022)*foulMult*AGG_PRESETS[teamAGG[o.team]].f
-        *(0.4+1.2*T(o.team).press)*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
+        *(0.4+1.2*T(o.team).press*(coalAlly[o.team]?0.7:1))*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
       if(Math.random()<fc*dt*60){
         const victim=owner;
         spawnNote(victim.x,victim.y-24,"FOUL!","#ffd166");
@@ -923,7 +928,7 @@ function physics(dt){
     const staging=(pendingRestart&&pendingRestart.p===p)||cornerTaker===p||throwPending===p;
     if(!p.sentOff&&!staging) clampInside(p, p.role==="K"?12:14);
     const v=Math.hypot(p.vx,p.vy), effort=v/2.35;
-    p.stamina-=effort*effort*0.0012*S*(0.85+0.5*T(p.team).press);
+    p.stamina-=effort*effort*0.0012*S*(0.85+0.5*T(p.team).press*(coalAlly[p.team]?0.7:1));
     p.stamina+=0.0004*S;
     p.stamina=Math.max(0,Math.min(1,p.stamina));
   });
