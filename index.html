@@ -1395,7 +1395,46 @@ function resolveFullTime(){
 }
 
 // ---------- Color commentary ----------
+let lastStyleAt=-99;
+function styleLines(){
+  const L=[], A=teamATK, D=teamDEF, G=teamAGG;
+  const has=(arr,v)=>arr.indexOf(v);
+  const alive=aliveTeams();
+  // known counters, from the lab's matchup matrix
+  for(const a of alive) for(const b of alive){ if(a===b) continue;
+    if(A[a]==="Probe"&&D[b]==="Gegenpress")
+      L.push(`The form guide says patience eats the press. ${tm(a)} know the numbers against ${tm(b)}.`);
+    if(A[a]==="RouteOne"&&D[b]==="Gegenpress")
+      L.push(`Over the top is the antidote to a press — ${tm(a)} keep launching it past ${tm(b)}.`);
+    if(A[a]==="TikiTaka"&&D[b]==="ParkTheBus")
+      L.push(`A thousand touches against a locked door — ${tm(a)} probing the ${tm(b)} bus.`);
+    if(A[a]==="Swashbuckle"&&D[b]==="ParkTheBus")
+      L.push(`Artillery versus the bus — ${tm(a)} will hit it from anywhere; ${tm(b)} will take the deflections.`);
+    if(A[a]==="TikiTaka"&&D[b]==="Gegenpress")
+      L.push(`Dangerous game: the ${tm(b)} press devours short passing. ${tm(a)} are playing with matches.`);
+    if(G[a]==="Nasty"&&G[b]==="Nasty")
+      L.push(`Two sides who tackle with intent tonight. The referee earns his fee.`);
+  }
+  // trio-shape lines
+  const buses=alive.filter(t=>D[t]==="ParkTheBus").length;
+  const presses=alive.filter(t=>D[t]==="Gegenpress").length;
+  const swash=alive.filter(t=>A[t]==="Swashbuckle").length;
+  if(buses>=2) L.push(`Two parked buses on one hexagon. Bring a book — or wait for the set pieces.`);
+  if(presses>=3) L.push(`Three pressing sides. Somebody's legs are going to file a formal complaint.`);
+  if(presses===2) L.push(`Two presses on the pitch — the fresh legs at minute one are a loan, not a gift.`);
+  if(swash>=2) L.push(`Multiple artillery sides tonight. The keepers have been informed. They are not pleased.`);
+  // coalition pressing, live
+  for(const t of alive)
+    if(coalAlly[t]&&T(t).press>0.7)
+      L.push(`${tm(t)} are pressing in coalition — half the bill, twice the menace.`);
+  return L;
+}
 function colorCommentary(){
+  // style & matchup color (~every 45s)
+  if(clockSec-lastStyleAt>45&&Math.random()<0.4){
+    const ls=styleLines();
+    if(ls.length){ lastStyleAt=clockSec; say(pick(ls)); }
+  }
   // fatigue watch (~every 40s)
   if(clockSec-lastFatigueComment>40){
     let worst=0, wv=1;
@@ -2175,6 +2214,16 @@ document.getElementById("btnStart").onclick=()=>{
     :`±1 rules — ${matchLen/60} minute${matchLen>=120?"s":""} on the clock, tiebreaks by goals scored, then golden-concession overtime.`,true);
   if(zoneRule) say(`Offsides enforced: no attacker may enter the penalty area before the ball.`);
   if(oobRule) say(`Touchlines in play — throw-ins, goal kicks, and corners.`);
+  {
+    const buses=[0,1,2].filter(t=>teamDEF[t]==="ParkTheBus").length;
+    const presses=[0,1,2].filter(t=>teamDEF[t]==="Gegenpress").length;
+    const swash=[0,1,2].filter(t=>teamATK[t]==="Swashbuckle").length;
+    const trioLine=buses>=2?`Two buses and a hexagon. Patience will be a weapon tonight.`
+      :presses>=3?`Three pressing machines. This one's decided by whoever has legs left.`
+      :swash>=2?`Shooters everywhere you look. Keepers, brace.`
+      :`Three philosophies walk onto a hexagon. Only one lifts the cup.`;
+    say(trioLine);
+  }
   if(foulMult===0) say(`🤼 No referee today — anything goes.`);
   else if(foulMult>3) say(`🚨 <b>MAYHEM</b> rules — the referee has brought extra cards and a grudge.`);
   else if(foulMult>1) say(`🟨 The referee is in a mood tonight.`);
