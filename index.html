@@ -2320,7 +2320,7 @@ if(!speechOK){ vt.disabled=true; vt.title="Speech not supported in this browser"
 vt.onclick=()=>{
   voiceOn=!voiceOn;
   vt.setAttribute("aria-pressed",String(voiceOn));
-  if(voiceOn) speak("Narrator on. Welcome to the hex — three teams, one ball, no permanent friends.");
+  if(voiceOn) speak("Welcome to the hex — three teams, one ball, no permanent friends.");
   else if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; }
 };
 
