@@ -673,7 +673,18 @@ function think(dt){
             if(Math.hypot(o.x-lx,o.y-ly)<(30-12*T(owner.team).risk)+5*(T(o.team).press-0.5)*2) laneOk=false;}
         });
         let s=gain*(0.6+0.8*T(owner.team).direct)+(laneOk?0:-500)+Math.random()*30;
-        if(allyOk) s-=matesLeft>0?(pressure>32?80:260):-20;   // desperation, or solidarity of the shorthanded
+        if(allyOk){
+          // treason is priced by the scoreboard: never when tied, cheap when someone runs away
+          const foe=targets[owner.team];
+          const foeLead=score[foe]-score[owner.team];
+          const shortfall=fieldersLeft(foe)-fieldersLeft(owner.team);
+          let desp=Math.max(0,foeLead)*0.28+Math.max(0,shortfall)*0.4
+                  +(fieldersLeft(owner.team)===0?0.45:0);
+          let pen=850*Math.max(0,1-desp);
+          if(matesLeft===0) pen-=80;
+          if(pressure>32) pen*=0.8;
+          s-=pen;
+        }
         if(s>bs){bs=s;best=m;}
       });
       if(best&&bs>-100){

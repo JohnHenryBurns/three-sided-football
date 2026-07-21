@@ -205,3 +205,13 @@ but worth knowing for the family meta.
    shorthanded coalition genuinely functions — combined with the invisibility
    dividend, uneven matches with alliances are now the MOST competitive
    configuration ever measured in this game. The 1v1v2 field report was right.
+
+**Alliance pricing v2 (supersedes the weight table above):** the flat loyalty tax is
+replaced by scoreboard-priced desperation: `desp = 0.28×(foe's lead over you) +
+0.4×(man shortfall vs foe) + 0.45 if you have no outfielders; penalty = 850×(1−desp)`,
+softened 20% under pressure, −80 when alone. Lab validation: **ally passes while the
+match is tied: ZERO** (every run); passes vs a runaway leader (margin ≥3): 23–39/match.
+The mechanic now reads exactly as designed — nobody robs Peter to pay Paul in a close
+game, but a runaway leader or a man-advantage mismatch turns the other two into a
+functioning coalition. Solo-survivor combos (1v1v2) preserved via the shortfall and
+no-outfielder terms.
