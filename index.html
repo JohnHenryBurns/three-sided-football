@@ -516,7 +516,7 @@ function think(dt){
       const wallR=oobRule?95:70, wallW=oobRule?1.6:1.1;
       if(wd<wallR&&!inMouth){ const w=(wallR-wd)/wallR*wallW; dx+=we.nx*w; dy+=we.ny*w; }
       steer(p,p.x+dx*80,p.y+dy*80,2.05);
-    } else if(p.role==="K"&&fieldersLeft(p.team)>0){
+    } else if(p.role==="K"&&(fieldersLeft(p.team)>0||dist(ball,goalCenter(p.team))<210)){
       const e=EDGES[GOAL_EDGE[p.team]];
       let along=(ball.x-e.mx)*e.ux+(ball.y-e.my)*e.uy;
       const lim=e.len*GOAL_HALF*0.9; along=Math.max(-lim,Math.min(lim,along));
@@ -583,8 +583,8 @@ function think(dt){
         if(sc>bs){bs=sc;pickM=m;}
       });
       if(!pickM&&mates.length) pickM=mates.sort((a,b)=>dist(a,owner)-dist(b,owner))[0];
-      if(pickM) kick(pickM.x+pickM.vx*8, pickM.y+pickM.vy*8, Math.min(7,4+dist(pickM,owner)*0.02), false);
-      else kick(CX,CY,6,false);
+      if(pickM){ kick(pickM.x+pickM.vx*8, pickM.y+pickM.vy*8, Math.min(7,4+dist(pickM,owner)*0.02), false); return; }
+      // no teammates left — he plays on himself, dribbling in
       return;
     }
     if(cornerTaker===owner){
