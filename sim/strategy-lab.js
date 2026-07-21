@@ -517,6 +517,11 @@ class Match {
         const inMouth=e.goal&&Math.abs(along)<e.len*GOAL_HALF;
         if(inMouth){
           if(d<-6){ if(b.z<28){this.goal(GOAL_EDGE.indexOf(k));return;} }
+        }else if(this.o.oob){
+          if(d<2){
+            this.m2.oobs=(this.m2.oobs||0)+1;
+            b.x=CX;b.y=CY;b.vx=0;b.vy=0;b.z=0;b.zv=0;b.owner=null;b.noClaim=null;
+          }
         }else{
           b.x+=e.nx*(7-d);b.y+=e.ny*(7-d);
           const vn=b.vx*e.nx+b.vy*e.ny;
@@ -633,6 +638,18 @@ if(process.env.ZONE==="1"){
     }
     console.log(JSON.stringify({cell:an+" vs Bus (zone rule)",AbeatsB:+(100*aWins/games).toFixed(1),was:{TikiTaka:60,RouteOne:53.3,Swashbuckle:58.3,Probe:62.5}[an]}));
   }
+  process.exit(0);
+}
+if(process.env.OOB==="1"){
+  const B={tempo:.5,risk:.5,line:.5,press:.5,direct:.5,bunker:0};
+  const rs=[];
+  for(let i=0;i<10;i++){
+    const m=new Match({minutes:MIN,dribble:true,aerial:true,zoneRule:true,anticipate:true,oob:true,
+      teamFlags:[{tac:{...B}},{tac:{...B}},{tac:{...B}}]});
+    const r=m.run(); r.oobs=+((m.m2.oobs||0)/MIN).toFixed(1); rs.push(r);
+  }
+  console.log(JSON.stringify({oobPerMin:avg(rs,"oobs"),goals:avg(rs,"goalsPerMin"),
+    headers:avg(rs,"headersPerMin"),spell:avg(rs,"avgSpellSec")}));
   process.exit(0);
 }
 if(process.env.ZONE2==="1"){
