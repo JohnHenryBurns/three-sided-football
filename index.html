@@ -440,7 +440,7 @@ function resetMatch(){
   }
   menuTeam=null; document.getElementById("coachMenu")?.classList.remove("show");
   stats={shots:[0,0,0],saves:[0,0,0],tackles:[0,0,0],poss:[0,0,0]};
-  goalsLog=[]; goldenScorer=null;
+  goalsLog=[]; goldenScorer=null; refreshNameColors();
   goalEls.forEach(g=>g&&g.setAttribute("opacity",1));
   drawBoards();   // fresh sponsors every match
   suppress=null; pendingPenalty=null; penaltyShooter=null; penaltyGoalTeam=null;
@@ -1390,10 +1390,17 @@ function resolveFullTime(){
     eliminateTeam(t);
   });
   otGolden=(aliveTeams().length===2);
-  if(otGolden)
+  if(otGolden){
     say(`<span class="goal">FULL TIME — dead level!</span> ${tm(leaders[0])} v ${tm(leaders[1])}: golden goal, next score wins the title!`,true);
-  else
+    showCelebration("#f7c948","⏱️ OVERTIME",
+      `${tm(leaders[0])} v ${tm(leaders[1])}`,
+      `Golden goal — next score wins the title`,"");
+  } else {
     say(`<span class="goal">FULL TIME — all three level!</span> Golden-concession overtime: concede and you're OUT.`,true);
+    showCelebration("#f7c948","⏱️ OVERTIME",
+      `All three teams level`,
+      `Golden concession — CONCEDE AND YOU'RE OUT`,"");
+  }
   computeTargets();
   kickoff(leaders[Math.floor(Math.random()*leaders.length)]);
 }
@@ -1549,7 +1556,19 @@ function speak(html){
 }
 
 let lastSayAt=-99;
+let NAME_COL=null;
+function refreshNameColors(){
+  NAME_COL=players.map(p=>[p.name,TEAMS[p.team].color])
+    .sort((a,b)=>b[0].length-a[0].length);
+}
+function colorNames(html){
+  if(!NAME_COL) return html;
+  for(const [n,c] of NAME_COL)
+    if(html.indexOf(n)>=0) html=html.split(n).join(`<b style="color:${c}">${n}</b>`);
+  return html;
+}
 function say(html,force,voice){
+  html=colorNames(html);
   // Low-priority chatter is dropped if the booth spoke in the last 3 seconds.
   if(!force && clockSec-lastSayAt<3) return;
   lastSayAt=clockSec;
