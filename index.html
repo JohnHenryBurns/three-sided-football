@@ -1750,6 +1750,17 @@ function say(html,force,voice){
 }
 
 // ---------- SVG ----------
+window.onerror=function(msg,src,line,col){
+  try{
+    const d=document.createElement("div");
+    d.style.cssText="position:fixed;top:8px;left:8px;right:8px;z-index:99;background:#7a1024;color:#fff;padding:.5rem .7rem;border-radius:8px;font-size:.75rem;word-break:break-all";
+    d.textContent=`⚠️ ${msg} @${line}:${col}`;
+    document.body.appendChild(d);
+    feed.unshift(`<div><span class="t">ERR</span>⚠️ ${msg} @${line}:${col}</div>`);
+    feedEl.innerHTML=feed.join("");
+  }catch(e2){}
+  return false;
+};
 const svg=document.getElementById("pitch");
 const NS="http://www.w3.org/2000/svg";
 function el(tag,attrs,parent){const n=document.createElementNS(NS,tag);
@@ -2385,7 +2396,7 @@ function cardTap(t){
 // ---------- Match setup dialog ----------
 const setupEl=document.getElementById("setup");
 function startCountdown(){
-  resumeAt=performance.now()+4400;   // the ball waits for the booth
+  resumeAt=performance.now()+6600;   // the ball waits for the booth
   const el2=document.getElementById("countdown");
   el2.classList.add("show");
   const steps=["3","2","1","GO!"];
@@ -2396,7 +2407,7 @@ function startCountdown(){
       say(`The whistle goes — we're underway!`,true);
       setTimeout(()=>el2.classList.remove("show"),1000);
     }
-  },i*1080));
+  },2200+i*1080));   // 2.2s of clear air for the trio line, then the count
 }
 function showSetup(){
   matchLive=false;
@@ -2427,9 +2438,9 @@ document.getElementById("btnStart").onclick=()=>{
   startCountdown();   // LAST: nothing downstream may touch resumeAt before the whistle
   say(scoreMode==="conceded"
     ?`Classic Jorn rules today — fewest conceded after ${matchLen/60} minute${matchLen>=120?"s":""} takes it.`
-    :`±1 rules — ${matchLen/60} minute${matchLen>=120?"s":""} on the clock, tiebreaks by goals scored, then golden-concession overtime.`,true);
-  if(zoneRule) say(`Offsides enforced: no attacker may enter the penalty area before the ball.`);
-  if(oobRule) say(`Touchlines in play — throw-ins, goal kicks, and corners.`);
+    :`±1 rules — ${matchLen/60} minute${matchLen>=120?"s":""} on the clock, tiebreaks by goals scored, then golden-concession overtime.`,true,false);
+  if(zoneRule) say(`Offsides enforced: no attacker may enter the penalty area before the ball.`,false,false);
+  if(oobRule) say(`Touchlines in play — throw-ins, goal kicks, and corners.`,false,false);
   {
     const buses=[0,1,2].filter(t=>teamDEF[t]==="ParkTheBus").length;
     const presses=[0,1,2].filter(t=>teamDEF[t]==="Gegenpress").length;
