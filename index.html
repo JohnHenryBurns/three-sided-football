@@ -1538,7 +1538,40 @@ function ambientChatter(){
     `Asger Jorn drew this pitch on a napkin in 1962. Look at it now.`,
     `Six sides, three teams, one ball. Simple game, really.`,
     `You don't defend a lead on the hex. You survive it.`,
-    `Scarves out in all three ends tonight.`);
+    `Scarves out in all three ends tonight.`,
+    // ---- the trope book ----
+    `It's a game of thirds out here. Nobody said it had to make sense.`,
+    `End-to-end-to-end stuff. This sport needed a new phrase and got one.`,
+    `Straight into the mixer — that's where the honest goals live.`,
+    `Ole football breaking out in patches tonight.`,
+    `Someone's playing for the highlight reel now.`,
+    `A proper shift being put in all over the grass.`,
+    `He couldn't hit a barn door from there, and yet you feel he might.`,
+    `Row Z has seen some traffic tonight.`,
+    `Textbook. Whatever textbook this sport uses.`,
+    `Against the run of play is the only kind of play the hex knows.`,
+    `Bread and butter stuff. Which, coincidentally, smells incredible from the concourse.`,
+    // ---- family lore & easter eggs ----
+    `Word from the paddock: Atlas the chocolate lab has escaped the dugout area again.`,
+    `Somewhere in the Willamette Valley, a Traeger is smoking and this match is on the porch speaker.`,
+    `Grampy Cliff says any team that can't fix its own tractor doesn't deserve silverware.`,
+    `Nanny's Baking Shop reports the halftime scones are already gone.`,
+    `Grandma Bridget's art class has reviewed the hexagon: 'derivative, but bold.'`,
+    `The chickens back home have reportedly stopped laying to watch this.`,
+    `Legend says a boy named Max invented this sport at the dinner table. The world simply caught up.`,
+    `Max FC scouts in the stands tonight. Notebooks out.`,
+    `Dampy the Dolphin waves from the family section. Splash responsibly.`,
+    `The pumpkin patch sits unguarded tonight. Priorities.`,
+    `Out past the floodlights, the hazelnut rows run clear to the river.`,
+    `A contest worthy of the Hat Creek outfit, this.`,
+    `More twists than a cattle drive to Montana.`,
+    `The barnyard is quiet. All eyes here.`);
+  if(clockSec<20) cand.push(`Early doors, as they say.`,`Feeling-out phase. Nobody wants to blink first.`);
+  if(clockSec>matchLen*0.75&&phase==="regulation")
+    cand.push(`Squeaky bum time approaching.`,`Late drama loading — you can feel it.`,
+      `Fine margins from here to the whistle.`);
+  if(phase==="overtime") cand.push(`Sudden death on a hexagon. Cruelty as entertainment.`,
+    `Nobody breathes in overtime. Not even the announcer.`);
   if(matchBoards.length&&Math.random()<0.25)
     cand.push(`Tonight's match brought to you in part by ${matchBoards[Math.floor(Math.random()*matchBoards.length)].toLowerCase()}.`);
   // no repeats from the last eight lines — long evenings deserve fresh material
@@ -1716,7 +1749,7 @@ function el(tag,attrs,parent){const n=document.createElementNS(NS,tag);
 const SPONSOR_LORE=[
   "CANBY HAZELNUTS","MAX FC","ATLAS K9 SECURITY","JORN & SONS","HEX•COLA","THE THIRD SIDE",
   "BURNS FAMILY FARMS","WILLAMETTE TURF CO.","TRAEGER SMOKE SIGNALS","PUMPKIN PATCH XXL",
-  "GRANDPA CLIFF'S TRACTOR PARTS","FRESH EGGS DAILY","HOME GYM IRONWORKS","LONESOME DOVE OUTFITTERS",
+  "GRAMPY CLIFF'S TRACTOR PARTS","NANNY'S BAKING SHOP","GRANDMA BRIDGET'S ART CLASS","FRESH EGGS DAILY","HOME GYM IRONWORKS","LONESOME DOVE OUTFITTERS",
   "P1S PRINT WORKS","BLUEBERRY ROW","THE DIP STATION","REMUDA RENTALS",
   "QUIRT SPORTING GOODS","GOLDEN CONCESSIONS","WALK OF SHAME INSURANCE","TACTICAL HUGS LLC",
   "ROW Z AIRLINES","KEEPER WARS PPV","GREG'S BRAIN","HORSECAMP","HELLFIRE CLUB"];
