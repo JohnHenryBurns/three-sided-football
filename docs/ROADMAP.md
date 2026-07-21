@@ -132,3 +132,41 @@ staging (FAST — ~1.2s, not penalty ceremony), parries with visuals, setup togg
 loop) across multiple Mayhem matches and reports any exception with a stack trace.
 It found a scope bug in the restart hold gate within 60 simulated seconds.
 **Protocol: `node sim/game-smoke.js` must pass before any push that touches index.html.**
+
+## Next session: National identities & the team selector
+
+**Vision:** every nation plays like itself. The preset inventory (attack/defense/aggression
+identities + dial offsets) gets assigned per-team from real-world reputation, and the
+roster expands well beyond the founding three. AI teams then play their NATIONAL identity
+by default (retiring the "AI stays Balanced" caveat) — so Spain passes you to death
+whether or not anyone coaches them, and every uncoached match has tactical texture.
+The coach menu still overrides everything for any bench a human takes.
+
+**Identity assignments (draft — tune by reputation and lab):**
+- Spain — Tiki-Taka / Gegenpress-lite, Clean
+- Argentina — Probe / Trap, Nasty (the dark arts are heritage)
+- England — Route One / Balanced press, Firm
+- Brazil — Swashbuckle / Balanced, Clean (jogo bonito)
+- Germany — Balanced / Gegenpress, Firm (the machine)
+- Italy — Probe / Park the Bus + Trap, Nasty (catenaccio lives)
+- France — Swashbuckle-lite / Trap counters, Firm
+- Netherlands — Tiki-Taka (total football) / high line, Firm
+- Morocco — Park the Bus / lightning counters, Firm
+- Japan — high-tempo press, Clean
+- Portugal, Croatia, Mexico, USA... (~12-16 total; each needs a 2026 squad roster)
+
+**Team data model:** per nation — colors/accent, squad (K/D/D/M/F names), identity
+bundle (atk/def/agg + optional dial nudges), display stats (ATT/MID/DEF/FLAIR/AGGRO
+bars derived from the bundle so the UI never lies about the engine), one-line
+reputation blurb, star player.
+
+**Team selector UI:** optional "Choose teams" entry from the setup dialog — three
+slots, tap a slot to browse the library; each team card shows colors, identity
+abbreviations (e.g. TT·GP), stat bars, blurb, and star. Selection writes into the
+three TEAMS slots. **Rapid start is sacred:** the default Kick off with
+Spain/Argentina/England must remain exactly one tap, zero new friction.
+
+**Lab work before shipping:** a national-identity round-robin to confirm no degenerate
+default triple (e.g. three buses producing 0-0-0), using the existing H2H harness.
+Smoke harness must pass; selector is pure UI but identity auto-application touches
+match init.
