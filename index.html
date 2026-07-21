@@ -567,11 +567,12 @@ function kick(tx,ty,power,isShot){
 function think(dt){
   const owner=ball.owner;
   const holdActive=performance.now()<restartHold;   // restart staging: ball dead, positioning live
+  const FL=[fieldersLeft(0),fieldersLeft(1),fieldersLeft(2)];   // cached: avoids per-player array filters
   const oppOf=t=>players.filter(p=>p.team!==t&&!p.out&&!p.sentOff);
   const chaser=[];
   for(let t=0;t<3;t++){
     let best=null,bd=1e9;
-    players.forEach(p=>{ if(p.team===t&&(p.role!=="K"||fieldersLeft(t)===0)&&!p.out&&!p.sentOff){const d=dist(p,ball); if(d<bd){bd=d;best=p;}}});
+    players.forEach(p=>{ if(p.team===t&&(p.role!=="K"||FL[t]===0)&&!p.out&&!p.sentOff){const d=dist(p,ball); if(d<bd){bd=d;best=p;}}});
     chaser[t]=best;
   }
   players.forEach(p=>{
@@ -612,7 +613,7 @@ function think(dt){
       const wallR=oobRule?95:70, wallW=oobRule?1.6:1.1;
       if(wd<wallR&&!inMouth){ const w=(wallR-wd)/wallR*wallW; dx+=we.nx*w; dy+=we.ny*w; }
       steer(p,p.x+dx*80,p.y+dy*80,2.05);
-    } else if(p.role==="K"&&(fieldersLeft(p.team)>0||dist(ball,goalCenter(p.team))<210)){
+    } else if(p.role==="K"&&(FL[p.team]>0||dist(ball,goalCenter(p.team))<210)){
       const e=EDGES[GOAL_EDGE[p.team]];
       let along=(ball.x-e.mx)*e.ux+(ball.y-e.my)*e.uy;
       const lim=e.len*GOAL_HALF*0.9; along=Math.max(-lim,Math.min(lim,along));
@@ -744,7 +745,7 @@ function think(dt){
     {
       const RK=T(owner.team).risk;
       // THE LONG STRIKE: open lane + decent angle + space = have a go from range
-      if(oobRule!==undefined&&dGoal>125&&dGoal<250&&pressure>42){
+      if(dGoal>125&&dGoal<250&&pressure>42){
         const hw2=e.len*GOAL_HALF;
         const latOff=Math.abs((owner.x-tgt.x)*e.ux+(owner.y-tgt.y)*e.uy);
         if(latOff<hw2*1.5){
@@ -778,7 +779,20 @@ function think(dt){
     }
     if(pressure<48 && Math.random()<(0.05+0.10*T(owner.team).tempo)*dt*60){
       let best=null,bs=-1e9;
-      const matesLeft=fieldersLeft(owner.team)-(owner.role!=="K"?1:0);
+      const matesLeft=FL[owner.team]-(owner.role!=="K"?1:0);
+      let allyPen=null;   // computed once: identical for every allied candidate
+      {
+        const foe=targets[owner.team];
+        if(foe!==null){
+          const foeLead=score[foe]-score[owner.team];
+          const shortfall=FL[foe]-FL[owner.team];
+          let desp=Math.max(0,foeLead)*0.28+Math.max(0,shortfall)*0.4+(FL[owner.team]===0?0.45:0);
+          let pen=850*Math.max(0,1-desp);
+          if(matesLeft===0) pen-=80;
+          if(pressure>32) pen*=0.8;
+          allyPen=pen;
+        }
+      }
       players.forEach(m=>{
         const allyOk=allied(owner.team,m.team);
         if((m.team!==owner.team&&!allyOk)||m===owner||m.role==="K"||m.out||m.sentOff)return;
@@ -792,18 +806,7 @@ function think(dt){
             if(Math.hypot(o.x-lx,o.y-ly)<(30-12*T(owner.team).risk)+5*(T(o.team).press-0.5)*2) laneOk=false;}
         });
         let s=gain*(0.6+0.8*T(owner.team).direct)+(laneOk?0:-500)+Math.random()*30;
-        if(allyOk){
-          // treason is priced by the scoreboard: never when tied, cheap when someone runs away
-          const foe=targets[owner.team];
-          const foeLead=score[foe]-score[owner.team];
-          const shortfall=fieldersLeft(foe)-fieldersLeft(owner.team);
-          let desp=Math.max(0,foeLead)*0.28+Math.max(0,shortfall)*0.4
-                  +(fieldersLeft(owner.team)===0?0.45:0);
-          let pen=850*Math.max(0,1-desp);
-          if(matesLeft===0) pen-=80;
-          if(pressure>32) pen*=0.8;
-          s-=pen;
-        }
+        if(allyOk&&allyPen!==null) s-=allyPen;   // scoreboard-priced treason, computed once above
         if(s>bs){bs=s;best=m;}
       });
       if(best&&bs>-100){
@@ -814,7 +817,7 @@ function think(dt){
     }
     // FOULS: clumsy or cynical challenges — aggression is now a priced behavior
     for(const o of oppOf(owner.team)){
-      if(o.role==="K"||o.out)continue;
+      if(o.role==="K"||o.out||o.sentOff)continue;
       if(suppress&&suppress.team===o.team&&clockSec<suppress.until)continue;
       if(dist(o,owner)>=28)continue;
       const inBox=dist(owner,goalCenter(o.team))<110;
