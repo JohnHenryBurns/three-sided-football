@@ -227,3 +227,9 @@ selection. Rapid start untouched: ESP/ARG/ENG one-tap kickoff.
 Round-robin sanity (lab): BRA/GER/FRA 3.3 goals/min, JPN/POR/USA 2.4 — healthy.
 KNOWN TEXTURE: double-bus triples (ITA+MAR) run ~1.15 goals/min — siege football by
 design; the preset counter-cycle still decides them (Probe/TikiTaka beat buses).
+
+**Long strikes (from a field report):** shot logic had zero awareness of openness,
+lane, or angle — open carriers just dribbled to the keeper (report confirmed at
+mechanism level). New branch: 125–250 range + clear lane + decent angle + space
+= a ripped 11.2-power drive with distance-scaled scatter. Lab: 1.05 long
+strikes/min, goals flat (accuracy tax works), headers +44% via rebounds/corners.
