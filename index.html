@@ -441,9 +441,10 @@ function resetMatch(){
   }
   menuTeam=null; document.getElementById("coachMenu")?.classList.remove("show");
   stats={shots:[0,0,0],saves:[0,0,0],tackles:[0,0,0],poss:[0,0,0]};
-  goalsLog=[]; goldenScorer=null; refreshNameColors(); matchLog=[];
+  goalsLog=[]; goldenScorer=null; matchLog=[];
   goalEls.forEach(g=>g&&g.setAttribute("opacity",1));
-  drawBoards();   // fresh sponsors every match
+  drawBoards();
+  refreshNameColors();   // AFTER squads exist — mapping an empty roster colors nothing   // fresh sponsors every match
   suppress=null; pendingPenalty=null; penaltyShooter=null; penaltyGoalTeam=null;
   stoppageAnnounced=false;
   stoppageLen=Math.min(55,matchLen*0.2)*(0.85+Math.random()*0.3);
