@@ -1716,21 +1716,24 @@ function speak(html,prio){
     };
     if(prio==="high"){
       const now2=performance.now();
+      highLockUntil=now2+1600;   // the mic belongs to the big call — chatter locked out
       if(speechSynthesis.speaking||speechSynthesis.pending){
         // rate-limit cancels: rapid cancel+speak cycles wedge Android TTS
-        if(now2-lastCancelAt>350){ speechSynthesis.cancel(); lastCancelAt=now2; }
+        if(now2-lastCancelAt>150){ speechSynthesis.cancel(); lastCancelAt=now2; }
         queuedUtter=0;
         // single-slot defer: a newer big call REPLACES a waiting one, never stacks
         if(pendingHighFire)clearTimeout(pendingHighFire);
         pendingHighFire=setTimeout(()=>{ pendingHighFire=null; fire(); },90);
       } else { fire(); }
     } else {
+      // low speech never speaks in the shadow of a big call (the 90ms defer gap was stealable)
+      if(performance.now()<highLockUntil)return;
       if(queuedUtter>0||speechSynthesis.speaking)return;
       fire();
     }
   }catch(e3){ queuedUtter=0; }
 }
-let lastCancelAt=0, pendingHighFire=null, speakStartedAt=0;
+let lastCancelAt=0, pendingHighFire=null, speakStartedAt=0, highLockUntil=0;
 if(speechOK){
   // heartbeat: Chrome's engine self-pauses on long gaps — nudge it awake
   setInterval(()=>{ try{ if(voiceOn) speechSynthesis.resume(); }catch(e7){} },4000);

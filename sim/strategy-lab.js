@@ -681,7 +681,16 @@ class Match {
     }
     this.conceded[conceder]++;this.score[conceder]--;
     if(legit){this.score[scorerTeam]++;this.scored[scorerTeam]++;
-      if(trailing)this.boostUntil[scorerTeam]=this.clock+20;
+      if(trailing){
+        this.boostUntil[scorerTeam]=this.clock+20;
+        if(this.o.fireProbe){
+          this.fp=this.fp||{rankTime:[0,0,0],rankFire:[0,0,0],fireTime:0,fireAsLeader:0,boosts:0,boostLedToLead:0};
+          this.fp.boosts++;
+          const mx=Math.max(...this.score);
+          if(this.score[scorerTeam]===mx&&this.score.filter(x=>x===mx).length===1)
+            this.fp.boostLedToLead++;   // the igniting goal itself took them top
+        }
+      }
       const sc=b.owner||b.lastKicker;if(sc)this.stam(sc,+0.2);
     } else {
       this.m.own++;
@@ -698,6 +707,20 @@ class Match {
     this.m.curSpell=0;this.m.curTeam=null;
   }
   step(dt){
+    if(this.o.fireProbe){
+      this.fp=this.fp||{rankTime:[0,0,0],rankFire:[0,0,0],fireTime:0,fireAsLeader:0,boosts:0,boostLedToLead:0};
+      const ranks=[0,1,2].sort((a,b)=>(this.score[b]-this.score[a])||(this.scored[b]-this.scored[a]));
+      for(let r=0;r<3;r++){
+        const t=ranks[r];
+        const strictLeader=r===0&&(this.score[ranks[0]]>this.score[ranks[1]]||(this.score[ranks[0]]===this.score[ranks[1]]&&this.scored[ranks[0]]>this.scored[ranks[1]]));
+        const fired=this.clock<this.boostUntil[t];
+        this.fp.rankTime[r]+=dt;
+        if(fired){
+          this.fp.rankFire[r]+=dt; this.fp.fireTime+=dt;
+          if(strictLeader&&r===0)this.fp.fireAsLeader+=dt;
+        }
+      }
+    }
     this.clock+=dt;this.retarget+=dt;
     if(this.retarget>6){this.retarget=0;this.computeTargets();}
     this.think(dt);this.physics(dt);
@@ -834,6 +857,29 @@ if(process.env.POWER==="1"){
     console.log(JSON.stringify({nation:nm,coal,n:N2,pts:+(pts/N2).toFixed(2),
       gf:+(gf/N2).toFixed(1),ga:+(ga/N2).toFixed(1),winPct:+(wins/N2*100).toFixed(0)}));
   });
+  process.exit(0);
+}
+if(process.env.FIRECHK==="1"){
+  const B={tempo:.5,risk:.5,direct:.5,line:.5,press:.5,bunker:0,aggF:1,aggT:1};
+  const agg={rt:[0,0,0],rf:[0,0,0],ft:0,fl:0,bo:0,bl:0,total:0};
+  for(let i=0;i<20;i++){
+    setSeed(41000+i*307);
+    const m=natMatch([{tac:{...B}},{tac:{...B}},{tac:{...B}}]);
+    m.o.fireProbe=true; m.run();
+    const f=m.fp||{rankTime:[0,0,0],rankFire:[0,0,0],fireTime:0,fireAsLeader:0,boosts:0,boostLedToLead:0};
+    for(let r=0;r<3;r++){agg.rt[r]+=f.rankTime[r];agg.rf[r]+=f.rankFire[r];}
+    agg.ft+=f.fireTime; agg.fl+=f.fireAsLeader; agg.bo+=f.boosts; agg.bl+=f.boostLedToLead;
+    agg.total+=m.clock;
+  }
+  console.log(JSON.stringify({
+    matches:20,
+    pctTimeOnFire_rank1:+((agg.rf[0]/agg.rt[0])*100).toFixed(1),
+    pctTimeOnFire_rank2:+((agg.rf[1]/agg.rt[1])*100).toFixed(1),
+    pctTimeOnFire_rank3:+((agg.rf[2]/agg.rt[2])*100).toFixed(1),
+    shareOfFireHeldByStrictLeader:+((agg.fl/agg.ft)*100).toFixed(1),
+    boostsPerMatch:+(agg.bo/20).toFixed(1),
+    pctBoostsWhereIgnitingGoalTookTheLead:+((agg.bl/agg.bo)*100).toFixed(1)
+  }));
   process.exit(0);
 }
 if(process.env.OGRATE==="1"){
