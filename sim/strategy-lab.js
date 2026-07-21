@@ -748,6 +748,27 @@ if(process.env.ZONE==="1"){
   }
   process.exit(0);
 }
+if(process.env.NATS==="1"){
+  const PRE={
+    TikiTaka:{tempo:.9,risk:.3,direct:.15},RouteOne:{tempo:.3,risk:.7,direct:.95},
+    Swashbuckle:{tempo:.8,risk:.95,direct:.5},Probe:{tempo:.35,risk:.25,direct:.3},
+    Balanced:{tempo:.5,risk:.5,direct:.5}};
+  const DEF={Gegenpress:{line:.8,press:.95,bunker:0},ParkTheBus:{line:.15,press:.2,bunker:1},
+    Trap:{line:.35,press:.6,bunker:0},Balanced:{line:.5,press:.5,bunker:0}};
+  function nat(a,d){return {tac:{...PRE[a],...DEF[d]}};}
+  function trio(label,teams){
+    const rs=[];
+    for(let i=0;i<8;i++)rs.push(new Match({minutes:MIN,dribble:true,aerial:true,zoneRule:true,
+      anticipate:true,oob:true,disc:true,restarts:true,parries:true,
+      ally:{},teamFlags:teams}).run());
+    console.log(JSON.stringify({label,goals:avg(rs,"goalsPerMin"),headers:avg(rs,"headersPerMin"),
+      spell:avg(rs,"avgSpellSec")}));
+  }
+  trio("ESP/ITA/MAR (TT·GP vs PR·BUS vs R1·BUS)",[nat("TikiTaka","Gegenpress"),nat("Probe","ParkTheBus"),nat("RouteOne","ParkTheBus")]);
+  trio("BRA/GER/FRA (SB·BAL vs BAL·GP vs SB·TRP)",[nat("Swashbuckle","Balanced"),nat("Balanced","Gegenpress"),nat("Swashbuckle","Trap")]);
+  trio("JPN/POR/USA (TT·GP vs SB·TRP vs BAL·GP)",[nat("TikiTaka","Gegenpress"),nat("Swashbuckle","Trap"),nat("Balanced","Gegenpress")]);
+  process.exit(0);
+}
 if(process.env.ALLY==="1"){
   const B={tempo:.5,risk:.5,line:.5,press:.5,direct:.5,bunker:0};
   const sd=a=>{const mu=a.reduce((x,y)=>x+y,0)/a.length;

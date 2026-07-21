@@ -215,3 +215,15 @@ The mechanic now reads exactly as designed — nobody robs Peter to pay Paul in 
 game, but a runaway leader or a man-advantage mismatch turns the other two into a
 functioning coalition. Solo-survivor combos (1v1v2) preserved via the shortfall and
 no-outfielder terms.
+
+**National identities: SHIPPED.** 12-nation TEAM_LIBRARY with grounded identity bundles
+(each nation's atk/def/agg from the validated preset inventory), reputation blurbs, and
+stars. National identity is now every team's RESTING state — AI teams play their nation
+(caveat retired); coach Release returns a team to its national identity, not Balanced.
+Team selector: optional "Teams" row in setup → per-slot picker with derived stat bars
+(ATT/DEF/PRESS/FLAIR/AGGRO computed FROM the engine bundle), blurb, star; duplicate
+picks auto-swap slots; world (crowd sections, goals, dugouts, chips) rebuilds on
+selection. Rapid start untouched: ESP/ARG/ENG one-tap kickoff.
+Round-robin sanity (lab): BRA/GER/FRA 3.3 goals/min, JPN/POR/USA 2.4 — healthy.
+KNOWN TEXTURE: double-bus triples (ITA+MAR) run ~1.15 goals/min — siege football by
+design; the preset counter-cycle still decides them (Probe/TikiTaka beat buses).
