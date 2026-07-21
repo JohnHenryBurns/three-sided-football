@@ -1797,7 +1797,7 @@ function speak(html,prio){
   const text=html
     .replace(/<[^>]*>/g,"")
     .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu,"")
-    .replace(/G+O+A+L+/gi,"goooooooooal")
+    .replace(/G+O+A+L+/gi,"goal")   // stretched spellings read as "gull" — emphasis comes from delivery instead
     .replace(/GOOOAL!/g,"Goal!")
     .replace(/\+1/g,"plus one").replace(/−1/g,"minus one")
     .replace(/\+(\d+)s\b/g,"plus $1 seconds")
@@ -1807,10 +1807,11 @@ function speak(html,prio){
   // Armor: the Android speech engine is unstable under cancel/speak churn.
   // Whatever it does, it must NEVER take the football down with it.
   try{
+    const isGoalCall=/G+O+A+L+|IT'S IN|NET BULGES/i.test(html);
     const mk=(txt)=>{
       const u=new SpeechSynthesisUtterance(txt);
       if(narrator)u.voice=narrator;
-      u.rate=1.12; u.pitch=1;
+      u.rate=isGoalCall?0.98:1.12; u.pitch=isGoalCall?1.06:1;   // the goal call slows and rises
       u.onend=u.onerror=()=>{
         queuedUtter=Math.max(0,queuedUtter-1); speakStartedAt=performance.now(); speakingPrio=null;
         if(highQ.length){                        // drain the big calls IN ORDER
