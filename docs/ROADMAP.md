@@ -170,3 +170,13 @@ Spain/Argentina/England must remain exactly one tap, zero new friction.
 default triple (e.g. three buses producing 0-0-0), using the existing H2H harness.
 Smoke harness must pass; selector is pure UI but identity auto-application touches
 match init.
+
+**Uneven-squad simulations (5-5-4 and 5-4-3, full OOB package):** zero mechanical
+errors — the engine handles asymmetric teams cleanly. The strategic finding is the
+surprise: being shorthanded is heavily compensated by hunt-the-leader dynamics.
+In 5-5-4 the four-man team finished MID-TABLE (-0.3) while a full-strength rival
+finished -1.4; in 5-4-3 the THREE-man team scored the most goals per match (4.8)
+and tied for best record. Weak teams never lead, so they never get pincered — an
+"invisibility dividend." Jorn's anti-binary thesis, validated computationally.
+Implication: red cards sting less than they look in ±1 scoring; no rebalance needed,
+but worth knowing for the family meta.
