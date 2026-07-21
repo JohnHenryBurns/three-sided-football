@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b1410">
 <title>Three-Sided World Cup — Spain · Argentina · England</title>
 <style>
   :root{
@@ -237,6 +239,7 @@
     <button id="btnZoom" title="Zoom"><span class="ico"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg></span><span class="val" id="zoomVal">2.3×</span></button>
     <button id="btnSpeed" title="Speed"><span class="ico"><svg viewBox="0 0 24 24"><path d="M4 5l7 7-7 7M13 5l7 7-7 7"/></svg></span><span class="val" id="speedVal">1×</span></button>
     <button id="btnVoice" class="toggle" title="Spoken narrator" aria-pressed="false"><span class="ico"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4"/></svg></span><span class="lbl">Narrator</span></button>
+    <button id="btnFull" class="toggle" title="Fullscreen" aria-pressed="false"><span class="ico"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></span><span class="lbl">Full</span></button>
   </div>
 </header>
 
@@ -2626,6 +2629,7 @@ document.getElementById("btnStart").onclick=()=>{
   oobRule=document.getElementById("setOob").checked;
   voiceOn=speechOK&&document.getElementById("setVoice").checked;
   matchLive=true;
+  keepAwake();
   setVoiceUI();
   if(voiceOn&&!welcomed){ speak("Welcome to the hex — three teams, one ball, no permanent friends."); welcomed=true; }
   foulMult=parseFloat(document.getElementById("setRef").value);
@@ -2682,6 +2686,23 @@ vt.onclick=()=>{
   if(voiceOn){ speak("Welcome to the hex — three teams, one ball, no permanent friends."); welcomed=true; }
   else if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; }
 };
+
+// ---------- Big screen ----------
+const btnFull=document.getElementById("btnFull");
+btnFull.onclick=()=>{
+  try{
+    if(document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen({navigationUI:"hide"});
+  }catch(e8){}
+};
+document.addEventListener("fullscreenchange",()=>{
+  btnFull.setAttribute("aria-pressed",String(!!document.fullscreenElement));
+});
+let wakeLock=null;
+async function keepAwake(){
+  try{ if("wakeLock" in navigator) wakeLock=await navigator.wakeLock.request("screen"); }catch(e8){}
+}
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"&&matchLive) keepAwake(); });
 
 // ---------- Go ----------
 function rebuildWorld(){
