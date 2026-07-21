@@ -1488,10 +1488,12 @@ function styleLines(){
       L.push(`${tm(t)} are pressing in coalition — half the bill, twice the menace.`);
   return L;
 }
+let recentChatter=[];
 function ambientChatter(){
   if(!matchLive||!voiceOn||!speechOK) return;
   if(queuedUtter>0||speechSynthesis.speaking) return;
-  if(clockSec-lastChatterAt<7) return;
+  const rt=performance.now()/1000;
+  if(rt-lastChatterAt<6) return;   // REAL seconds: slow-speed viewing gets a full broadcast
   const cand=[];
   const o=ball.owner;
   if(o&&o.role!=="K"){
@@ -1500,26 +1502,52 @@ function ambientChatter(){
       `${o.name} on the ball for ${TEAMS[o.team].name}.`,
       `${o.name} carries it forward.`,
       `Patient stuff from ${TEAMS[o.team].name} — ${o.name} surveying.`,
+      `${o.name} with a touch, and another.`,
       tgt!==null?`${o.name} looking toward the ${TEAMS[tgt].name} end.`:`${o.name} in space.`);
+    if(o.name===TEAMS[o.team].star)
+      cand.push(`The star man — every seat leans in when ${o.name} takes it.`,
+        `${o.name}. You can feel the anticipation.`);
+    if(o.stamina<0.5) cand.push(`${o.name} looks heavy-legged now.`);
     let nd=1e9; oppOf(o.team).forEach(q=>nd=Math.min(nd,dist(q,o)));
-    if(nd<40) cand.push(`${o.name} under pressure...`,`They're closing ${o.name} down fast.`);
-    if(nd>90) cand.push(`Acres of space for ${o.name}.`);
+    if(nd<40) cand.push(`${o.name} under pressure...`,`They're closing ${o.name} down fast.`,
+      `Nowhere to hide for ${o.name}.`);
+    if(nd>90) cand.push(`Acres of space for ${o.name}.`,`Time and grass for ${o.name}.`);
+  } else if(o&&o.role==="K"){
+    cand.push(`${o.name} with it at the back — restarting the story.`,
+      `The keeper takes his time. Smart.`);
   }
-  if(clockSec>30){
+  if(clockSec>25){
     const totP=stats.poss.reduce((a,b)=>a+b,0)||1;
     const lead=[0,1,2].sort((a,b)=>stats.poss[b]-stats.poss[a])[0];
     cand.push(`${TEAMS[lead].name} seeing most of the ball — ${Math.round(100*stats.poss[lead]/totP)} percent possession.`);
     const tk=[0,1,2].sort((a,b)=>stats.tackles[b]-stats.tackles[a])[0];
     if(stats.tackles[tk]>3) cand.push(`${TEAMS[tk].name} lead the tackle count with ${stats.tackles[tk]}.`);
+    const mx=Math.max(...score), ldrs=[0,1,2].filter(t=>score[t]===mx);
+    if(ldrs.length===1)
+      cand.push(`${TEAMS[ldrs[0]].name} top of the pile — and the hex punishes the top of the pile.`,
+        `Everyone in this stadium knows who the target is: ${TEAMS[ldrs[0]].name}.`);
+    if(ldrs.length===3&&mx===0) cand.push(`Dead level. Someone has to blink.`);
   }
+  const tired=players.filter(p2=>!p2.out&&!p2.sentOff&&p2.stamina<0.4);
+  if(tired.length>3) cand.push(`Legs are going all over the pitch. This is where character shows.`);
   cand.push(
     `Great atmosphere around the hex tonight.`,
     `The crowd's in good voice.`,
     `Three goals, three keepers, no permanent friends — this sport is undefeated.`,
-    `The floodlights doing their work on a beautiful evening for it.`);
+    `The floodlights doing their work on a beautiful evening for it.`,
+    `Asger Jorn drew this pitch on a napkin in 1962. Look at it now.`,
+    `Six sides, three teams, one ball. Simple game, really.`,
+    `You don't defend a lead on the hex. You survive it.`,
+    `Scarves out in all three ends tonight.`);
   if(matchBoards.length&&Math.random()<0.25)
     cand.push(`Tonight's match brought to you in part by ${matchBoards[Math.floor(Math.random()*matchBoards.length)].toLowerCase()}.`);
-  if(cand.length){ lastChatterAt=clockSec; speak(pick(cand),"low"); }
+  // no repeats from the last eight lines — long evenings deserve fresh material
+  let fresh=cand.filter(l=>!recentChatter.includes(l));
+  if(!fresh.length) fresh=cand;
+  const line=pick(fresh);
+  recentChatter.push(line); if(recentChatter.length>8) recentChatter.shift();
+  lastChatterAt=rt;
+  speak(line,"low");
 }
 function colorCommentary(){
   ambientChatter();
