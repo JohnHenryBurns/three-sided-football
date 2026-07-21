@@ -130,13 +130,14 @@
     display:none;align-items:center;justify-content:center;z-index:70;padding:1rem}
   #coachMenu.show{display:flex}
   #cmCard{background:var(--panel);border:3px solid var(--cele,#fff);border-radius:16px;
-    padding:1.1rem 1.2rem;max-width:min(26rem,94vw);max-height:88vh;overflow-y:auto;text-align:center}
+    padding:1.1rem 1.2rem;width:min(26rem,92vw);max-height:88vh;overflow-y:auto;text-align:center;
+    box-sizing:border-box}
   #cmCard .big2{font-size:1.2rem;letter-spacing:.1em;text-transform:uppercase;font-weight:600}
   .cmSec{margin-top:.75rem;font-size:.64rem;letter-spacing:.16em;color:var(--ink-dim);text-transform:uppercase}
-  .cmRow{display:grid;grid-template-columns:repeat(auto-fit,minmax(5rem,1fr));gap:.35rem;margin-top:.32rem}
-  .cmRow .cmBtn{width:100%;white-space:nowrap}
+  .cmRow{display:grid;gap:.35rem;margin-top:.32rem}
+  .cmRow .cmBtn{width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
   .cmFoot{grid-template-columns:1fr 1fr;margin-top:.9rem}
-  .cmDesc{font-size:.7rem;color:var(--ink-dim);margin-top:.3rem;min-height:1.2em;line-height:1.35}
+  .cmDesc{font-size:.7rem;color:var(--ink-dim);margin-top:.3rem;min-height:2.6em;line-height:1.3}
   .cmBtn{font-size:.72rem;padding:.38rem .3rem}
   .cmBtn.sel{border-color:var(--cele);color:#fff;background:rgba(255,255,255,.08);box-shadow:0 0 8px var(--cele)}
   .cmBtn.go{border-color:var(--arg)}
@@ -2024,21 +2025,24 @@ function openCoachMenu(t){
   card.style.setProperty("--cele",TEAMS[t].color);
   const rivals=[0,1,2].filter(x=>x!==t&&!out[x]);
   const btn=(txt,sel,attrs)=>`<button class="cmBtn${sel?" sel":""}" ${attrs}>${txt}</button>`;
+  const LBL={TikiTaka:"Tiki-Taka",RouteOne:"Route 1",Swashbuckle:"Swash",ParkTheBus:"The Bus",
+    Gegenpress:"Gegen"};
+  const cols=n=>`style="grid-template-columns:repeat(${n},1fr)"`;
   const huntDesc=coachTarget[t]===null
     ?"AI decides — every attack hunts the current leader."
     :`Every attack targets ${TEAMS[coachTarget[t]].name}.`;
   card.innerHTML=`<div class="big2" style="color:${TEAMS[t].color}">${TEAMS[t].name} bench</div>
-    <div class="cmSec">Hunt</div><div class="cmRow">${
+    <div class="cmSec">Hunt</div><div class="cmRow" ${cols(1+rivals.length)}>${
       btn("Auto",coachTarget[t]===null,'data-h="auto"')+
       rivals.map(r=>btn(TEAMS[r].short,coachTarget[t]===r,`data-h="${r}"`)).join("")}</div>
     <div class="cmDesc">${huntDesc}</div>
-    <div class="cmSec">Attack identity</div><div class="cmRow">${
-      Object.keys(ATK_PRESETS).map(k=>btn(k,teamATK[t]===k,`data-a="${k}"`)).join("")}</div>
+    <div class="cmSec">Attack identity</div><div class="cmRow" ${cols(Object.keys(ATK_PRESETS).length)}>${
+      Object.keys(ATK_PRESETS).map(k=>btn(LBL[k]||k,teamATK[t]===k,`data-a="${k}"`)).join("")}</div>
     <div class="cmDesc">${ATK_D[teamATK[t]]}</div>
-    <div class="cmSec">Defensive identity</div><div class="cmRow">${
-      Object.keys(DEF_PRESETS).map(k=>btn(k,teamDEF[t]===k,`data-d="${k}"`)).join("")}</div>
+    <div class="cmSec">Defensive identity</div><div class="cmRow" ${cols(Object.keys(DEF_PRESETS).length)}>${
+      Object.keys(DEF_PRESETS).map(k=>btn(LBL[k]||k,teamDEF[t]===k,`data-d="${k}"`)).join("")}</div>
     <div class="cmDesc">${DEF_D[teamDEF[t]]}</div>
-    <div class="cmSec">Aggression</div><div class="cmRow">${
+    <div class="cmSec">Aggression</div><div class="cmRow" ${cols(Object.keys(AGG_PRESETS).length)}>${
       Object.keys(AGG_PRESETS).map(k=>btn(k,teamAGG[t]===k,`data-g="${k}"`)).join("")}</div>
     <div class="cmDesc">${AGG_D[teamAGG[t]]}</div>
     <div class="cmRow cmFoot">
