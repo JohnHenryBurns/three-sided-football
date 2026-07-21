@@ -1583,7 +1583,66 @@ function ambientChatter(){
     `Nobody breathes in overtime. Not even the announcer.`);
   if(matchBoards.length&&Math.random()<0.25)
     cand.push(`Tonight's match brought to you in part by ${matchBoards[Math.floor(Math.random()*matchBoards.length)].toLowerCase()}.`);
-  // no repeats from the last eight lines — long evenings deserve fresh material
+  // ---- state-aware storytelling (batch 2) ----
+  {
+    // hat-trick watch & man of the moment
+    players.forEach(p2=>{
+      if(p2.out||p2.sentOff)return;
+      if(p2.goals===2) cand.push(`${p2.name} is ONE away from a hat-trick. Everybody in the ground knows it.`);
+      if(p2.goals>=3) cand.push(`${p2.name} has a hat-trick and wants more. Greedy. Wonderful.`);
+      if(p2.yellows>=1&&p2.role!=="K") cand.push(`${p2.name} walking the tightrope on a yellow.`);
+    });
+    // save-count heroics
+    const svLead=[0,1,2].sort((a,b)=>stats.saves[b]-stats.saves[a])[0];
+    if(stats.saves[svLead]>=4){
+      const gk=players.find(p2=>p2.team===svLead&&p2.role==="K");
+      if(gk) cand.push(`${gk.name} is building a highlight reel tonight — ${stats.saves[svLead]} saves.`);
+    }
+    // shorthanded valor & bedlam
+    for(let t2=0;t2<3;t2++){
+      const men=players.filter(p2=>p2.team===t2&&!p2.out&&p2.sentOff).length;
+      if(men===1&&!out[t2]) cand.push(`${TEAMS[t2].name} a man down and refusing to die. Respect.`);
+      if(men>=2&&!out[t2]) cand.push(`${TEAMS[t2].name} down to the bare bones. This is siege survival now.`);
+    }
+    // scoreline drama
+    const mx2=Math.max(...score), mn2=Math.min(...score);
+    if(mx2-mn2>=3) cand.push(`A ${mx2-mn2}-point spread. Someone's evening has gone sideways.`,
+      `The gap is real now. Alliances form in gaps like this.`);
+    if(mn2<=-3) { const worst=[0,1,2].find(t2=>score[t2]===mn2);
+      cand.push(`Grim arithmetic for ${TEAMS[worst].name}. But the hex forgives fast — one pincer changes everything.`); }
+    const totGoals=scored.reduce((a,b)=>a+b,0);
+    if(totGoals>=5) cand.push(`${totGoals} goals already. Absolute bedlam, and nobody's apologizing.`);
+    if(totGoals===0&&clockSec>matchLen*0.5) cand.push(`Still goalless. The keepers are winning the argument.`);
+    const ccLead=[0,1,2].sort((a,b)=>conceded[b]-conceded[a])[0];
+    if(conceded[ccLead]>=3) cand.push(`${TEAMS[ccLead].name} leaky at the back tonight — ${conceded[ccLead]} conceded.`);
+    // targeting theater
+    for(let a2=0;a2<3;a2++) for(let b2=a2+1;b2<3;b2++)
+      if(targets[a2]===b2&&targets[b2]===a2&&!out[a2]&&!out[b2])
+        cand.push(`${TEAMS[a2].name} and ${TEAMS[b2].name} are locked in a private war. The third team should be taking notes.`);
+    for(let t2=0;t2<3;t2++)
+      if(!out[t2]&&[0,1,2].every(o2=>o2===t2||out[o2]||targets[o2]===t2))
+        cand.push(`Everyone's guns point at ${TEAMS[t2].name}. That's the price of the summit.`);
+    // fire
+    for(let t2=0;t2<3;t2++)
+      if(clockSec<boostUntil[t2]) cand.push(`${TEAMS[t2].name} still burning — you can see it in the strides.`);
+  }
+  // ---- lore & tropes, batch 2 ----
+  cand.push(
+    `At the end of the day, it's twelve men, a hexagon, and consequences.`,
+    `They'll take each match as it comes. Mostly because that's how time works.`,
+    `The hexagon: six sides, no hiding places. Grandma Bridget calls it honest geometry.`,
+    `Grampy Cliff would've cleared that with the loader tractor.`,
+    `Nanny's sourdough is rising slower than this backline.`,
+    `Atlas just caught a moth in the family section. Biggest save of the night so far.`,
+    `The hens are on the fencepost. They can sense drama.`,
+    `Rain's holding off. This is Oregon — that's a miracle worth a point.`,
+    `The blueberry rows have seen a hundred summers. They've never seen anything like this.`,
+    `Word is the Hellfire Club has a table tonight. Say nothing.`,
+    `Max FC's academy motto: three sides, no excuses.`,
+    `Dampy the Dolphin reminds everyone: hydrate, and splash responsibly.`,
+    `Somewhere a Traeger just hit temp. Priorities being tested across the valley.`,
+    `You'd ride the river with this lot. Most of them, anyway.`,
+    `Fine margins. Fine hexagons. Fine evening all around.`);
   let fresh=cand.filter(l=>!recentChatter.includes(l));
   if(!fresh.length) fresh=cand;
   const line=pick(fresh);
