@@ -141,7 +141,8 @@
   .cmBtn{font-size:.72rem;padding:.38rem .3rem}
   .cmBtn.sel{border-color:var(--cele);color:#fff;background:rgba(255,255,255,.08);box-shadow:0 0 8px var(--cele)}
   .cmBtn.go{border-color:var(--arg)}
-  .slotRow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.35rem;flex:1}
+  .slotRow{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.35rem;flex:1}
+  .diceBtn{padding:.3rem .55rem;font-size:1rem}
   .slotBtn{font-weight:700;letter-spacing:.06em}
   #teamPick{position:fixed;inset:0;background:rgba(4,8,6,.66);backdrop-filter:blur(2px);
     display:none;align-items:center;justify-content:center;z-index:80;padding:1rem}
@@ -2223,6 +2224,15 @@ function renderTeamSlots(){
     b.onclick=()=>openTeamPick(i);
     row.appendChild(b);
   }
+  const dice=document.createElement("button");
+  dice.className="diceBtn"; dice.textContent="🎲"; dice.title="Random matchup";
+  dice.onclick=()=>{
+    const pool=[...TEAM_LIBRARY.keys()];
+    for(let i=pool.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [pool[i],pool[j]]=[pool[j],pool[i]]; }
+    selTeams=pool.slice(0,3);
+    rebuildWorld(); renderTeamSlots();
+  };
+  row.appendChild(dice);
 }
 function openTeamPick(slot){
   const card=document.getElementById("tpCard");
