@@ -72,6 +72,11 @@ for(let run=0;run<RUNS;run++){
     try{ cb(simNow); }
     catch(e){ console.log(`RUNTIME CRASH run ${run} frame ${f} (t=${(f/60).toFixed(1)}s):\n`,e.stack); process.exit(1); }
   }
+  {
+    const cs=sandbox.clockSec!==undefined?sandbox.clockSec:(sandbox.window&&sandbox.window.clockSec);
+    if(typeof cs==="number"&&cs<40)
+      throw new Error("LIVENESS FAIL: clock only reached "+cs.toFixed(1)+"s of game time in 90 simulated seconds — play stalled");
+  }
   console.log(`run ${run}: 90 simulated seconds clean`);
 }
 console.log("SMOKE PASS: no crashes across",RUNS,"matches on MAYHEM settings");
