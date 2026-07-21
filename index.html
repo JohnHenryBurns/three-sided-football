@@ -366,7 +366,7 @@ function kickoff(toTeam){
   for(let t=0;t<3;t++){ formation(t).forEach(f=>{const p=players[i++]; p.x=f.x;p.y=f.y;p.vx=0;p.vy=0;}); }
   ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
   ball.touchT=0; ball.strayer=null; ball.strayF=0; ball.z=0; ball.zv=0;
-  cornerTaker=null; cornerGoal=null;
+  cornerTaker=null; cornerGoal=null; restartHold=0;
   const fwd=players.find(p=>p.team===toTeam&&p.role==="F"&&!p.out&&!p.sentOff)
     ||players.find(p=>p.team===toTeam&&p.role!=="K"&&!p.out&&!p.sentOff)
     ||players.find(p=>p.team===toTeam&&p.role==="K"&&!p.out);
@@ -398,7 +398,12 @@ function computeTargets(){
     say(pick([
       `Tactical switch — ${tm(t)} turn their guns on ${tm(targets[t])}!`,
       `The alliance shifts: ${tm(t)} now hunting ${tm(targets[t])}.`,
-      `${tm(t)} smell blood — they're going after ${tm(targets[t])} now.`]),true);
+      `${tm(t)} smell blood — they're going after ${tm(targets[t])} now.`,
+      `Word from the ${tm(t)} bench: the new target is ${tm(targets[t])}.`,
+      `${tm(t)} have seen enough of ${tm(targets[t])}'s lead. Here they come.`,
+      `Friendship over — ${tm(t)} set their sights on ${tm(targets[t])}.`,
+      `The hex has no loyalty: ${tm(t)} pivot onto ${tm(targets[t])}.`,
+      `${tm(t)} redraw the map. ${tm(targets[t])} are the enemy now.`]),true);
   }
   renderScore();
 }
@@ -464,6 +469,7 @@ function kick(tx,ty,power,isShot){
 // ---------- AI ----------
 function think(dt){
   const owner=ball.owner;
+  const holdActive=performance.now()<restartHold;   // restart staging: ball dead, positioning live
   const oppOf=t=>players.filter(p=>p.team!==t&&!p.out&&!p.sentOff);
   const chaser=[];
   for(let t=0;t<3;t++){
@@ -494,6 +500,10 @@ function think(dt){
       steer(p, e.mx+e.ux*along+e.nx*20, e.my+e.uy*along+e.ny*20, 1.9);
       if(dist(p,ball)<55 && (!owner||owner.team!==p.team)) steer(p,ball.x,ball.y,2.3);
     } else if(p===chaser[p.team] && (!owner || owner.team!==p.team)){
+      if(holdActive&&owner){
+        const dx3=p.x-ball.x, dy3=p.y-ball.y, d3=Math.hypot(dx3,dy3)||1;
+        steer(p, ball.x+dx3/d3*52, ball.y+dy3/d3*52, 1.9);   // prowl the ten yards
+      } else
       steer(p, ball.x+ball.vx*6, ball.y+ball.vy*6, 2.15+0.4*T(p.team).press);
     } else if(p.role==="D"){
       const ds=players.filter(q=>q.team===p.team&&q.role==="D");
@@ -535,6 +545,7 @@ function think(dt){
   }
   // owner decisions
   if(owner){
+    if(holdActive){ p.vx*=0.85; p.vy*=0.85; return; }
     if(cornerTaker===owner){
       cornerTaker=null;
       const e2=EDGES[GOAL_EDGE[cornerGoal]], g=goalCenter(cornerGoal);
@@ -616,7 +627,7 @@ function think(dt){
       if(suppress&&suppress.team===o.team&&clockSec<suppress.until)continue;
       if(dist(o,owner)>=28)continue;
       const inBox=dist(owner,goalCenter(o.team))<110;
-      const fc=0.0022*foulMult*AGG_PRESETS[teamAGG[o.team]].f
+      const fc=(holdActive?0:0.0022)*foulMult*AGG_PRESETS[teamAGG[o.team]].f
         *(0.4+1.2*T(o.team).press)*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
       if(Math.random()<fc*dt*60){
         const victim=owner;
@@ -659,7 +670,10 @@ function think(dt){
             `${o.name} ${off} — the referee points to the spot.`, 4600);
           say(`<b style="color:${TEAMS[victim.team].color}">PENALTY to ${tm(victim.team)}!</b>`,true);
         } else if(Math.random()<0.5){
-          say(`Free kick — ${o.name} ${off}.`);
+          say(pick([
+            `Free kick — ${o.name} ${off}.`,
+            `The whistle goes. ${o.name} ${off}.`,
+            `Referee's seen it: ${o.name} ${off}. Free kick.`]));
         }
         return;
       }
@@ -667,7 +681,7 @@ function think(dt){
     // tackles (fatigue and momentum affect steal odds; radius sits just outside body contact)
     oppOf(owner.team).forEach(o=>{
       if(suppress&&suppress.team===o.team&&clockSec<suppress.until) return;
-      let tc=0.010*(0.6+0.8*T(o.team).press)*AGG_PRESETS[teamAGG[o.team]].t; // aggression bites harder
+      let tc=holdActive?0:0.010*(0.6+0.8*T(o.team).press)*AGG_PRESETS[teamAGG[o.team]].t; // aggression bites harder; dead balls untouchable
       tc*=(0.55+0.45*o.stamina);             // fresh tacklers bite harder
       tc*=(1.35-0.5*owner.stamina);          // gassed carriers are easier to rob
       if(momentumOn&&clockSec<boostUntil[o.team]) tc*=1.3;
@@ -685,7 +699,13 @@ function think(dt){
         if(o.role!=="K" && Math.random()<0.28) say(pick([
           `${o.name} muscles ${victim.name} off the ball!`,
           `Crunching challenge — ${o.name} strips it from ${victim.name}.`,
-          `${o.name} picks ${victim.name}'s pocket!`]));
+          `${o.name} picks ${victim.name}'s pocket!`,
+          `${victim.name} dwells too long and ${o.name} makes him pay.`,
+          `Textbook from ${o.name} — shoulder in, ball won, no arguments.`,
+          `${o.name} reads it like a bedtime story. Possession stolen.`,
+          `Nothing gentle about that — ${o.name} simply takes it off ${victim.name}.`,
+          `${victim.name} had it on a plate and ${o.name} ate first.`,
+          `${o.name} arrives like a tax bill. ${victim.name} pays in full.`]));
       }
     });
   }
@@ -759,7 +779,12 @@ function physics(dt){
         say(pick([
           `${o.name} wins it for ${tm(o.team)}.`,
           `${tm(o.team)} on the ball — ${o.name} carries.`,
-          `Turnover! ${o.name} takes charge for ${tm(o.team)}.`]));
+          `Turnover! ${o.name} takes charge for ${tm(o.team)}.`,
+          `New chapter: ${tm(o.team)} in possession through ${o.name}.`,
+          `${o.name} gathers, and ${tm(o.team)} start to build.`,
+          `The ball changes flags — ${tm(o.team)} have it now.`,
+          `${o.name} on it, head up, options everywhere.`,
+          `Possession swings to ${tm(o.team)}. The hex spins on.`]));
       }
       lastPossessTeam=o.team;
     }
@@ -784,7 +809,12 @@ function physics(dt){
           if(Math.random()<0.4) say(pick([
             `${win.name} rises highest!`,
             `Up goes ${win.name} — wins it in the air!`,
-            `${win.name} climbs above the crowd!`]));
+            `${win.name} climbs above the crowd!`,
+            `${win.name} hangs in the air like laundry — and wins it!`,
+            `Aerial duel... it's ${win.name} who gets the touch!`,
+            `${win.name} out-jumps the lot of them!`,
+            `The ball drops into a forest of heads — ${win.name}'s is tallest.`,
+            `Meet it? ${win.name} MARRIES it!`]));
           if(targets[win.team]!==null&&dist(ball,tgt2)<160&&win.role!=="K"){
             const e2=EDGES[GOAL_EDGE[targets[win.team]]];
             const off2=(Math.random()*2-1)*e2.len*GOAL_HALF*1.35;
@@ -844,14 +874,24 @@ function physics(dt){
           if(Math.random()<0.6) say(pick([
             `${best.name} can only parry it away!`,
             `Strong hands from ${best.name} — pushed wide, still live!`,
-            `${best.name} tips it around... danger not cleared!`]),true);
+            `${best.name} tips it around... danger not cleared!`,
+            `Too hot to hold — ${best.name} beats it away!`,
+            `${best.name} punches it clear... straight into the chaos!`,
+            `Fingertips from ${best.name}! The ball is still loose!`,
+            `${best.name} gets SOMETHING on it — scramble on!`]),true);
           return;
         }
         spawnNote(best.x,best.y-20,"SAVE!","#ffd166");
         if(Math.random()<0.5) say(pick([
           `<span class="goal">SAVE!</span> ${best.name} denies ${kicker.name}!`,
           `What a stop by ${best.name} — ${kicker.name} can't believe it!`,
-          `${kicker.name} lets fly... ${best.name} gets a strong hand to it!`]),true);
+          `${kicker.name} lets fly... ${best.name} gets a strong hand to it!`,
+          `${best.name} says NO. Emphatically.`,
+          `Robbed! ${kicker.name} had the whole goal and ${best.name} shrank it.`,
+          `${best.name} swallows it whole. ${kicker.name} kicks the turf.`,
+          `That's a save they'll replay — ${best.name} at full stretch!`,
+          `${kicker.name} picks his spot... ${best.name} was already there.`,
+          `The wall has a name, and it's ${best.name}.`]),true);
       } else if(kicker && spd>2.2 && best!==kicker){
         if(best.team===kicker.team){
           // completed pass: small lift for both
@@ -884,7 +924,11 @@ function physics(dt){
           if(ball.isShot && ball.lastKicker){
             say(pick([
               `${ball.lastKicker.name} drags it wide!`,
-              `Off target — ${ball.lastKicker.name} will want that one back.`]));
+              `Off target — ${ball.lastKicker.name} will want that one back.`,
+              `${ball.lastKicker.name} leans back and it sails over!`,
+              `Row Z! ${ball.lastKicker.name} tests the crowd's reflexes.`,
+              `${ball.lastKicker.name} sends a postcard to the corner flag.`,
+              `Wide! The ${TEAMS[ball.lastKicker.team].name} fans behind the goal duck as one.`]));
             ball.isShot=false;
           }
           outOfBounds(k,e); return;
@@ -894,7 +938,11 @@ function physics(dt){
           say(pick([
             `${ball.lastKicker.name} drags it wide!`,
             `Off target — ${ball.lastKicker.name} will want that one back.`,
-            `${ball.lastKicker.name} shoots... nowhere near it.`]));
+            `${ball.lastKicker.name} shoots... nowhere near it.`,
+            `That's closer to the dugout than the goal, ${ball.lastKicker.name}.`,
+            `${ball.lastKicker.name} snatches at it — wide and not by a little.`,
+            `The shot everyone forgets by full time. Except ${ball.lastKicker.name}.`,
+            `${ball.lastKicker.name} with the ambition, not the accuracy.`]));
           ball.isShot=false;
         }
         ball.x+=e.nx*(7-d); ball.y+=e.ny*(7-d);
@@ -910,7 +958,7 @@ function physics(dt){
 let celebrateUntil=0, pendingKickoff=null;
 let suppress=null, pendingPenalty=null, penaltyShooter=null, penaltyGoalTeam=null;
 let stoppageLen=0, stoppageAnnounced=false, zoneRule=true, foulMult=1;
-let oobRule=true, cornerTaker=null, cornerGoal=null;
+let oobRule=true, cornerTaker=null, cornerGoal=null, restartHold=0;
 let camFocusP=null, camFocusUntil=0, walkOff=null, walkPending=null;
 function addStoppage(sec){ stoppageLen=Math.min(Math.min(65,matchLen*0.30), stoppageLen+sec); }
 const celeEl=document.getElementById("celebrate"), celeCard=document.getElementById("celeCard"),
@@ -949,7 +997,13 @@ const YELLOW_OFFENSES=[
   "mistook {V}'s ankles for the ball — twice",
   "described the referee's decision as 'creative fiction'",
   "took {V} down, then briefly claimed to be the victim",
-  "treated the shoulder charge as a full-contact art form"];
+  "treated the shoulder charge as a full-contact art form",
+  "asked {V} to hold his drink, then tackled him",
+  "applied for planning permission mid-challenge and was denied",
+  "offered {V} a guided tour of the turf, face-first",
+  "auditioned for a diving competition nobody scheduled",
+  "delayed the restart to retie both boots and his life choices",
+  "committed a foul so slow the referee aged during it"];
 const RED_OFFENSES=[
   "a two-footed lunge visible from space",
   "rugby-tackled {V} out of pure nostalgia",
@@ -957,7 +1011,12 @@ const RED_OFFENSES=[
   "challenged {V} to a duel, glove and all",
   "kicked everything except the ball, including the referee's patience",
   "tried to deflate the ball while {V} was still dribbling it",
-  "picked {V} up and attempted to file him under 'lost property'"];
+  "picked {V} up and attempted to file him under 'lost property'",
+  "performed a piledriver he'd clearly been saving all season",
+  "attempted to trade {V} to another team mid-match, no paperwork",
+  "swept {V}'s legs like it was the final of a karate movie",
+  "tried to score an own goal with {V}",
+  "declared the penalty area sovereign territory and defended the border"];
 
 function goalScored(concederTeam){
   const scorerTeam=ball.lastTouch;
@@ -1005,11 +1064,23 @@ function goalScored(concederTeam){
     const scoreline=scoreMode==="conceded"
       ?`${tm(concederTeam)} now ${conceded[concederTeam]} conceded`
       :`${tm(scorerTeam)} +1, ${tm(concederTeam)} −1`;
-    say(`<span class="goal">⚽ GOOOAL!</span> ${name} beats ${keeper.name} — ${scoreline}!`,true);
+    say(pick([
+      `<span class="goal">⚽ GOOOAL!</span> ${name} beats ${keeper.name} — ${scoreline}!`,
+      `<span class="goal">⚽ GOOOAL!</span> ${name} finds the net! ${scoreline}!`,
+      `<span class="goal">⚽ IT'S IN!</span> ${keeper.name} rooted — ${name} scores! ${scoreline}!`,
+      `<span class="goal">⚽ GOOOAL!</span> ${name} with ice in the veins — ${scoreline}!`,
+      `<span class="goal">⚽ GOOOAL!</span> Nothing ${keeper.name} could do! ${name}! ${scoreline}!`,
+      `<span class="goal">⚽ THE NET BULGES!</span> ${name}! ${scoreline}!`,
+      `<span class="goal">⚽ GOOOAL!</span> ${name} writes his name on this match — ${scoreline}!`]),true);
     if(momentumOn && wasTrailing){
       boostUntil[scorerTeam]=clockSec+20;
       caughtFire=true;
-      say(`${tm(scorerTeam)} catch fire! 🔥 The underdogs are flying for the next 20 seconds.`,true);
+      say(pick([
+        `${tm(scorerTeam)} catch fire! 🔥 The underdogs are flying for the next 20 seconds.`,
+        `🔥 Belief is a fuel — ${tm(scorerTeam)} are burning it! 20 seconds of fury!`,
+        `The comeback spark! 🔥 ${tm(scorerTeam)} find another gear!`,
+        `🔥 ${tm(scorerTeam)} down but never out — they're FLYING now!`,
+        `Someone lit the touchpaper — ${tm(scorerTeam)} are ablaze! 🔥`]),true);
     }
     showCelebration(TEAMS[scorerTeam].color, "⚽ GOOOAL!",
       `<b>${name}</b> — ${tm(scorerTeam)}`,
@@ -1119,7 +1190,11 @@ function colorCommentary(){
       say(pick([
         `Legs are getting heavy for ${tm(worst)} — they're running on fumes.`,
         `${tm(worst)} look gassed out there. The pressing has taken its toll.`,
-        `You can see ${tm(worst)} slowing down. Fatigue is real on the hex.`]));
+        `You can see ${tm(worst)} slowing down. Fatigue is real on the hex.`,
+        `${tm(worst)} are walking. That's not tactics, that's exhaustion.`,
+        `Someone check ${tm(worst)}'s legs — the batteries are blinking red.`,
+        `Every sprint costs ${tm(worst)} double now. The late goals are coming.`,
+        `${tm(worst)} hands on hips. The universal language of the finished.`]));
       return;
     }
   }
@@ -1132,7 +1207,11 @@ function colorCommentary(){
       say(pick([
         `The pincer is on — ${tm(others[0])} and ${tm(others[1])} are both hunting ${tm(L)}!`,
         `Nobody stays on top for long here: ${tm(L)} lead, so ${tm(others[0])} and ${tm(others[1])} have formed an alliance of convenience.`,
-        `Two thieves who agree on the target: everyone wants a piece of ${tm(L)}.`]),false,true);
+        `Two thieves who agree on the target: everyone wants a piece of ${tm(L)}.`,
+        `${tm(L)} against the world — both rivals commit to the siege.`,
+        `Heavy is the head: ${tm(L)} lead, and two armies march on them.`,
+        `It's ${tm(L)} versus everyone. Asger Jorn smiles somewhere.`,
+        `The oldest story on the hex: lead, and be hunted. ${tm(L)}'s turn.`]),false,true);
     }
   }
 }
@@ -1534,8 +1613,12 @@ function stageThrowIn(toucher,e,ex,ey){
   ball.x=sx; ball.y=sy; ball.touchT=0.4;
   suppress={team:toucher,until:clockSec+0.8};
   spawnNote(sx,sy-24,"throw-in!",TEAMS[thr.team].color,TEAMS[thr.team].accent);
-  if(Math.random()<0.4) say(`Out of play — throw-in ${tm(thr.team)}, quickly taken.`);
-  resumeAt=performance.now()+650;
+  if(Math.random()<0.4) say(pick([
+    `Out of play — throw-in ${tm(thr.team)}, quickly taken.`,
+    `Into touch. ${thr.name} hurls it back in for ${tm(thr.team)}.`,
+    `${tm(thr.team)} with the throw — no time wasted.`,
+    `Over the line! ${thr.name} takes it quickly.`]));
+  restartHold=performance.now()+750;
 }
 function stageGoalKick(t){
   const gk=players.find(q=>q.team===t&&q.role==="K"&&!q.out);
@@ -1543,8 +1626,12 @@ function stageGoalKick(t){
   ball.owner=gk; ball.lastTouch=t; ball.lastKicker=gk;
   ball.x=gk.x; ball.y=gk.y; ball.touchT=0.4;
   spawnNote(gk.x,gk.y-24,"goal kick",TEAMS[t].color,TEAMS[t].accent);
-  if(Math.random()<0.35) say(`Behind for a goal kick — ${tm(t)} restart.`);
-  resumeAt=performance.now()+550;
+  if(Math.random()<0.35) say(pick([
+    `Behind for a goal kick — ${tm(t)} restart.`,
+    `${gk.name} places it for the goal kick. Deep breath.`,
+    `Nothing doing — goal kick ${tm(t)}.`,
+    `All the way through for a goal kick. ${gk.name} resets the board.`]));
+  restartHold=performance.now()+650;
 }
 function stageCorner(ownerT,e,ex,ey){
   const alive=[0,1,2].filter(x=>x!==ownerT&&!out[x]);
@@ -1561,8 +1648,12 @@ function stageCorner(ownerT,e,ex,ey){
   ball.x=taker.x; ball.y=taker.y; ball.touchT=99;
   cornerTaker=taker; cornerGoal=ownerT;
   spawnNote(taker.x,taker.y-26,"corner!",TEAMS[att].color,TEAMS[att].accent);
-  say(`<b style="color:${TEAMS[att].color}">Corner to ${tm(att)}</b> — ${taker.name} to swing it in...`,true);
-  resumeAt=performance.now()+1100;
+  say(pick([
+    `<b style="color:${TEAMS[att].color}">Corner to ${tm(att)}</b> — ${taker.name} to swing it in...`,
+    `<b style="color:${TEAMS[att].color}">Corner ${tm(att)}!</b> Big bodies forward... ${taker.name} over the flag.`,
+    `<b style="color:${TEAMS[att].color}">Corner to ${tm(att)}</b> — the box fills. ${taker.name} whips it...`,
+    `<b style="color:${TEAMS[att].color}">Corner!</b> ${taker.name} raises an arm... here it comes...`]),true);
+  restartHold=performance.now()+1300;
 }
 
 function stagePenalty(){
@@ -1582,7 +1673,11 @@ function stagePenalty(){
     if(d<170){ q.x=g.x+(q.x-g.x)/d*178; q.y=g.y+(q.y-g.y)/d*178; }});
   penaltyShooter=shooter; penaltyGoalTeam=conceder;
   spawnNote(sx,sy-28,"PENALTY!","#ffd166");
-  say(`${shooter.name} places the ball on the spot... the keeper crouches...`,true);
+  say(pick([
+    `${shooter.name} places the ball on the spot... the keeper crouches...`,
+    `${shooter.name} steps up. The stadium holds its breath...`,
+    `Just ${shooter.name} and the keeper now. Twelve paces of silence...`,
+    `${shooter.name} wipes the ball on his shirt. Spot. Run-up. Here we go...`]),true);
   resumeAt=performance.now()+1000;
 }
 
@@ -1613,7 +1708,12 @@ function loop(now){
           q.out=true; q.sentOff=false; walkOff=null; camFocusP=null;
           q.benched=true;
           q.seat=players.filter(o=>o.team===q.team&&o.benched).length-1;
-          say(`${q.name} takes his seat on the bench, head in hands. ${tm(q.team)} regroup a man light.`);
+          say(pick([
+            `${q.name} takes his seat on the bench, head in hands. ${tm(q.team)} regroup a man light.`,
+            `${q.name} sits down in the dugout and studies his boots. ${tm(q.team)} play on without him.`,
+            `A towel over the head for ${q.name}. The bench is a lonely place tonight.`,
+            `${q.name} takes the long seat. His teammates don't look over.`,
+            `Down he sits — ${q.name}'s evening is over, and he knows exactly whose fault it is.`]));
           if(fieldersLeft(q.team)===0)
             say(`${tm(q.team)} are down to just the goalkeeper. He abandons his line — needs must.`,true);
           if([0,1,2].every(tt=>out[tt]||fieldersLeft(tt)===0))
@@ -1745,7 +1845,7 @@ document.getElementById("btnStart").onclick=()=>{
   oobRule=document.getElementById("setOob").checked;
   foulMult=parseFloat(document.getElementById("setRef").value);
   setupEl.classList.remove("show");
-  camX=camTX=CX; camY=camTY=CY; resumeAt=0; camFocusP=null; camFocusUntil=0;
+  camX=camTX=CX; camY=camTY=CY; resumeAt=0; camFocusP=null; camFocusUntil=0; restartHold=0;
   walkOff=null; walkPending=null;
   resetMatch(); updateBars(); draw();
   running=true; setPlayBtn();
