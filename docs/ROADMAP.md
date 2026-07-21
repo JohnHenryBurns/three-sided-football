@@ -180,3 +180,28 @@ and tied for best record. Weak teams never lead, so they never get pincered — 
 "invisibility dividend." Jorn's anti-binary thesis, validated computationally.
 Implication: red cards sting less than they look in ±1 scoring; no rebalance needed,
 but worth knowing for the family meta.
+
+## Alliance passing: weighted-alliance analysis (lab, 4-min balanced worlds)
+
+| weights (base/press) | ally/min | goals | leader conceded | score spread |
+|---|---|---|---|---|
+| OFF | 0 | 2.65 | 4.9 | 2.32 |
+| tuned −320/−150 | 2.4 | 2.58 | 5.0 | 1.92 |
+| **shipped −260/−80** | **5.0** | **3.05** | **6.3** | **2.29** |
+| liberal −120/−30 | 11.3 | 3.32 | 6.8 | 2.45 |
+| free love 0/0 | 21 | 3.08 | **5.0** | **3.61** |
+
+**Findings:**
+1. **The loyalty tax IS the targeting system.** Leader punishment follows an inverted-U:
+   it peaks near shipped/liberal weights and COLLAPSES back to baseline under free love —
+   unlimited fraternization stops aiming at the leader and just inflates variance
+   (spread 3.61). Pricing the alliance is what points it at the front-runner.
+2. Too-strict weights (tuned) make the mechanic decorative: 2.4 passes/min moved leader
+   punishment not at all. Shipped (−260/−80/+20) sits at the knee: near-max anti-leader
+   effect (+29% leader goals conceded) at half liberal's frequency. KEEP SHIPPED;
+   if it feels chatty on the phone, press 80→110 is the dial.
+3. **Asymmetric squads are the mechanic's true home.** In 5-4-3: score spread fell
+   from 2.84 to **1.61** (−43%) and leader punishment rose to 7.1 (+34%). The
+   shorthanded coalition genuinely functions — combined with the invisibility
+   dividend, uneven matches with alliances are now the MOST competitive
+   configuration ever measured in this game. The 1v1v2 field report was right.

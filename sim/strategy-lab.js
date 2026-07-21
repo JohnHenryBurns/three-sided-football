@@ -327,8 +327,13 @@ class Match {
       }
       if(pressure<48&&Math.random()<(0.05+0.10*this.tac(owner.team).tempo)*dt*60){
         let best=null,bs=-1e9;
+        const AW=this.o.ally;   // {base, press, solo} penalties, or null = alliance passing off
+        const allied=(a,b)=>a!==b&&this.targets[a]!==null&&this.targets[a]===this.targets[b]
+          &&this.targets[a]!==b&&this.targets[b]!==a;
+        const matesLeft=P.filter(q=>q.team===owner.team&&q!==owner&&!q.out&&q.role!=="K").length;
         P.forEach(m=>{
-          if(m.team!==owner.team||m===owner||m.role==="K")return;
+          const allyOk=AW&&allied(owner.team,m.team)&&!m.out&&m.role!=="K";
+          if((m.team!==owner.team&&!allyOk)||m===owner||m.role==="K")return;
           const d=dist(m,owner);
           const DIR=this.tac(owner.team).direct;
           const maxR=(this.offense(owner.team)==="direct")?330:(210+140*DIR);
@@ -354,10 +359,12 @@ class Match {
               const blockR=(30-12*this.tac(owner.team).risk)+5*(this.tac(o.team).press-0.5)*2;
               if(Math.hypot(o.x-lx,o.y-ly)<blockR)laneOk=false;}
           });
-          const s=gain*(0.6+0.8*DIR)+schemeBonus+openBonus*(1.4-0.8*DIR)+(laneOk?0:-500)+Math.random()*30;
+          let s=gain*(0.6+0.8*DIR)+schemeBonus+openBonus*(1.4-0.8*DIR)+(laneOk?0:-500)+Math.random()*30;
+          if(allyOk) s-=matesLeft>0?(pressure>32?AW.press:AW.base):AW.solo;
           if(s>bs){bs=s;best=m;}
         });
         if(best&&bs>-100){
+          if(best.team!==owner.team) this.m2.ally=(this.m2.ally||0)+1;
           this.m.passTry++;
           const passer=owner;
           this.kick(best.x+best.vx*8,best.y+best.vy*8,Math.min(9,dist(best,owner)*0.045+4));
@@ -617,6 +624,11 @@ class Match {
     if(b.owner)this.m.carriedIn=(this.m.carriedIn||0)+1;
     const legit=(scorerTeam!==null&&scorerTeam!==conceder);
     const trailing=legit&&this.wasTrailing(scorerTeam);
+    {
+      const mx=Math.max(...this.score);
+      if(this.score[conceder]===mx&&this.score.filter(x=>x===mx).length===1)
+        this.m2.leadHit=(this.m2.leadHit||0)+1;
+    }
     this.conceded[conceder]++;this.score[conceder]--;
     if(legit){this.score[scorerTeam]++;this.scored[scorerTeam]++;
       if(trailing)this.boostUntil[scorerTeam]=this.clock+20;
@@ -717,6 +729,37 @@ if(process.env.ZONE==="1"){
       if(m.rankCmp(posA,posB)<0)aWins++;games++;
     }
     console.log(JSON.stringify({cell:an+" vs Bus (zone rule)",AbeatsB:+(100*aWins/games).toFixed(1),was:{TikiTaka:60,RouteOne:53.3,Swashbuckle:58.3,Probe:62.5}[an]}));
+  }
+  process.exit(0);
+}
+if(process.env.ALLY==="1"){
+  const B={tempo:.5,risk:.5,line:.5,press:.5,direct:.5,bunker:0};
+  const sd=a=>{const mu=a.reduce((x,y)=>x+y,0)/a.length;
+    return Math.sqrt(a.reduce((x,y)=>x+(y-mu)**2,0)/a.length);};
+  function aw(label,ally,outs){
+    const rs=[]; let allyN=0, leadN=0, spread=0;
+    for(let i=0;i<8;i++){
+      const m=new Match({minutes:MIN,dribble:true,aerial:true,zoneRule:true,anticipate:true,
+        oob:true,disc:true,restarts:true,parries:true,ally,outs,
+        teamFlags:[{tac:{...B}},{tac:{...B}},{tac:{...B}}]});
+      if(outs)m.applyOuts();
+      const r=m.run(); rs.push(r);
+      allyN+=(m.m2.ally||0); leadN+=(m.m2.leadHit||0); spread+=sd(m.score);
+    }
+    console.log(JSON.stringify({label,goals:avg(rs,"goalsPerMin"),
+      allyPerMin:+(allyN/8/MIN).toFixed(2),leaderConcededPerMatch:+(leadN/8).toFixed(1),
+      scoreSpread:+(spread/8).toFixed(2),spell:avg(rs,"avgSpellSec")}));
+  }
+  const MODE=process.env.MODE||"sweep";
+  if(MODE==="sweep"){
+    aw("alliances OFF",null);
+    aw("shipped (-260/-80/+20)",{base:260,press:80,solo:-20});
+    aw("liberal (-120/-30/+30)",{base:120,press:30,solo:-30});
+    aw("free love (0/0/-40)",{base:0,press:0,solo:-40});
+  } else {
+    aw("tuned (-320/-150/+20, gate stays)",{base:320,press:150,solo:-20});
+    aw("5-4-3, alliances OFF",null,[0,1,2]);
+    aw("5-4-3, shipped weights",{base:260,press:80,solo:-20},[0,1,2]);
   }
   process.exit(0);
 }
