@@ -263,6 +263,7 @@
   <div class="formrow chk"><label for="setMom">Underdog fire</label><input id="setMom" type="checkbox" checked></div>
   <div class="formrow chk"><label for="setZone" title="Attackers can't enter the penalty area before the ball">Enforce offsides</label><input id="setZone" type="checkbox" checked></div>
   <div class="formrow chk"><label for="setOob" title="Touchlines in play: throw-ins, goal kicks, corners, keeper parries">Out of bounds</label><input id="setOob" type="checkbox" checked></div>
+  <div class="formrow chk"><label for="setVoice" title="Spoken play-by-play (uses your phone's voice)">Narrator</label><input id="setVoice" type="checkbox" checked></div>
   <div class="formrow"><label>Teams</label><div id="teamSlots" class="slotRow"></div></div>
   <div class="formrow"><label for="setRef">Referee</label><select id="setRef">
     <option value="0">Off — let them play</option>
@@ -1576,7 +1577,7 @@ function flash(t){ const c=document.getElementById("card"+t); if(!c)return;
   c.classList.add("flash"); setTimeout(()=>c.classList.remove("flash"),700); }
 
 // ---------- Narrator (Web Speech API — built into the phone, works offline) ----------
-let voiceOn=false, narrator=null, queuedUtter=0;
+let voiceOn=true, narrator=null, queuedUtter=0, welcomed=false;
 const speechOK=("speechSynthesis" in window);
 function pickVoice(){
   const vs=speechSynthesis.getVoices();
@@ -2274,6 +2275,9 @@ document.getElementById("btnStart").onclick=()=>{
   momentumOn=document.getElementById("setMom").checked;
   zoneRule=document.getElementById("setZone").checked;
   oobRule=document.getElementById("setOob").checked;
+  voiceOn=speechOK&&document.getElementById("setVoice").checked;
+  setVoiceUI();
+  if(voiceOn&&!welcomed){ speak("Welcome to the hex — three teams, one ball, no permanent friends."); welcomed=true; }
   foulMult=parseFloat(document.getElementById("setRef").value);
   setupEl.classList.remove("show");
   camX=camTX=CX; camY=camTY=CY; resumeAt=0; camFocusP=null; camFocusUntil=0; restartHold=0; pendingRestart=null;
@@ -2316,11 +2320,15 @@ function setPlayBtn(){
   document.querySelector("#btnPlay .lbl").textContent=running?"Pause":"Play";
 }
 const vt=document.getElementById("btnVoice");
-if(!speechOK){ vt.disabled=true; vt.title="Speech not supported in this browser"; }
-vt.onclick=()=>{
-  voiceOn=!voiceOn;
+if(!speechOK){ vt.disabled=true; vt.title="Speech not supported in this browser"; voiceOn=false; }
+function setVoiceUI(){
   vt.setAttribute("aria-pressed",String(voiceOn));
-  if(voiceOn) speak("Welcome to the hex — three teams, one ball, no permanent friends.");
+  const sv=document.getElementById("setVoice"); if(sv) sv.checked=voiceOn;
+}
+setVoiceUI();
+vt.onclick=()=>{
+  voiceOn=!voiceOn; setVoiceUI();
+  if(voiceOn){ speak("Welcome to the hex — three teams, one ball, no permanent friends."); welcomed=true; }
   else if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; }
 };
 
