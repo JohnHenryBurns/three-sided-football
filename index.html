@@ -311,6 +311,7 @@ let teamATK=["Balanced","Balanced","Balanced"], teamDEF=["Balanced","Balanced","
 let tac=[null,null,null], menuTeam=null;
 function applyPresets(t){ tac[t]={...ATK_PRESETS[teamATK[t]],...DEF_PRESETS[teamDEF[t]]}; }
 function fieldersLeft(t){ return players.filter(q=>q.team===t&&!q.out&&!q.sentOff&&q.role!=="K").length; }
+function allied(a,b){ return a!==b&&targets[a]!==null&&targets[a]===targets[b]&&targets[a]!==b&&targets[b]!==a; }
 function T(t){ return tac[t]; }
 let boostUntil=[0,0,0], momentumOn=true;
 let lastPossessTeam=null, lastPossessComment=-99, lastFatigueComment=0, lastColorComment=0;
@@ -443,6 +444,7 @@ function steer(p,tx,ty,maxV){
 }
 function kick(tx,ty,power,isShot){
   const o=ball.owner;
+  ball.allyPass=false;
   if(oobRule&&!isShot){
     for(const e of EDGES){                       // aim inside the lines
       const dd=(tx-e.p1.x)*e.nx+(ty-e.p1.y)*e.ny;
@@ -583,8 +585,18 @@ function think(dt){
         if(sc>bs){bs=sc;pickM=m;}
       });
       if(!pickM&&mates.length) pickM=mates.sort((a,b)=>dist(a,owner)-dist(b,owner))[0];
-      if(pickM){ kick(pickM.x+pickM.vx*8, pickM.y+pickM.vy*8, Math.min(7,4+dist(pickM,owner)*0.02), false); return; }
-      // no teammates left — he plays on himself, dribbling in
+      if(!pickM){
+        const allies=players.filter(m=>allied(owner.team,m.team)&&!m.out&&!m.sentOff&&m.role!=="K"
+          &&dist(m,owner)>40&&dist(m,owner)<260)
+          .sort((a,b)=>dist(a,owner)-dist(b,owner));
+        if(allies.length){ pickM=allies[0]; }
+      }
+      if(pickM){
+        kick(pickM.x+pickM.vx*8, pickM.y+pickM.vy*8, Math.min(7,4+dist(pickM,owner)*0.02), false);
+        if(allied(owner.team,pickM.team)) ball.allyPass=true;
+        return;
+      }
+      // truly alone in the world — he plays on himself, dribbling in
       return;
     }
     if(cornerTaker===owner){
@@ -647,20 +659,28 @@ function think(dt){
     }
     if(pressure<48 && Math.random()<(0.05+0.10*T(owner.team).tempo)*dt*60){
       let best=null,bs=-1e9;
+      const matesLeft=fieldersLeft(owner.team)-(owner.role!=="K"?1:0);
       players.forEach(m=>{
-        if(m.team!==owner.team||m===owner||m.role==="K"||m.out||m.sentOff)return;
+        const allyOk=allied(owner.team,m.team);
+        if((m.team!==owner.team&&!allyOk)||m===owner||m.role==="K"||m.out||m.sentOff)return;
         const d=dist(m,owner); if(d<60||d>210+140*T(owner.team).direct)return;
         const gain=dist(owner,tgt)-dist(m,tgt);
         let laneOk=true;
         oppOf(owner.team).forEach(o=>{
+          if(allied(owner.team,o.team))return;   // allies don't block the lane story
           const t=((o.x-owner.x)*(m.x-owner.x)+(o.y-owner.y)*(m.y-owner.y))/(d*d);
           if(t>0.1&&t<0.9){const lx=owner.x+(m.x-owner.x)*t, ly=owner.y+(m.y-owner.y)*t;
             if(Math.hypot(o.x-lx,o.y-ly)<(30-12*T(owner.team).risk)+5*(T(o.team).press-0.5)*2) laneOk=false;}
         });
-        const s=gain*(0.6+0.8*T(owner.team).direct)+(laneOk?0:-500)+Math.random()*30;
+        let s=gain*(0.6+0.8*T(owner.team).direct)+(laneOk?0:-500)+Math.random()*30;
+        if(allyOk) s-=matesLeft>0?(pressure>32?80:260):-20;   // desperation, or solidarity of the shorthanded
         if(s>bs){bs=s;best=m;}
       });
-      if(best&&bs>-100){ kick(best.x+best.vx*8, best.y+best.vy*8, Math.min(9,dist(best,owner)*0.045+4)); return;}
+      if(best&&bs>-100){
+        kick(best.x+best.vx*8, best.y+best.vy*8, Math.min(9,dist(best,owner)*0.045+4));
+        if(allied(ball.lastKicker?ball.lastKicker.team:-1,best.team)) ball.allyPass=true;
+        return;
+      }
     }
     // FOULS: clumsy or cynical challenges — aggression is now a priced behavior
     for(const o of oppOf(owner.team)){
@@ -887,6 +907,15 @@ function physics(dt){
     if(best){
       const wasShot=ball.isShot, spd=Math.hypot(ball.vx,ball.vy), kicker=ball.lastKicker;
       const strayer=(ball.strayF>0)?ball.strayer:null;
+      if(ball.allyPass&&ball.lastKicker&&best.team!==ball.lastKicker.team&&allied(ball.lastKicker.team,best.team)
+        &&Math.random()<0.5){
+        say(pick([
+          `The alliance is real — ${ball.lastKicker.name} slips it to ${best.name}!`,
+          `Enemy of my enemy: ${ball.lastKicker.name} finds ${best.name} across battle lines!`,
+          `A pass BETWEEN teams! ${ball.lastKicker.name} to ${best.name} — the leader should worry.`,
+          `${ball.lastKicker.name} and ${best.name} wear different shirts and share one grudge.`]),true);
+      }
+      ball.allyPass=false;
       ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
       ball.touchT=0.3; ball.strayer=null; ball.strayF=0;
       ball.lastKicker=best;   // person-level attribution follows possession
@@ -1654,7 +1683,7 @@ function draw(){
 function outOfBounds(k,e){
   const toucher=ball.lastTouch;
   const ex=ball.x, ey=ball.y;
-  ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
+  ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0; ball.owner=null; ball.noClaim=null; ball.isShot=false; ball.allyPass=false;
   addStoppage(0.8);
   if(e.goal){
     const ownerT=GOAL_EDGE.indexOf(k);
