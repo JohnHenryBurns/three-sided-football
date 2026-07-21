@@ -1517,7 +1517,7 @@ function ambientChatter(){
       cand.push(`The star man — every seat leans in when ${o.name} takes it.`,
         `${o.name}. You can feel the anticipation.`);
     if(o.stamina<0.5) cand.push(`${o.name} looks heavy-legged now.`);
-    let nd=1e9; oppOf(o.team).forEach(q=>nd=Math.min(nd,dist(q,o)));
+    let nd=1e9; players.forEach(q=>{ if(q.team!==o.team&&!q.out&&!q.sentOff) nd=Math.min(nd,dist(q,o)); });
     if(nd<40) cand.push(`${o.name} under pressure...`,`They're closing ${o.name} down fast.`,
       `Nowhere to hide for ${o.name}.`);
     if(nd>90) cand.push(`Acres of space for ${o.name}.`,`Time and grass for ${o.name}.`);
@@ -1731,6 +1731,18 @@ function speak(html,prio){
   }catch(e3){ queuedUtter=0; }
 }
 let lastCancelAt=0, pendingHighFire=null, speakStartedAt=0;
+if(speechOK){
+  // heartbeat: Chrome's engine self-pauses on long gaps — nudge it awake
+  setInterval(()=>{ try{ if(voiceOn) speechSynthesis.resume(); }catch(e7){} },4000);
+  // watchdog: engine claims busy but nothing is landing — reset it
+  setInterval(()=>{
+    try{
+      if(queuedUtter>0&&performance.now()-speakStartedAt>6000){
+        speechSynthesis.cancel(); queuedUtter=0;
+      }
+    }catch(e7){ queuedUtter=0; }
+  },3000);
+}
 // Watchdog: heal a wedged engine instead of letting speech die silently
 if(speechOK) setInterval(()=>{
   try{
