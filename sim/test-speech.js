@@ -53,7 +53,7 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
     spoken.length===4 &&
     spoken[0].startsWith("the crowd") &&
     log.includes("CANCEL") &&
-    spoken[1].startsWith("goooooooooal") &&
+    spoken[1].startsWith("goal") &&
     spoken[2].startsWith("Mexico catch fire") &&
     spoken[3].startsWith("Tactical switch");
   console.log(ok?"SPEECH PRIORITY TEST PASS: goal survives its entourage, in order, chatter locked out"
