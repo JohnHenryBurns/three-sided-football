@@ -274,50 +274,62 @@
 const TEAM_LIBRARY=[
   {name:"Spain", short:"ESP", color:"#e63946", accent:"#f7c948",
    roster:["Unai Simón","Laporte","Cucurella","Rodri","Lamine Yamal"],
+   third:"#8a1024", motif:{t:"hband",c:["#f7c948"]},
    id:{atk:"TikiTaka",def:"Gegenpress",agg:"Clean"}, star:"Lamine Yamal",
    blurb:"Death by a thousand touches, then a teenager ruins your night."},
   {name:"Argentina", short:"ARG", color:"#6fb7e3", accent:"#ffffff",
    roster:["Dibu Martínez","Romero","Tagliafico","Enzo Fernández","Messi"],
+   third:"#f7c948", motif:{t:"sun",c:["#f7c948"]},
    id:{atk:"Probe",def:"Trap",agg:"Nasty"}, star:"Messi",
    blurb:"Patient, cynical, and utterly certain it will end their way."},
   {name:"England", short:"ENG", color:"#f2f2f2", accent:"#cf1020",
    roster:["Pickford","Stones","Guéhi","Bellingham","Kane"],
+   third:"#28418f", motif:{t:"cross",c:["#cf1020"]},
    id:{atk:"RouteOne",def:"Balanced",agg:"Firm"}, star:"Bellingham",
    blurb:"Over the top, second balls, and belief that hurts to watch."},
   {name:"Brazil", short:"BRA", color:"#2fa84f", accent:"#ffdf00",
    roster:["Alisson","Marquinhos","Militão","Bruno Guimarães","Vinícius Jr"],
+   third:"#2a4db8", motif:{t:"diamond",c:["#ffdf00","#2a4db8"]},
    id:{atk:"Swashbuckle",def:"Balanced",agg:"Clean"}, star:"Vinícius Jr",
    blurb:"Jogo bonito. Goals at both ends and no apologies at either."},
   {name:"Germany", short:"GER", color:"#4a4f55", accent:"#ffce00",
    roster:["ter Stegen","Rüdiger","Tah","Musiala","Havertz"],
+   third:"#c8102e", motif:{t:"hbands2",c:["#c8102e","#ffce00"]},
    id:{atk:"Balanced",def:"Gegenpress",agg:"Firm"}, star:"Musiala",
    blurb:"The machine hunts in packs and never stops running."},
   {name:"Italy", short:"ITA", color:"#1268c3", accent:"#f5f5f5",
    roster:["Donnarumma","Bastoni","Di Lorenzo","Barella","Retegui"],
+   third:"#1d8a4e", motif:{t:"vbands",c:["#1d8a4e","#f5f5f5","#c8102e"]},
    id:{atk:"Probe",def:"ParkTheBus",agg:"Nasty"}, star:"Donnarumma",
    blurb:"Catenaccio lives. You shall not pass, and you may get kicked."},
   {name:"France", short:"FRA", color:"#28418f", accent:"#e63946",
    roster:["Maignan","Saliba","Koundé","Tchouaméni","Mbappé"],
+   third:"#f5f5f5", motif:{t:"vbands",c:["#28418f","#f5f5f5","#e63946"]},
    id:{atk:"Swashbuckle",def:"Trap",agg:"Firm"}, star:"Mbappé",
    blurb:"Invites you forward, then breaks your heart at full sprint."},
   {name:"Netherlands", short:"NED", color:"#ff7a1a", accent:"#f5f5f5",
    roster:["Verbruggen","Van Dijk","De Ligt","Frenkie de Jong","Gakpo"],
+   third:"#28418f", motif:{t:"hbands3",c:["#c8102e","#f5f5f5","#28418f"]},
    id:{atk:"TikiTaka",def:"Gegenpress",agg:"Firm"}, star:"Van Dijk",
    blurb:"Total football, high line, higher self-regard."},
   {name:"Morocco", short:"MAR", color:"#1d8a4e", accent:"#e63946",
    roster:["Bounou","Hakimi","Aguerd","Amrabat","En-Nesyri"],
+   third:"#e63946", motif:{t:"star",c:["#e63946"]},
    id:{atk:"RouteOne",def:"ParkTheBus",agg:"Firm"}, star:"Hakimi",
    blurb:"The bus is parked and the counters are lightning."},
   {name:"Japan", short:"JPN", color:"#22315e", accent:"#d7003a",
    roster:["Zion Suzuki","Tomiyasu","Itakura","Kamada","Mitoma"],
+   third:"#f5f5f5", motif:{t:"disc",c:["#d7003a"]},
    id:{atk:"TikiTaka",def:"Gegenpress",agg:"Clean"}, star:"Mitoma",
    blurb:"Relentless tempo, immaculate manners, zero mercy."},
   {name:"Portugal", short:"POR", color:"#8a1538", accent:"#1d8a4e",
    roster:["Diogo Costa","Rúben Dias","Cancelo","Vitinha","Ronaldo"],
+   third:"#1d8a4e", motif:{t:"vsplit",c:["#1d8a4e","#c8102e","#f7c948"]},
    id:{atk:"Swashbuckle",def:"Trap",agg:"Firm"}, star:"Ronaldo",
    blurb:"Flair everywhere, and a 41-year-old who still believes."},
-  {name:"USA", short:"USA", color:"#3c3b6e", accent:"#c73a45",
+  {name:"USA", short:"USA", color:"#3c3b6e", accent:"#f0f0f0",
    roster:["Turner","Richards","Robinson","McKennie","Pulisic"],
+   third:"#c73a45", motif:{t:"stars",c:["#f0f0f0","#c73a45"]},
    id:{atk:"Balanced",def:"Gegenpress",agg:"Firm"}, star:"Pulisic",
    blurb:"Grit, lungs, and a nation that just learned the rules."},
 ];
@@ -1646,6 +1658,41 @@ function buildPitch(){
 }
 
 let actorEls=[], ballEl, ballHalo, ballShadow, ownerLabel, walkLabel, trailEls=[], trailPts=[], pings=[], goalEls=[], benchPos=[], boardsG=null;
+function lum(hex){const n=parseInt(hex.slice(1),16);
+  return (0.299*(n>>16&255)+0.587*(n>>8&255)+0.114*(n&255))/255;}
+function drawMotif(g,L){
+  const M=L.motif; if(!M)return; const c=M.c;
+  switch(M.t){
+    case "cross":
+      el("line",{x1:-8,y1:0,x2:8,y2:0,stroke:c[0],"stroke-width":3.4},g);
+      el("line",{x1:0,y1:-8,x2:0,y2:8,stroke:c[0],"stroke-width":3.4},g); break;
+    case "hband": el("rect",{x:-9,y:-2.6,width:18,height:5.2,fill:c[0],opacity:.95},g); break;
+    case "sun":
+      el("circle",{r:4.2,fill:c[0]},g);
+      el("circle",{r:4.2,fill:"none",stroke:"rgba(0,0,0,.3)","stroke-width":.8},g); break;
+    case "diamond":
+      el("path",{d:"M0,-8 L7,0 L0,8 L-7,0 Z",fill:c[0],opacity:.95},g);
+      el("circle",{r:3,fill:c[1]},g); break;
+    case "hbands2":
+      el("rect",{x:-8.5,y:-1.4,width:17,height:3,fill:c[0]},g);
+      el("rect",{x:-8.5,y:2,width:17,height:3,fill:c[1]},g); break;
+    case "hbands3":
+      [[-4.6,c[0]],[-1.2,c[1]],[2.2,c[2]]].forEach(a2=>el("rect",{x:-8,y:a2[0],width:16,height:2.6,fill:a2[1],opacity:.92},g)); break;
+    case "vbands":
+      [[-7.5,c[0]],[-2.5,c[1]],[2.5,c[2]]].forEach(a2=>el("rect",{x:a2[0],y:-7,width:5,height:14,fill:a2[1],opacity:.92},g)); break;
+    case "star":
+      el("path",{d:"M0,-6 L1.8,-1.9 L6,-1.9 L2.6,0.9 L3.7,5 L0,2.4 L-3.7,5 L-2.6,0.9 L-6,-1.9 L-1.8,-1.9 Z",fill:c[0]},g); break;
+    case "disc": el("circle",{r:4.6,fill:c[0]},g); break;
+    case "vsplit":
+      el("rect",{x:-8,y:-6,width:8,height:12,rx:2,fill:c[0],opacity:.92},g);
+      el("rect",{x:0,y:-6,width:8,height:12,rx:2,fill:c[1],opacity:.92},g);
+      el("circle",{r:2.6,fill:c[2]},g); break;
+    case "stars":
+      el("rect",{x:-8,y:3.4,width:16,height:2.1,fill:c[1],opacity:.9},g);
+      el("rect",{x:-8,y:6.3,width:16,height:1.7,fill:c[1],opacity:.9},g);
+      el("path",{d:"M0,-6.5 L1.7,-2.2 L6,-2.2 L2.5,0.5 L3.5,4.6 L0,2 L-3.5,4.6 L-2.5,0.5 L-6,-2.2 L-1.7,-2.2 Z",fill:c[0]},g); break;
+  }
+}
 function buildActors(){
   actorEls=[]; trailEls=[]; trailPts=[]; pings=[];   // re-entrant: rebuilt on team change
   players.forEach(p=>{
@@ -1654,12 +1701,9 @@ function buildActors(){
     const ring=el("circle",{r:16,fill:"none","stroke-width":3.5,
       stroke:"#7ec97e","stroke-linecap":"round",transform:"rotate(-90)"},g);
     el("circle",{r:p.role==="K"?13:12,fill:TEAMS[p.team].color,
-      stroke:p.role==="K"?(p.team===2?"#222":"#fff"):"rgba(0,0,0,.35)",
+      stroke:p.role==="K"?(lum(TEAMS[p.team].color)>0.72?"#222":"#fff"):"rgba(0,0,0,.35)",
       "stroke-width":p.role==="K"?3:2},g);
-    if(p.team===2){ // England: St George's cross so white shirts never read as the ball
-      el("line",{x1:-8,y1:0,x2:8,y2:0,stroke:"#cf1020","stroke-width":3.4},g);
-      el("line",{x1:0,y1:-8,x2:0,y2:8,stroke:"#cf1020","stroke-width":3.4},g);
-    }
+    drawMotif(g,TEAMS[p.team]);   // national colors, worn on the shirt
     const R=p.role==="K"?13:12;
     const nose=el("path",{d:`M${R+6},0 L${R-2},-4.5 L${R-2},4.5 Z`,
       fill:TEAMS[p.team].accent,stroke:"rgba(0,0,0,.4)","stroke-width":1},g);
