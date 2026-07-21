@@ -1806,36 +1806,53 @@ function speak(html,prio){
   // Armor: the Android speech engine is unstable under cancel/speak churn.
   // Whatever it does, it must NEVER take the football down with it.
   try{
+    const mk=(txt)=>{
+      const u=new SpeechSynthesisUtterance(txt);
+      if(narrator)u.voice=narrator;
+      u.rate=1.12; u.pitch=1;
+      u.onend=u.onerror=()=>{
+        queuedUtter=Math.max(0,queuedUtter-1); speakStartedAt=performance.now(); speakingPrio=null;
+        if(highQ.length){                        // drain the big calls IN ORDER
+          const nxt=highQ.shift();
+          highLockUntil=performance.now()+2000;
+          setTimeout(()=>{ try{
+            queuedUtter++; speakStartedAt=performance.now(); speakingPrio="high";
+            speechSynthesis.speak(mk(nxt));
+          }catch(e6){ queuedUtter=0; speakingPrio=null; } },40);
+        }
+      };
+      return u;
+    };
     const fire=()=>{
       try{
-        const u=new SpeechSynthesisUtterance(text);
-        if(narrator)u.voice=narrator;
-        u.rate=1.12; u.pitch=1;
-        queuedUtter++; speakStartedAt=performance.now();
-        u.onend=u.onerror=()=>{ queuedUtter=Math.max(0,queuedUtter-1); };
-        speechSynthesis.speak(u);
-      }catch(e2){ queuedUtter=0; }
+        queuedUtter++; speakStartedAt=performance.now(); speakingPrio=prio;
+        speechSynthesis.speak(mk(text));
+      }catch(e2){ queuedUtter=0; speakingPrio=null; }
     };
     if(prio==="high"){
       const now2=performance.now();
-      highLockUntil=now2+1600;   // the mic belongs to the big call — chatter locked out
+      highLockUntil=now2+2000;   // the mic belongs to the big calls — chatter locked out
+      if(speakingPrio==="high"||pendingHighFire||highQ.length){
+        // a big call is playing or waiting: QUEUE IN ORDER, never clobber
+        // (the old "latest wins" slot let a goal be replaced by its own follow-ups)
+        if(highQ.length<4) highQ.push(text);
+        return;
+      }
       if(speechSynthesis.speaking||speechSynthesis.pending){
-        // rate-limit cancels: rapid cancel+speak cycles wedge Android TTS
+        // interrupting LOW speech: rate-limited cancel, then the Android defer
         if(now2-lastCancelAt>150){ speechSynthesis.cancel(); lastCancelAt=now2; }
         queuedUtter=0;
-        // single-slot defer: a newer big call REPLACES a waiting one, never stacks
-        if(pendingHighFire)clearTimeout(pendingHighFire);
         pendingHighFire=setTimeout(()=>{ pendingHighFire=null; fire(); },90);
       } else { fire(); }
     } else {
-      // low speech never speaks in the shadow of a big call (the 90ms defer gap was stealable)
-      if(performance.now()<highLockUntil)return;
+      // low speech never speaks in the shadow of big calls
+      if(performance.now()<highLockUntil||highQ.length)return;
       if(queuedUtter>0||speechSynthesis.speaking)return;
       fire();
     }
   }catch(e3){ queuedUtter=0; }
 }
-let lastCancelAt=0, pendingHighFire=null, speakStartedAt=0, highLockUntil=0;
+let lastCancelAt=0, pendingHighFire=null, speakStartedAt=0, highLockUntil=0, speakingPrio=null, highQ=[];
 if(speechOK){
   // heartbeat: Chrome's engine self-pauses on long gaps — nudge it awake
   setInterval(()=>{ try{ if(voiceOn) speechSynthesis.resume(); }catch(e7){} },4000);
@@ -2551,9 +2568,9 @@ function startCountdown(){
 function showSetup(){
   matchLive=false;
   document.getElementById("countdown").classList.remove("show");
-  if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; }
+  if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; highQ=[]; speakingPrio=null; }
   running=false;
-  if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; }
+  if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; highQ=[]; speakingPrio=null; }
   hideCelebration(); pendingKickoff=null;
   setPlayBtn();
   setupEl.classList.add("show");
