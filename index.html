@@ -1642,7 +1642,22 @@ function ambientChatter(){
     `Dampy the Dolphin reminds everyone: hydrate, and splash responsibly.`,
     `Somewhere a Traeger just hit temp. Priorities being tested across the valley.`,
     `You'd ride the river with this lot. Most of them, anyway.`,
-    `Fine margins. Fine hexagons. Fine evening all around.`);
+    `Fine margins. Fine hexagons. Fine evening all around.`,
+    // ---- the family section ----
+    `Princess Solana watching from the royal box tonight. The hex bows accordingly.`,
+    `Solana scored that landing a perfect ten. Gymnastics judges are the toughest crowd here.`,
+    `They say Solana could ride a horse around this pitch faster than these midfielders cover it.`,
+    `Jupiter's scouting report is in: he could beat this entire back line himself.`,
+    `Jupiter has rebuilt this whole stadium in Lego, and frankly, his has better sight lines.`,
+    `Jupiter says this reminds him of ancient battles. He would know — the kid's read everything.`,
+    `Word from the touchline: Jupiter's stepover is already better than half these professionals.`,
+    `Rachel's trail-run route runs past the stadium. She'd lap this midfield twice.`,
+    `Rachel and the horses paused at the fence line. Even they respect a good buildup.`,
+    `The whole farm runs on Rachel's schedule. This match runs on borrowed time.`,
+    `Baby Orion — Chango to those who love him — just walked the length of the touchline. Standing ovation.`,
+    `Chango has eaten his weight in berries and is now the loudest supporter in the ground.`,
+    `Chango cheers hardest for his brothers and sister. Everything else is background noise.`,
+    `The younger fans learn to walk here so that one day they can learn to swashbuckle.`);
   let fresh=cand.filter(l=>!recentChatter.includes(l));
   if(!fresh.length) fresh=cand;
   const line=pick(fresh);
