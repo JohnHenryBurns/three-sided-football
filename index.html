@@ -545,7 +545,7 @@ function think(dt){
   }
   // owner decisions
   if(owner){
-    if(holdActive){ p.vx*=0.85; p.vy*=0.85; return; }
+    if(holdActive){ owner.vx*=0.85; owner.vy*=0.85; return; }
     if(cornerTaker===owner){
       cornerTaker=null;
       const e2=EDGES[GOAL_EDGE[cornerGoal]], g=goalCenter(cornerGoal);

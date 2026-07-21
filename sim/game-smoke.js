@@ -1,0 +1,67 @@
+// Headless smoke test: runs the REAL game script with a stubbed DOM and pumps the loop.
+const fs=require("fs"), vm=require("vm");
+const html=fs.readFileSync(process.argv[2]||"/mnt/user-data/outputs/three-sided-worldcup.html","utf8");
+const script=html.match(/<script>([\s\S]*)<\/script>/)[1];
+
+function mkEl(id){
+  const el={ _id:id, style:{setProperty(){},removeProperty(){}}, dataset:{},
+    classList:{add(){},remove(){},toggle(){},contains(){return false}},
+    children:[], value:"1", checked:true,
+    setAttribute(){}, getAttribute(){return null}, removeAttribute(){},
+    appendChild(c){this.children.push(c);return c}, removeChild(){}, remove(){},
+    querySelector(){return mkEl(id+">q")}, querySelectorAll(){return []},
+    addEventListener(){}, insertBefore(c){return c}, replaceChildren(){},
+    scroll(){}, scrollTo(){}, focus(){}, click(){},
+    getBoundingClientRect(){return {width:390,height:700,left:0,top:0}} };
+  Object.defineProperty(el,"textContent",{set(){},get(){return ""}});
+  Object.defineProperty(el,"innerHTML",{set(){},get(){return ""}});
+  Object.defineProperty(el,"onclick",{set(f){this._onclick=f},get(){return this._onclick}});
+  return el;
+}
+const byId={};
+// give the setup dialog sensible values
+const values={setLen:"60",setRef:"3.5"};
+function getEl(id){
+  if(!byId[id]){ byId[id]=mkEl(id); if(values[id])byId[id].value=values[id]; }
+  return byId[id];
+}
+let rafCb=null; let simNow=0;
+const sandbox={
+  console, Math, JSON, parseFloat, parseInt, isFinite, NaN, Infinity,
+  performance:{now:()=>simNow},
+  requestAnimationFrame:(cb)=>{rafCb=cb},
+  setTimeout:(cb)=>{}, clearTimeout(){}, setInterval(){}, clearInterval(){},
+  document:{
+    getElementById:getEl,
+    createElementNS:(ns,tag)=>mkEl("svg:"+tag),
+    createElement:(tag)=>mkEl("html:"+tag),
+    body:mkEl("body"), documentElement:mkEl("root"),
+    addEventListener(){}, querySelector:()=>mkEl("q"), querySelectorAll:()=>[]
+  },
+  navigator:{userAgent:"smoke"}, location:{href:"smoke"},
+};
+sandbox.window=sandbox;
+vm.createContext(sandbox);
+try{ vm.runInContext(script,sandbox,{filename:"game.js"}); }
+catch(e){ console.log("LOAD CRASH:\n",e.stack); process.exit(1); }
+
+// press Kick off
+simNow=1000;
+try{ byId["btnStart"]._onclick(); }
+catch(e){ console.log("START CRASH:\n",e.stack); process.exit(1); }
+
+// pump: N simulated minutes at 60fps, multiple runs for randomness
+const RUNS=parseInt(process.env.RUNS||"6");
+for(let run=0;run<RUNS;run++){
+  if(run>0){ try{ byId["btnStart"]._onclick(); }catch(e){ console.log(`RESTART CRASH run ${run}:\n`,e.stack); process.exit(1);} }
+  const frames=60*90; // 90s covers a blitz + stoppage + some OT
+  for(let f=0;f<frames;f++){
+    simNow+=16.7;
+    const cb=rafCb; rafCb=null;
+    if(!cb){ console.log(`LOOP DIED SILENTLY at run ${run} frame ${f} (no rAF re-queued)`); process.exit(1); }
+    try{ cb(simNow); }
+    catch(e){ console.log(`RUNTIME CRASH run ${run} frame ${f} (t=${(f/60).toFixed(1)}s):\n`,e.stack); process.exit(1); }
+  }
+  console.log(`run ${run}: 90 simulated seconds clean`);
+}
+console.log("SMOKE PASS: no crashes across",RUNS,"matches on MAYHEM settings");
