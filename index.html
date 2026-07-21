@@ -140,6 +140,22 @@
   .cmBtn{font-size:.72rem;padding:.38rem .3rem}
   .cmBtn.sel{border-color:var(--cele);color:#fff;background:rgba(255,255,255,.08);box-shadow:0 0 8px var(--cele)}
   .cmBtn.go{border-color:var(--arg)}
+  .slotRow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.35rem;flex:1}
+  .slotBtn{font-weight:700;letter-spacing:.06em}
+  #teamPick{position:fixed;inset:0;background:rgba(4,8,6,.66);backdrop-filter:blur(2px);
+    display:none;align-items:center;justify-content:center;z-index:80;padding:1rem}
+  #teamPick.show{display:flex}
+  #tpCard{background:var(--panel);border:3px solid #fff;border-radius:16px;
+    padding:1rem 1.1rem;max-width:min(28rem,94vw);max-height:88vh;overflow-y:auto}
+  .tpTeam{border:2px solid rgba(255,255,255,.18);border-radius:12px;padding:.55rem .7rem;
+    margin-top:.5rem;cursor:pointer;background:rgba(255,255,255,.03)}
+  .tpTeam:active{background:rgba(255,255,255,.09)}
+  .tpTeam.taken{opacity:.45}
+  .tpName{font-weight:800;font-size:1.02rem;letter-spacing:.04em}
+  .tpId{font-size:.72rem;color:var(--ink-dim);letter-spacing:.1em;margin-left:.4rem}
+  .tpBars{display:flex;gap:.7rem;font-size:.66rem;color:var(--ink-dim);margin-top:.2rem;
+    letter-spacing:.05em;flex-wrap:wrap}
+  .tpBlurb{font-size:.74rem;color:var(--ink-dim);margin-top:.22rem;line-height:1.3}
   .setupCard .big{font-size:2rem}
   .formrow{display:flex;flex-direction:column;align-items:stretch;gap:.3rem;margin-top:.9rem;font-size:.95rem;text-align:left}
   .formrow label{font-size:.78rem;color:var(--ink-dim);letter-spacing:.08em}
@@ -238,6 +254,7 @@
   <div class="formrow chk"><label for="setMom">Underdog fire</label><input id="setMom" type="checkbox" checked></div>
   <div class="formrow chk"><label for="setZone" title="Attackers can't enter the penalty area before the ball">Enforce offsides</label><input id="setZone" type="checkbox" checked></div>
   <div class="formrow chk"><label for="setOob" title="Touchlines in play: throw-ins, goal kicks, corners, keeper parries">Out of bounds</label><input id="setOob" type="checkbox" checked></div>
+  <div class="formrow"><label>Teams</label><div id="teamSlots" class="slotRow"></div></div>
   <div class="formrow"><label for="setRef">Referee</label><select id="setRef">
     <option value="0">Off — let them play</option>
     <option value="1" selected>Balanced</option>
@@ -248,18 +265,74 @@
   <a class="ghlink" href="https://github.com/JohnHenryBurns/three-sided-football" target="_blank" rel="noopener">⚙ view on GitHub</a>
 </div></div>
 <div id="coachMenu"><div id="cmCard"></div></div>
+<div id="teamPick"><div id="tpCard"></div></div>
 
 <script>
 "use strict";
 // ---------- Teams & rosters (2026 WC squads) ----------
-const TEAMS=[
+const TEAM_LIBRARY=[
   {name:"Spain", short:"ESP", color:"#e63946", accent:"#f7c948",
-   roster:["Unai Simón","Laporte","Cucurella","Rodri","Lamine Yamal"]},
+   roster:["Unai Simón","Laporte","Cucurella","Rodri","Lamine Yamal"],
+   id:{atk:"TikiTaka",def:"Gegenpress",agg:"Clean"}, star:"Lamine Yamal",
+   blurb:"Death by a thousand touches, then a teenager ruins your night."},
   {name:"Argentina", short:"ARG", color:"#6fb7e3", accent:"#ffffff",
-   roster:["Dibu Martínez","Romero","Tagliafico","Enzo Fernández","Messi"]},
+   roster:["Dibu Martínez","Romero","Tagliafico","Enzo Fernández","Messi"],
+   id:{atk:"Probe",def:"Trap",agg:"Nasty"}, star:"Messi",
+   blurb:"Patient, cynical, and utterly certain it will end their way."},
   {name:"England", short:"ENG", color:"#f2f2f2", accent:"#cf1020",
-   roster:["Pickford","Stones","Guéhi","Bellingham","Kane"]},
+   roster:["Pickford","Stones","Guéhi","Bellingham","Kane"],
+   id:{atk:"RouteOne",def:"Balanced",agg:"Firm"}, star:"Bellingham",
+   blurb:"Over the top, second balls, and belief that hurts to watch."},
+  {name:"Brazil", short:"BRA", color:"#2fa84f", accent:"#ffdf00",
+   roster:["Alisson","Marquinhos","Militão","Bruno Guimarães","Vinícius Jr"],
+   id:{atk:"Swashbuckle",def:"Balanced",agg:"Clean"}, star:"Vinícius Jr",
+   blurb:"Jogo bonito. Goals at both ends and no apologies at either."},
+  {name:"Germany", short:"GER", color:"#4a4f55", accent:"#ffce00",
+   roster:["ter Stegen","Rüdiger","Tah","Musiala","Havertz"],
+   id:{atk:"Balanced",def:"Gegenpress",agg:"Firm"}, star:"Musiala",
+   blurb:"The machine hunts in packs and never stops running."},
+  {name:"Italy", short:"ITA", color:"#1268c3", accent:"#f5f5f5",
+   roster:["Donnarumma","Bastoni","Di Lorenzo","Barella","Retegui"],
+   id:{atk:"Probe",def:"ParkTheBus",agg:"Nasty"}, star:"Donnarumma",
+   blurb:"Catenaccio lives. You shall not pass, and you may get kicked."},
+  {name:"France", short:"FRA", color:"#28418f", accent:"#e63946",
+   roster:["Maignan","Saliba","Koundé","Tchouaméni","Mbappé"],
+   id:{atk:"Swashbuckle",def:"Trap",agg:"Firm"}, star:"Mbappé",
+   blurb:"Invites you forward, then breaks your heart at full sprint."},
+  {name:"Netherlands", short:"NED", color:"#ff7a1a", accent:"#f5f5f5",
+   roster:["Verbruggen","Van Dijk","De Ligt","Frenkie de Jong","Gakpo"],
+   id:{atk:"TikiTaka",def:"Gegenpress",agg:"Firm"}, star:"Van Dijk",
+   blurb:"Total football, high line, higher self-regard."},
+  {name:"Morocco", short:"MAR", color:"#1d8a4e", accent:"#e63946",
+   roster:["Bounou","Hakimi","Aguerd","Amrabat","En-Nesyri"],
+   id:{atk:"RouteOne",def:"ParkTheBus",agg:"Firm"}, star:"Hakimi",
+   blurb:"The bus is parked and the counters are lightning."},
+  {name:"Japan", short:"JPN", color:"#22315e", accent:"#d7003a",
+   roster:["Zion Suzuki","Tomiyasu","Itakura","Kamada","Mitoma"],
+   id:{atk:"TikiTaka",def:"Gegenpress",agg:"Clean"}, star:"Mitoma",
+   blurb:"Relentless tempo, immaculate manners, zero mercy."},
+  {name:"Portugal", short:"POR", color:"#8a1538", accent:"#1d8a4e",
+   roster:["Diogo Costa","Rúben Dias","Cancelo","Vitinha","Ronaldo"],
+   id:{atk:"Swashbuckle",def:"Trap",agg:"Firm"}, star:"Ronaldo",
+   blurb:"Flair everywhere, and a 41-year-old who still believes."},
+  {name:"USA", short:"USA", color:"#3c3b6e", accent:"#c73a45",
+   roster:["Turner","Richards","Robinson","McKennie","Pulisic"],
+   id:{atk:"Balanced",def:"Gegenpress",agg:"Firm"}, star:"Pulisic",
+   blurb:"Grit, lungs, and a nation that just learned the rules."},
 ];
+let selTeams=[0,1,2];
+const TEAMS=[TEAM_LIBRARY[0],TEAM_LIBRARY[1],TEAM_LIBRARY[2]];
+function statBars(lib){   // display stats DERIVED from the engine bundle — the UI never lies
+  const A={TikiTaka:4,RouteOne:3,Swashbuckle:5,Probe:3,Balanced:3};
+  const F={TikiTaka:4,RouteOne:2,Swashbuckle:5,Probe:3,Balanced:3};
+  const P={Gegenpress:5,Trap:3,ParkTheBus:1,Balanced:3};
+  const D={Gegenpress:3,Trap:4,ParkTheBus:5,Balanced:3};
+  const G={Clean:1,Firm:2,Nasty:4,Filthy:5};
+  return {ATT:A[lib.id.atk],FLR:F[lib.id.atk],PRS:P[lib.id.def],DEF:D[lib.id.def],AGG:G[lib.id.agg]};
+}
+function applyTeamSelection(){
+  for(let i=0;i<3;i++) TEAMS[i]=TEAM_LIBRARY[selTeams[i]];
+}
 const ROLES=["K","D","D","M","F"];
 
 // ---------- Geometry ----------
@@ -336,9 +409,10 @@ function resetMatch(){
   players=[]; score=[0,0,0]; conceded=[0,0,0]; scored=[0,0,0]; clockSec=0; feed.length=0;
   phase="regulation"; out=[false,false,false]; otGolden=false;
   coached=[false,false,false]; coachTarget=[null,null,null]; activeCoach=null;
-  teamATK=["Balanced","Balanced","Balanced"]; teamDEF=["Balanced","Balanced","Balanced"];
-  teamAGG=["Firm","Firm","Firm"];
-  for(let t=0;t<3;t++) applyPresets(t);
+  for(let t=0;t<3;t++){
+    teamATK[t]=TEAMS[t].id.atk; teamDEF[t]=TEAMS[t].id.def; teamAGG[t]=TEAMS[t].id.agg;
+    applyPresets(t);
+  }
   menuTeam=null; document.getElementById("coachMenu")?.classList.remove("show");
   stats={shots:[0,0,0],saves:[0,0,0],tackles:[0,0,0],poss:[0,0,0]};
   goalsLog=[]; goldenScorer=null;
@@ -1547,6 +1621,7 @@ function buildPitch(){
 
 let actorEls=[], ballEl, ballHalo, ballShadow, ownerLabel, walkLabel, trailEls=[], trailPts=[], pings=[], goalEls=[], benchPos=[], boardsG=null;
 function buildActors(){
+  actorEls=[]; trailEls=[]; trailPts=[]; pings=[];   // re-entrant: rebuilt on team change
   players.forEach(p=>{
     const g=el("g",{});
     el("circle",{r:20,fill:"none",stroke:TEAMS[p.team].color,"stroke-width":3.5,opacity:0,class:"boostring"},g);
@@ -1955,7 +2030,7 @@ function openCoachMenu(t){
     teamAGG[t]=b.dataset.g; renderScore(); openCoachMenu(t); });
   document.getElementById("cmRelease").onclick=()=>{
     coached[t]=false; coachTarget[t]=null;
-    teamATK[t]="Balanced"; teamDEF[t]="Balanced"; teamAGG[t]="Firm"; applyPresets(t);
+    teamATK[t]=TEAMS[t].id.atk; teamDEF[t]=TEAMS[t].id.def; teamAGG[t]=TEAMS[t].id.agg; applyPresets(t);
     if(activeCoach===t){ const n=coached.findIndex(c=>c); activeCoach=n>=0?n:null; }
     say(`${tm(t)} return to AI control.`,true);
     closeCoachMenu(); computeTargets(); renderScore(); };
@@ -2032,9 +2107,56 @@ vt.onclick=()=>{
 };
 
 // ---------- Go ----------
+function rebuildWorld(){
+  applyTeamSelection();
+  while(svg.firstChild) svg.removeChild(svg.firstChild);
+  buildPitch();
+  resetMatch();
+  buildActors();
+  renderScore();
+}
+function renderTeamSlots(){
+  const row=document.getElementById("teamSlots");
+  row.innerHTML="";
+  for(let i=0;i<3;i++){
+    const L=TEAM_LIBRARY[selTeams[i]];
+    const b=document.createElement("button");
+    b.className="slotBtn"; b.textContent=L.short;
+    b.style.borderColor=L.color; b.style.color=L.color;
+    b.onclick=()=>openTeamPick(i);
+    row.appendChild(b);
+  }
+}
+function openTeamPick(slot){
+  const card=document.getElementById("tpCard");
+  const bar=(n)=>"▰".repeat(n)+"▱".repeat(5-n);
+  card.innerHTML=`<div class="big2">Slot ${slot+1}: choose a nation</div>`+
+    TEAM_LIBRARY.map((L,idx)=>{
+      const st=statBars(L), taken=selTeams.includes(idx)&&selTeams[slot]!==idx;
+      return `<div class="tpTeam${taken?" taken":""}" data-idx="${idx}" style="border-color:${L.color}">
+        <span class="tpName" style="color:${L.color}">${L.name}</span>
+        <span class="tpId">${ATK_AB[L.id.atk]}·${DEF_AB[L.id.def]}·${L.id.agg.toUpperCase()}</span>
+        <div class="tpBars">
+          <span>ATT ${bar(st.ATT)}</span><span>DEF ${bar(st.DEF)}</span>
+          <span>PRESS ${bar(st.PRS)}</span><span>FLAIR ${bar(st.FLR)}</span>
+          <span>AGGRO ${bar(st.AGG)}</span></div>
+        <div class="tpBlurb">${L.blurb} ⭐ ${L.star}</div>
+      </div>`;
+    }).join("");
+  card.querySelectorAll(".tpTeam").forEach(elx=>elx.onclick=()=>{
+    const idx=parseInt(elx.dataset.idx);
+    const other=selTeams.indexOf(idx);
+    if(other>=0&&other!==slot) selTeams[other]=selTeams[slot];   // swap to prevent duplicates
+    selTeams[slot]=idx;
+    document.getElementById("teamPick").classList.remove("show");
+    rebuildWorld(); renderTeamSlots();
+  });
+  document.getElementById("teamPick").classList.add("show");
+}
 buildPitch();
 resetMatch();
 buildActors();
+renderTeamSlots();
 draw();
 showSetup();
 requestAnimationFrame(loop);
