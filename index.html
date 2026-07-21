@@ -1588,6 +1588,7 @@ function speak(html){
   const text=html
     .replace(/<[^>]*>/g,"")
     .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu,"")
+    .replace(/G+O+A+L+/gi,"goooooooooal")
     .replace(/GOOOAL!/g,"Goal!")
     .replace(/\+1/g,"plus one").replace(/−1/g,"minus one")
     .replace(/—/g,", ").trim();
