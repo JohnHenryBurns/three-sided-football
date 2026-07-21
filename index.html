@@ -213,7 +213,7 @@
       <div id="scoreboard" class="chips" aria-label="Scoreboard"></div>
       <div class="hudclock" id="clock">00:00</div>
     </div>
-    <svg id="pitch" viewBox="0 0 900 810" role="img" aria-label="Hexagonal pitch, three teams"></svg>
+    <svg id="pitch" viewBox="-80 -80 1060 970" role="img" aria-label="Hexagonal pitch, three teams"></svg>
   </div>
   <aside class="comm" aria-label="Commentary">
     <div class="feedTitle">Play-by-play</div>
@@ -1180,6 +1180,41 @@ function buildPitch(){
   const pat=el("pattern",{id:"net",width:"7",height:"7",patternUnits:"userSpaceOnUse",
     patternTransform:"rotate(45)"},defs);
   el("path",{d:"M0 0H7M0 0V7",stroke:"rgba(255,255,255,.5)","stroke-width":1,fill:"none"},pat);
+  // ---------- The stadium bowl (drawn beneath the pitch) ----------
+  el("circle",{cx:CX,cy:CY,r:382,fill:"#0e1f16"});                       // the apron
+  const ringArc=(r,a1,a2,color,w,dash)=>{
+    let d="";
+    const n=Math.max(6,Math.round((a2-a1)*12));
+    for(let i=0;i<=n;i++){const a=a1+(a2-a1)*i/n;
+      d+=(i?"L":"M")+(CX+r*Math.cos(a)).toFixed(1)+" "+(CY+r*Math.sin(a)).toFixed(1);}
+    el("path",{d,fill:"none",stroke:color,"stroke-width":w,"stroke-dasharray":dash});
+  };
+  [398,420,442].forEach((r,ri)=>{
+    ringArc(r,0,Math.PI*2,"rgba(205,215,208,.14)",13-ri*1.5,"3 5");      // the neutrals
+    GOAL_EDGE.forEach((k,t)=>{                                            // the faithful
+      const e=EDGES[k], ang=Math.atan2(e.my-CY,e.mx-CX);
+      ringArc(r,ang-0.52,ang+0.52,TEAMS[t].color,13-ri*1.5,"3 5");
+    });
+  });
+  // the tunnel (neutral edge 3)
+  {
+    const e=EDGES[3];
+    const tx=e.mx-e.nx*8, ty=e.my-e.ny*8;
+    el("rect",{x:-14,y:-4,width:28,height:52,rx:4,fill:"#0a120d",stroke:"rgba(255,255,255,.25)","stroke-width":2,
+      transform:`translate(${tx},${ty}) rotate(${(Math.atan2(-e.ny,-e.nx)*180/Math.PI-90).toFixed(1)})`});
+  }
+  // team benches on the apron beside each goal
+  benchPos=[];
+  GOAL_EDGE.forEach((k,t)=>{
+    const e=EDGES[k], hw=e.len*GOAL_HALF;
+    const bx=e.mx-e.nx*34+e.ux*(hw+62), by=e.my-e.ny*34+e.uy*(hw+62);
+    benchPos[t]={x:bx,y:by,ux:e.ux,uy:e.uy};
+    const rot=(Math.atan2(e.uy,e.ux)*180/Math.PI).toFixed(1);
+    el("rect",{x:-30,y:-9,width:60,height:18,rx:5,fill:"rgba(10,18,13,.9)",
+      stroke:TEAMS[t].color,"stroke-width":2.2,transform:`translate(${bx},${by}) rotate(${rot})`});
+    for(let sIdx=0;sIdx<4;sIdx++)
+      el("circle",{cx:bx+e.ux*(-21+sIdx*14),cy:by+e.uy*(-21+sIdx*14),r:3.4,fill:"rgba(255,255,255,.22)"});
+  });
   const hexPts=V.map(v=>`${v.x},${v.y}`).join(" ");
   el("polygon",{points:hexPts,fill:"url(#turf)",stroke:"var(--chalk)","stroke-width":3});
   // "mowing" bands: nested hexes with alternating tint
@@ -1234,7 +1269,7 @@ function buildPitch(){
   }
 }
 
-let actorEls=[], ballEl, ballHalo, ballShadow, ownerLabel, walkLabel, trailEls=[], trailPts=[], pings=[], goalEls=[];
+let actorEls=[], ballEl, ballHalo, ballShadow, ownerLabel, walkLabel, trailEls=[], trailPts=[], pings=[], goalEls=[], benchPos=[];
 function buildActors(){
   players.forEach(p=>{
     const g=el("g",{});
@@ -1290,7 +1325,15 @@ function draw(){
   const nowMs=performance.now();
   players.forEach((p,i)=>{
     const a=actorEls[i];
-    if(p.out){ a.g.setAttribute("opacity",0); return; }
+    if(p.out){
+      if(p.benched){
+        const B=benchPos[p.team];
+        a.g.setAttribute("opacity",0.5);
+        a.g.setAttribute("transform",`translate(${B.x+B.ux*(-14+(p.seat%4)*14)},${B.y+B.uy*(-14+(p.seat%4)*14)}) scale(0.8)`);
+        a.pip.setAttribute("fill","#e11d2e"); a.pip.setAttribute("opacity",1);
+      } else a.g.setAttribute("opacity",0);
+      return;
+    }
     a.g.setAttribute("opacity",1);
     a.g.setAttribute("transform",`translate(${p.x},${p.y})`);
     a.nose.setAttribute("transform",`rotate(${(Math.atan2(p.hy,p.hx)*180/Math.PI).toFixed(1)})`);
@@ -1366,9 +1409,9 @@ function draw(){
       const move=Math.max(0,dd-10)*(zoom>=3?0.12:0.07);   // soft deadband: micro-motion never pans
       camX+=ddx/dd*move; camY+=ddy/dd*move;
     }
-    const vw=900/zoom, vh=810/zoom;
-    const cx=Math.max(vw/2,Math.min(900-vw/2,camX));
-    const cy=Math.max(vh/2,Math.min(810-vh/2,camY));
+    const vw=1060/zoom, vh=970/zoom;
+    const cx=Math.max(-80+vw/2,Math.min(980-vw/2,camX));
+    const cy=Math.max(-80+vh/2,Math.min(890-vh/2,camY));
     svg.setAttribute("viewBox",`${(cx-vw/2).toFixed(1)} ${(cy-vh/2).toFixed(1)} ${vw.toFixed(1)} ${vh.toFixed(1)}`);
   }
 }
@@ -1410,17 +1453,18 @@ function loop(now){
         else if(pendingPenalty){ stagePenalty(); } else resumeAt=performance.now()+350;
       }
       if(walkOff){
-        // the walk of shame owns the stage: play holds, camera escorts him out
-        const q=walkOff; let wd=1e9,we=null;
-        for(const e2 of EDGES){ const d2=(q.x-e2.p1.x)*e2.nx+(q.y-e2.p1.y)*e2.ny;
-          if(d2<wd){wd=d2;we=e2;} }
-        q.x-=we.nx*1.5*dt*60; q.y-=we.ny*1.5*dt*60; q.vx=0; q.vy=0;
+        // the walk of shame owns the stage: play holds, camera escorts him to the bench
+        const q=walkOff, B=benchPos[q.team];
+        const bdx=B.x-q.x, bdy=B.y-q.y, bd=Math.hypot(bdx,bdy)||1;
+        q.x+=bdx/bd*1.5*dt*60; q.y+=bdy/bd*1.5*dt*60; q.vx=0; q.vy=0;
         if(ball.owner===q) ball.owner=null;
         camFocusP=q; camFocusUntil=performance.now()+400;
         resumeAt=performance.now()+120;
-        if(wd<-10){
+        if(bd<12){
           q.out=true; q.sentOff=false; walkOff=null; camFocusP=null;
-          say(`${q.name} disappears down the tunnel. ${tm(q.team)} regroup a man light.`);
+          q.benched=true;
+          q.seat=players.filter(o=>o.team===q.team&&o.benched).length-1;
+          say(`${q.name} takes his seat on the bench, head in hands. ${tm(q.team)} regroup a man light.`);
           if(fieldersLeft(q.team)===0)
             say(`${tm(q.team)} are down to just the goalkeeper. He abandons his line — needs must.`,true);
           if([0,1,2].every(tt=>out[tt]||fieldersLeft(tt)===0))
@@ -1462,7 +1506,7 @@ document.getElementById("btnZoom").onclick=e=>{
   const i=(ZOOMS.indexOf(zoom)+1)%ZOOMS.length;
   zoom=ZOOMS[i];
   document.getElementById("zoomVal").textContent=zoom+"×";
-  if(zoom===1) svg.setAttribute("viewBox","0 0 900 810");
+  if(zoom===1) svg.setAttribute("viewBox","-80 -80 1060 970");
   else { camX=camTX=ball.x; camY=camTY=ball.y; }   // start on the action
   draw();                              // apply immediately, even while paused
 };
