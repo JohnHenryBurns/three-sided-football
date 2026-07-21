@@ -164,6 +164,13 @@
     letter-spacing:.06em;font-weight:600}
   .tpBarBg{flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.13)}
   .tpBarF{height:100%;border-radius:3px}
+  #countdown{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    z-index:70;pointer-events:none;font-weight:900;font-size:7rem;color:#fff;
+    text-shadow:0 4px 22px rgba(0,0,0,.75)}
+  #countdown.show{display:flex}
+  #countdown span{animation:countPop .9s ease-out}
+  @keyframes countPop{0%{transform:scale(1.7);opacity:0}25%{transform:scale(1);opacity:1}
+    80%{opacity:1}100%{transform:scale(.92);opacity:0}}
   .tpBlurb{font-size:.74rem;color:var(--ink-dim);margin-top:.22rem;line-height:1.3}
   .setupCard .big{font-size:2rem}
   .formrow{display:flex;flex-direction:column;align-items:stretch;gap:.3rem;margin-top:.9rem;font-size:.95rem;text-align:left}
@@ -276,6 +283,7 @@
 </div></div>
 <div id="coachMenu"><div id="cmCard"></div></div>
 <div id="teamPick"><div id="tpCard"></div></div>
+<div id="countdown"></div>
 
 <script>
 "use strict";
@@ -2375,8 +2383,22 @@ function cardTap(t){
 
 // ---------- Match setup dialog ----------
 const setupEl=document.getElementById("setup");
+function startCountdown(){
+  resumeAt=performance.now()+3400;   // the ball waits for the booth
+  const el2=document.getElementById("countdown");
+  el2.classList.add("show");
+  const steps=["3","2","1","🟢"];
+  steps.forEach((t2,i)=>setTimeout(()=>{
+    el2.innerHTML=`<span>${t2}</span>`;
+    if(t2==="🟢"){
+      say(`The whistle goes — we're underway!`,true);
+      setTimeout(()=>el2.classList.remove("show"),850);
+    }
+  },i*850));
+}
 function showSetup(){
   matchLive=false;
+  document.getElementById("countdown").classList.remove("show");
   if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; }
   running=false;
   if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; }
@@ -2393,6 +2415,7 @@ document.getElementById("btnStart").onclick=()=>{
   voiceOn=speechOK&&document.getElementById("setVoice").checked;
   matchLive=true;
   setVoiceUI();
+  startCountdown();
   if(voiceOn&&!welcomed){ speak("Welcome to the hex — three teams, one ball, no permanent friends."); welcomed=true; }
   foulMult=parseFloat(document.getElementById("setRef").value);
   setupEl.classList.remove("show");
