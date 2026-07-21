@@ -116,3 +116,13 @@ extend the viewBox beyond the pitch — concentric crowd rings with team-colored
 behind each goal, benches on a neutral edge (the coach-sim tie-in: your bench is visible;
 the sent-off player's walk of shame ends AT the bench, head in hands), a tunnel, maybe
 hex-league ad boards. Crowd opacity pulse on goals later.
+
+**Phase 1–2 lab results (validated, ready to port):**
+Full package (discipline + restarts + keeper parries): 3.68 stoppages/min
+(throw-ins 1.36, corners 1.04, goal kicks 1.28), goals 2.78/min, headers DOUBLED to
+1.0/min via corner deliveries, pens stable. Key findings: the OOB floor is shot misses
+(goal kicks are realistic, not a bug); corners cannot exist without **keeper parries**
+(clean-catch keepers never concede them) — fast shots now 40% parried wide, which also
+adds rebound chaos. Parry direction must push wide-and-out, not infield. Port list:
+discipline kicks (clamp + power cap), stronger line-avoidance, throw-in/goal-kick/corner
+staging (FAST — ~1.2s, not penalty ceremony), parries with visuals, setup toggle.
