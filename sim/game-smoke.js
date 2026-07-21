@@ -41,6 +41,16 @@ const sandbox={
   navigator:{userAgent:"smoke"}, location:{href:"smoke"},
 };
 sandbox.window=sandbox;
+// speech stubs: exercise the announcer path (SPEECH=1 default on)
+sandbox.speechSynthesis={
+  _q:[], speaking:false, pending:false,
+  speak(u){ this._q.push(u); setTimeout(()=>{ const i=this._q.indexOf(u); if(i>=0)this._q.splice(i,1); u.onend&&u.onend(); },3); },
+  cancel(){ this._q.length=0; },
+  getVoices(){ return []; },
+  onvoiceschanged:null
+};
+sandbox.SpeechSynthesisUtterance=function(t){ this.text=t; };
+
 vm.createContext(sandbox);
 try{ vm.runInContext(script,sandbox,{filename:"game.js"}); }
 catch(e){ console.log("LOAD CRASH:\n",e.stack); process.exit(1); }
