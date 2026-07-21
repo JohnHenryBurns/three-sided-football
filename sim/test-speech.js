@@ -12,7 +12,8 @@ const log=[];
 const eng={
   speaking:false, pending:false, _cur:null,
   speak(u){ this._cur=u; this.speaking=true; log.push("SPEAK: "+u.text.slice(0,30)); },
-  cancel(){ log.push("CANCEL"); this._cur=null; this.speaking=false; },
+  cancel(){ log.push("CANCEL"); const c=this._cur; this._cur=null; this.speaking=false;
+    if(c&&c.onend) setTimeout(()=>c.onend(),15); },   // Android ghost onend
   finish(){ const c=this._cur; if(c){ this._cur=null; this.speaking=false; c.onend&&c.onend(); } },
   resume(){},
 };
