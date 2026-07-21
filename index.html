@@ -1587,7 +1587,7 @@ function speak(html){
   if(!voiceOn||!speechOK)return;
   const text=html
     .replace(/<[^>]*>/g,"")
-    .replace(/[⚽🔥]/g,"")
+    .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu,"")
     .replace(/GOOOAL!/g,"Goal!")
     .replace(/\+1/g,"plus one").replace(/−1/g,"minus one")
     .replace(/—/g,", ").trim();
@@ -2340,6 +2340,7 @@ function renderTeamSlots(){
     const b=document.createElement("button");
     b.className="slotBtn"; b.textContent=L.short;
     b.style.borderColor=L.color; b.style.color=L.color;
+    b.style.boxShadow=`inset 0 -3.5px 0 ${L.accent}`;
     b.onclick=()=>openTeamPick(i);
     row.appendChild(b);
   }
