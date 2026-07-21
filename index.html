@@ -1318,18 +1318,18 @@ const BOARD_PALETTE=[["#c8102e","#ffd166"],["#0a2a66","#ffffff"],["#ffd166","#1a
 function drawBoards(){
   if(!boardsG)return;
   while(boardsG.firstChild) boardsG.removeChild(boardsG.firstChild);
-  const lore=[...SPONSOR_LORE].sort(()=>Math.random()-0.5).slice(0,14);
+  const lore=[...SPONSOR_LORE].sort(()=>Math.random()-0.5).slice(0,7);
   const a0=Math.random()*Math.PI*2;
   lore.forEach((txt,i)=>{
-    const th=a0+i/14*Math.PI*2;
-    const bx=CX+386*Math.cos(th), by=CY+386*Math.sin(th);
+    const th=a0+i/7*Math.PI*2;
+    const bx=CX+387*Math.cos(th), by=CY+387*Math.sin(th);
     let deg=th*180/Math.PI+90;
     if(((deg%360)+360)%360>90 && ((deg%360)+360)%360<270) deg+=180;
     const [bg,fg]=BOARD_PALETTE[i%BOARD_PALETTE.length];
-    el("rect",{x:-46,y:-8.5,width:92,height:17,rx:3,fill:bg,stroke:"rgba(0,0,0,.5)","stroke-width":1.5,
-      opacity:.95,transform:`translate(${bx.toFixed(1)},${by.toFixed(1)}) rotate(${deg.toFixed(1)})`},boardsG);
-    el("text",{x:0,y:0,fill:fg,"font-size":"11.5","font-weight":"700","text-anchor":"middle",
-      "letter-spacing":"1.1","dominant-baseline":"central","font-family":"inherit",
+    el("rect",{x:-84,y:-13,width:168,height:26,rx:4,fill:bg,stroke:"rgba(0,0,0,.5)","stroke-width":1.8,
+      opacity:.96,transform:`translate(${bx.toFixed(1)},${by.toFixed(1)}) rotate(${deg.toFixed(1)})`},boardsG);
+    el("text",{x:0,y:0,fill:fg,"font-size":"17","font-weight":"700","text-anchor":"middle",
+      "letter-spacing":"1.6","dominant-baseline":"central","font-family":"inherit",
       transform:`translate(${bx.toFixed(1)},${by.toFixed(1)}) rotate(${deg.toFixed(1)})`},boardsG).textContent=txt;
   });
 }
