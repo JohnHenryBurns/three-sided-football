@@ -309,6 +309,7 @@ let teamATK=["Balanced","Balanced","Balanced"], teamDEF=["Balanced","Balanced","
     teamAGG=["Firm","Firm","Firm"];
 let tac=[null,null,null], menuTeam=null;
 function applyPresets(t){ tac[t]={...ATK_PRESETS[teamATK[t]],...DEF_PRESETS[teamDEF[t]]}; }
+function fieldersLeft(t){ return players.filter(q=>q.team===t&&!q.out&&!q.sentOff&&q.role!=="K").length; }
 function T(t){ return tac[t]; }
 let boostUntil=[0,0,0], momentumOn=true;
 let lastPossessTeam=null, lastPossessComment=-99, lastFatigueComment=0, lastColorComment=0;
@@ -364,7 +365,10 @@ function kickoff(toTeam){
   for(let t=0;t<3;t++){ formation(t).forEach(f=>{const p=players[i++]; p.x=f.x;p.y=f.y;p.vx=0;p.vy=0;}); }
   ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
   ball.touchT=0; ball.strayer=null; ball.strayF=0; ball.z=0; ball.zv=0;
-  const fwd=players.find(p=>p.team===toTeam&&p.role==="F");
+  const fwd=players.find(p=>p.team===toTeam&&p.role==="F"&&!p.out&&!p.sentOff)
+    ||players.find(p=>p.team===toTeam&&p.role!=="K"&&!p.out&&!p.sentOff)
+    ||players.find(p=>p.team===toTeam&&p.role==="K"&&!p.out);
+  if(!fwd) return;
   fwd.x=CX-8; fwd.y=CY; ball.owner=fwd; ball.lastTouch=toTeam;
   spawnNote(CX,CY-46,"kick-off!",TEAMS[toTeam].color,TEAMS[toTeam].accent);
 }
@@ -448,7 +452,7 @@ function think(dt){
   const chaser=[];
   for(let t=0;t<3;t++){
     let best=null,bd=1e9;
-    players.forEach(p=>{ if(p.team===t&&p.role!=="K"&&!p.out&&!p.sentOff){const d=dist(p,ball); if(d<bd){bd=d;best=p;}}});
+    players.forEach(p=>{ if(p.team===t&&(p.role!=="K"||fieldersLeft(t)===0)&&!p.out&&!p.sentOff){const d=dist(p,ball); if(d<bd){bd=d;best=p;}}});
     chaser[t]=best;
   }
   players.forEach(p=>{
@@ -466,7 +470,7 @@ function think(dt){
         Math.abs((p.x-we.mx)*we.ux+(p.y-we.my)*we.uy)<we.len*GOAL_HALF*1.3;
       if(wd<70&&!inMouth){ const w=(70-wd)/70*1.1; dx+=we.nx*w; dy+=we.ny*w; }
       steer(p,p.x+dx*80,p.y+dy*80,2.05);
-    } else if(p.role==="K"){
+    } else if(p.role==="K"&&fieldersLeft(p.team)>0){
       const e=EDGES[GOAL_EDGE[p.team]];
       let along=(ball.x-e.mx)*e.ux+(ball.y-e.my)*e.uy;
       const lim=e.len*GOAL_HALF*0.9; along=Math.max(-lim,Math.min(lim,along));
@@ -525,7 +529,7 @@ function think(dt){
     if(owner.role==="K"){
       const og=goalCenter(owner.team);
       let best=null,bd=1e9;
-      players.forEach(m=>{ if(m.team===owner.team&&!m.out&&(m.role==="M"||m.role==="F")){
+      players.forEach(m=>{ if(m.team===owner.team&&!m.out&&!m.sentOff&&(m.role==="M"||m.role==="F")){
         const d=dist(m,owner); if(d<bd){bd=d;best=m;}}});
       if(best){
         let tx=best.x+best.vx*10, ty=best.y+best.vy*10;
@@ -545,7 +549,7 @@ function think(dt){
       const mouth=we&&we.goal&&Math.abs((owner.x-we.mx)*we.ux+(owner.y-we.my)*we.uy)<we.len*GOAL_HALF*1.3;
       if(wd<34&&pressure<58&&!mouth&&Math.random()<0.22*dt*60){
         let best=null,bs=1e9;
-        players.forEach(m=>{if(m.team===owner.team&&m!==owner&&m.role!=="K"){
+        players.forEach(m=>{if(m.team===owner.team&&m!==owner&&!m.out&&!m.sentOff&&m.role!=="K"){
           const dc=dist(m,{x:CX,y:CY}); if(dc<bs){bs=dc;best=m;}}});
         if(best) kick(best.x+best.vx*8,best.y+best.vy*8,Math.min(9,dist(best,owner)*0.045+4.5));
         else kick(CX,CY,7);
@@ -565,7 +569,7 @@ function think(dt){
     if(pressure<48 && Math.random()<(0.05+0.10*T(owner.team).tempo)*dt*60){
       let best=null,bs=-1e9;
       players.forEach(m=>{
-        if(m.team!==owner.team||m===owner||m.role==="K"||m.out)return;
+        if(m.team!==owner.team||m===owner||m.role==="K"||m.out||m.sentOff)return;
         const d=dist(m,owner); if(d<60||d>210+140*T(owner.team).direct)return;
         const gain=dist(owner,tgt)-dist(m,tgt);
         let laneOk=true;
@@ -612,9 +616,10 @@ function think(dt){
           addStoppage(3);
           o.sentOff=true; o.redCard=true; walkPending=o;   // the walk follows the popup
           const left=players.filter(q=>q.team===o.team&&!q.out&&!q.sentOff).length;
+          const leftTxt=left===1?`only the goalkeeper remains for ${tm(o.team)}!`:`${tm(o.team)} down to ${left} men.`;
           showNotice(col, card==="second"?"🟨🟥 SECOND YELLOW":"🟥 RED CARD",
             `${o.name} (${shortT})`,
-            `The offense: ${off}.${penTag}<br>OFF! The walk of shame begins — ${tm(o.team)} down to ${left} men.`, 5200);
+            `The offense: ${off}.${penTag}<br>OFF! The walk of shame begins — ${leftTxt}`, 5200);
           say(`🟥 <b>RED CARD!</b> ${o.name} sent off for ${off}. ${tm(o.team)} play on a man short!`,true);
         } else if(card==="yellow"){
           addStoppage(3);
@@ -1416,6 +1421,10 @@ function loop(now){
         if(wd<-10){
           q.out=true; q.sentOff=false; walkOff=null; camFocusP=null;
           say(`${q.name} disappears down the tunnel. ${tm(q.team)} regroup a man light.`);
+          if(fieldersLeft(q.team)===0)
+            say(`${tm(q.team)} are down to just the goalkeeper. He abandons his line — needs must.`,true);
+          if([0,1,2].every(tt=>out[tt]||fieldersLeft(tt)===0))
+            say(`<b>Scenes. Three goalkeepers enter. One lifts the cup.</b>`,true);
           if(pendingPenalty) stagePenalty(); else resumeAt=performance.now()+400;
         }
       }
