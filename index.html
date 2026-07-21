@@ -483,7 +483,8 @@ function kickoff(toTeam){
     ||players.find(p=>p.team===toTeam&&p.role==="K"&&!p.out);
   if(!fwd) return;
   fwd.x=CX-8; fwd.y=CY; ball.owner=fwd; ball.lastTouch=toTeam;
-  spawnNote(CX,CY-46,"kick-off!",TEAMS[toTeam].color,TEAMS[toTeam].accent);
+  if(performance.now()>resumeAt-2500)   // countdown in progress? the note waits for GO
+    spawnNote(CX,CY-46,"kick-off!",TEAMS[toTeam].color,TEAMS[toTeam].accent);
 }
 
 // ---------- Diplomacy & ranking ----------
@@ -2560,6 +2561,7 @@ function startCountdown(){
     if(!matchLive){ el2.classList.remove("show"); return; }
     el2.innerHTML=`<span${t2==="GO!"?' style="font-size:5.2rem;letter-spacing:.05em"':''}>${t2}</span>`;
     if(t2==="GO!"){
+      spawnNote(CX,CY-46,"kick-off!","#ffd166");
       say(`The whistle goes — we're underway!`,true);
       setTimeout(()=>el2.classList.remove("show"),1000);
     }
