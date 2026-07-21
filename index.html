@@ -1319,9 +1319,17 @@ function goalScored(concederTeam){
   // ---- regulation ----
   let caughtFire=false;
   if(legit){
+    const st2=score[scorerTeam];
     const scoreline=scoreMode==="conceded"
       ?`${tm(concederTeam)} now ${conceded[concederTeam]} conceded`
-      :`${tm(scorerTeam)} +1, ${tm(concederTeam)} −1`;
+      :pick([                                  // the arithmetic lecture, retired
+        `${tm(scorerTeam)} +1`,
+        `advantage ${tm(scorerTeam)}`,
+        `that's +1 for ${tm(scorerTeam)}`,
+        `${tm(scorerTeam)} now ${st2>0?"+":""}${st2}`,
+        `${tm(scorerTeam)} climb to ${st2>0?"+":""}${st2}`,
+        `${tm(scorerTeam)} +1, and ${tm(concederTeam)} pay the bill`,
+        `${tm(scorerTeam)} +1, ${tm(concederTeam)} −1`]);
     say(pick([
       `<span class="goal">⚽ GOOOAL!</span> ${name} beats ${keeper.name} — ${scoreline}!`,
       `<span class="goal">⚽ GOOOAL!</span> ${name} finds the net! ${scoreline}!`,
