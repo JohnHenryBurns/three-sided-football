@@ -888,7 +888,9 @@ function think(dt){
           showNotice(col, card==="second"?"🟨🟥 SECOND YELLOW":"🟥 RED CARD",
             `${o.name} (${shortT})`,
             `His crime: he ${off}.${penTag}<br>OFF! The walk of shame begins — ${leftTxt}`, 5200);
-          say(`🟥 <b>RED CARD!</b> ${o.name} is off — he ${off}. ${tm(o.team)} play on a man short!`,true);
+          say(Math.random()<0.25
+            ?`🟥 <b>RED CARD!</b> ${o.name} is EXCOMMUNICADO — he ${off}. No services, no help, and ${tm(o.team)} play a man short!`
+            :`🟥 <b>RED CARD!</b> ${o.name} is off — he ${off}. ${tm(o.team)} play on a man short!`,true);
         } else if(card==="yellow"){
           addStoppage(3);
           showNotice(col,"🟨 YELLOW CARD",`${o.name} (${shortT})`,
@@ -935,7 +937,10 @@ function think(dt){
           `${o.name} reads it like a bedtime story. Possession stolen.`,
           `Nothing gentle about that — ${o.name} simply takes it off ${victim.name}.`,
           `${victim.name} had it on a plate and ${o.name} ate first.`,
-          `${o.name} arrives like a tax bill. ${victim.name} pays in full.`]));
+          `${o.name} arrives like a tax bill. ${victim.name} pays in full.`,
+          `${o.name} sends ${victim.name} straight back to the lobby.`,
+          `Dutton rules from ${o.name} — that's HIS grass ${victim.name} was standing on.`,
+          `${o.name} with a tackle Grampy Cliff would call proper equipment maintenance.`]));
       }
     });
   }
@@ -1045,7 +1050,8 @@ function physics(dt){
             `Aerial duel... it's ${win.name} who gets the touch!`,
             `${win.name} out-jumps the lot of them!`,
             `The ball drops into a forest of heads — ${win.name}'s is tallest.`,
-            `Meet it? ${win.name} MARRIES it!`]));
+            `Meet it? ${win.name} MARRIES it!`,
+            `${win.name} rises like something off the mesa — no earthly explanation for that hang time.`]));
           if(targets[win.team]!==null&&dist(ball,tgt2)<160&&win.role!=="K"){
             const e2=EDGES[GOAL_EDGE[targets[win.team]]];
             const off2=(Math.random()*2-1)*e2.len*GOAL_HALF*1.35;
@@ -1173,7 +1179,10 @@ function physics(dt){
               `${ball.lastKicker.name} leans back and it sails over!`,
               `Row Z! ${ball.lastKicker.name} tests the crowd's reflexes.`,
               `${ball.lastKicker.name} sends a postcard to the corner flag.`,
-              `Wide! The ${TEAMS[ball.lastKicker.team].name} fans behind the goal duck as one.`]));
+              `Wide! The ${TEAMS[ball.lastKicker.team].name} fans behind the goal duck as one.`,
+              `${ball.lastKicker.name} built in creative mode there — spectacular, and completely without survival value.`,
+              `Wide! The instruments spiked, the ball swerved, and honestly... what IS in that mesa?`,
+              `Off it goes — Atlas is already in pursuit somewhere beyond the hoardings.`]));
             ball.isShot=false;
           }
           outOfBounds(k,e); return;
@@ -1316,7 +1325,10 @@ function goalScored(concederTeam){
       `<span class="goal">⚽ GOOOAL!</span> ${name} with ice in the veins — ${scoreline}!`,
       `<span class="goal">⚽ GOOOAL!</span> Nothing ${keeper.name} could do! ${name}! ${scoreline}!`,
       `<span class="goal">⚽ THE NET BULGES!</span> ${name}! ${scoreline}!`,
-      `<span class="goal">⚽ GOOOAL!</span> ${name} writes his name on this match — ${scoreline}!`]),true);
+      `<span class="goal">⚽ GOOOAL!</span> ${name} writes his name on this match — ${scoreline}!`,
+      `<span class="goal">⚽ GOOOAL!</span> ${name} with John Wick calm — one look, one finish. ${scoreline}!`,
+      `<span class="goal">⚽ GOOOAL!</span> ${name}! Absolute Victory Royale form! ${scoreline}!`,
+      `<span class="goal">⚽ GOOOAL!</span> ${name}! Grandma Gloria's candle is WORKING — ${scoreline}!`]),true);
     if(momentumOn && wasTrailing){
       boostUntil[scorerTeam]=clockSec+20;
       caughtFire=true;
