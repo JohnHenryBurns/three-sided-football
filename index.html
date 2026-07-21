@@ -1592,7 +1592,7 @@ function ambientChatter(){
   speak(line,"low");
 }
 function colorCommentary(){
-  ambientChatter();
+  try{ ambientChatter(); }catch(e5){}
   // style & matchup color (~every 45s)
   if(clockSec-lastStyleAt>45&&Math.random()<0.4){
     const ls=styleLines();
@@ -1701,27 +1701,49 @@ function speak(html,prio){
     .replace(/(\d+)s\b/g,"$1 seconds")
     .replace(/—/g,", ").trim();
   if(!text)return;
-  const fire=()=>{
-    const u=new SpeechSynthesisUtterance(text);
-    if(narrator)u.voice=narrator;
-    u.rate=1.12; u.pitch=1;
-    queuedUtter++;
-    u.onend=u.onerror=()=>{ queuedUtter=Math.max(0,queuedUtter-1); };
-    speechSynthesis.speak(u);
-  };
-  if(prio==="high"){
-    // the big call cuts off whatever the booth was saying, mid-word.
-    // Android drops an utterance queued in the same tick as cancel() — defer it.
-    if(speechSynthesis.speaking||speechSynthesis.pending){
-      speechSynthesis.cancel(); queuedUtter=0;
-      setTimeout(fire,80);
-    } else { fire(); }
-  } else {
-    // chatter only fills silence — never queues behind anything
-    if(queuedUtter>0||speechSynthesis.speaking)return;
-    fire();
-  }
+  // Armor: the Android speech engine is unstable under cancel/speak churn.
+  // Whatever it does, it must NEVER take the football down with it.
+  try{
+    const fire=()=>{
+      try{
+        const u=new SpeechSynthesisUtterance(text);
+        if(narrator)u.voice=narrator;
+        u.rate=1.12; u.pitch=1;
+        queuedUtter++; speakStartedAt=performance.now();
+        u.onend=u.onerror=()=>{ queuedUtter=Math.max(0,queuedUtter-1); };
+        speechSynthesis.speak(u);
+      }catch(e2){ queuedUtter=0; }
+    };
+    if(prio==="high"){
+      const now2=performance.now();
+      if(speechSynthesis.speaking||speechSynthesis.pending){
+        // rate-limit cancels: rapid cancel+speak cycles wedge Android TTS
+        if(now2-lastCancelAt>350){ speechSynthesis.cancel(); lastCancelAt=now2; }
+        queuedUtter=0;
+        // single-slot defer: a newer big call REPLACES a waiting one, never stacks
+        if(pendingHighFire)clearTimeout(pendingHighFire);
+        pendingHighFire=setTimeout(()=>{ pendingHighFire=null; fire(); },90);
+      } else { fire(); }
+    } else {
+      if(queuedUtter>0||speechSynthesis.speaking)return;
+      fire();
+    }
+  }catch(e3){ queuedUtter=0; }
 }
+let lastCancelAt=0, pendingHighFire=null, speakStartedAt=0;
+// Watchdog: heal a wedged engine instead of letting speech die silently
+if(speechOK) setInterval(()=>{
+  try{
+    // Chrome pause bug: a periodic resume keeps long sessions alive
+    if(speechSynthesis.speaking) speechSynthesis.resume();
+    // desync: counter says busy but the engine is idle — resync
+    if(queuedUtter>0&&!speechSynthesis.speaking&&!speechSynthesis.pending) queuedUtter=0;
+    // hard wedge: one utterance "speaking" for 15+ real seconds — reset the engine
+    if(queuedUtter>0&&performance.now()-speakStartedAt>15000){
+      speechSynthesis.cancel(); queuedUtter=0;
+    }
+  }catch(e4){}
+},2000);
 
 let lastSayAt=-99;
 let NAME_COL=null, matchLog=[], champInfo=null, matchLive=false, matchBoards=[], lastChatterAt=-99;
