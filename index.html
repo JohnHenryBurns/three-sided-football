@@ -367,7 +367,7 @@ function kickoff(toTeam){
   for(let t=0;t<3;t++){ formation(t).forEach(f=>{const p=players[i++]; p.x=f.x;p.y=f.y;p.vx=0;p.vy=0;}); }
   ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
   ball.touchT=0; ball.strayer=null; ball.strayF=0; ball.z=0; ball.zv=0;
-  cornerTaker=null; cornerGoal=null; restartHold=0;
+  cornerTaker=null; cornerGoal=null; restartHold=0; pendingRestart=null;
   const fwd=players.find(p=>p.team===toTeam&&p.role==="F"&&!p.out&&!p.sentOff)
     ||players.find(p=>p.team===toTeam&&p.role!=="K"&&!p.out&&!p.sentOff)
     ||players.find(p=>p.team===toTeam&&p.role==="K"&&!p.out);
@@ -480,6 +480,27 @@ function think(dt){
   }
   players.forEach(p=>{
     if(p.out||p.sentOff||targets[p.team]===null)return;
+    if(pendingRestart){
+      const R=pendingRestart;
+      if(p===R.p){
+        steer(p,R.x,R.y,2.6);
+        if(dist(p,{x:R.x,y:R.y})<10||performance.now()>R.cap){
+          p.x=R.x; p.y=R.y; p.vx=0; p.vy=0;
+          ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.touchT=0.4;
+          restartHold=performance.now()+(cornerTaker===p?500:260);
+          pendingRestart=null;
+        }
+        return;
+      }
+    }
+    if(holdActive){
+      const rx=pendingRestart?pendingRestart.x:ball.x, ry=pendingRestart?pendingRestart.y:ball.y;
+      const rteam=pendingRestart?pendingRestart.team:(ball.owner?ball.owner.team:-1);
+      if(p.team!==rteam){
+        const dd2=Math.hypot(p.x-rx,p.y-ry);
+        if(dd2<46){ steer(p, rx+(p.x-rx)/(dd2||1)*54, ry+(p.y-ry)/(dd2||1)*54, 2.0); return; }
+      }
+    }
     const own=goalCenter(p.team), tgt=goalCenter(targets[p.team]);
     if(p===owner){
       let near=null,nd=1e9;
@@ -834,6 +855,7 @@ function physics(dt){
     if(ball.noClaimF>0) ball.noClaimF-=S; else ball.noClaim=null;
     if(ball.strayF>0) ball.strayF-=S; else ball.strayer=null;
     let best=null,bd=1e9;
+    if(performance.now()<restartHold&&!ball.owner) return;   // dead ball awaits its taker
     players.forEach(p=>{ if(p.out||p.sentOff)return; if(p===ball.noClaim&&ball.noClaimF>0)return;
       if(suppress&&suppress.team===p.team&&clockSec<suppress.until)return;
       if(ball.z>(p.role==="K"?28:12))return;   // sailing over their heads
@@ -959,7 +981,7 @@ function physics(dt){
 let celebrateUntil=0, pendingKickoff=null;
 let suppress=null, pendingPenalty=null, penaltyShooter=null, penaltyGoalTeam=null;
 let stoppageLen=0, stoppageAnnounced=false, zoneRule=true, foulMult=1;
-let oobRule=true, cornerTaker=null, cornerGoal=null, restartHold=0;
+let oobRule=true, cornerTaker=null, cornerGoal=null, restartHold=0, pendingRestart=null;
 let camFocusP=null, camFocusUntil=0, walkOff=null, walkPending=null;
 function addStoppage(sec){ stoppageLen=Math.min(Math.min(65,matchLen*0.30), stoppageLen+sec); }
 const celeEl=document.getElementById("celebrate"), celeCard=document.getElementById("celeCard"),
@@ -1620,11 +1642,8 @@ function stageThrowIn(toucher,e,ex,ey){
     .sort((a,b)=>dist(a,{x:sx,y:sy})-dist(b,{x:sx,y:sy}));
   const thr=cands[0];
   if(!thr){ ball.x=CX; ball.y=CY; return; }
-  thr.x=sx; thr.y=sy; thr.vx=0; thr.vy=0;
-  players.forEach(q=>{ if(q===thr||q.out)return;
-    const dq=dist(q,thr); if(dq<45){ q.x=thr.x+(q.x-thr.x)/(dq||1)*48; q.y=thr.y+(q.y-thr.y)/(dq||1)*48; }});
-  ball.owner=thr; ball.lastTouch=thr.team; ball.lastKicker=thr;
-  ball.x=sx; ball.y=sy; ball.touchT=0.4;
+  ball.owner=null; ball.x=sx; ball.y=sy;
+  pendingRestart={p:thr, x:sx, y:sy, team:thr.team, cap:performance.now()+2000};
   suppress={team:toucher,until:clockSec+0.8};
   spawnNote(sx,sy-24,"throw-in!",TEAMS[thr.team].color,TEAMS[thr.team].accent);
   if(Math.random()<0.4) say(pick([
@@ -1632,7 +1651,7 @@ function stageThrowIn(toucher,e,ex,ey){
     `Into touch. ${thr.name} hurls it back in for ${tm(thr.team)}.`,
     `${tm(thr.team)} with the throw — no time wasted.`,
     `Over the line! ${thr.name} takes it quickly.`]));
-  restartHold=performance.now()+750;
+  restartHold=performance.now()+2200;   // shortened the moment the taker arrives
 }
 function stageGoalKick(t){
   const gk=players.find(q=>q.team===t&&q.role==="K"&&!q.out);
@@ -1655,11 +1674,9 @@ function stageCorner(ownerT,e,ex,ey){
   const taker=players.filter(q=>q.team===att&&q.role!=="K"&&!q.out&&!q.sentOff)
     .sort((a,b)=>dist(a,vtx)-dist(b,vtx))[0];
   if(!taker){ stageGoalKick(ownerT); return; }
-  taker.x=vtx.x+e.nx*14; taker.y=vtx.y+e.ny*14; taker.vx=0; taker.vy=0;
-  players.forEach(q=>{ if(q===taker||q.out)return;
-    const dq=dist(q,taker); if(dq<60){ q.x=taker.x+(q.x-taker.x)/(dq||1)*64; q.y=taker.y+(q.y-taker.y)/(dq||1)*64; }});
-  ball.owner=taker; ball.lastTouch=att; ball.lastKicker=taker;
-  ball.x=taker.x; ball.y=taker.y; ball.touchT=99;
+  const cx2=vtx.x+e.nx*14, cy2=vtx.y+e.ny*14;
+  ball.owner=null; ball.x=cx2; ball.y=cy2;
+  pendingRestart={p:taker, x:cx2, y:cy2, team:att, cap:performance.now()+2400};
   cornerTaker=taker; cornerGoal=ownerT;
   spawnNote(taker.x,taker.y-26,"corner!",TEAMS[att].color,TEAMS[att].accent);
   say(pick([
@@ -1667,7 +1684,7 @@ function stageCorner(ownerT,e,ex,ey){
     `<b style="color:${TEAMS[att].color}">Corner ${tm(att)}!</b> Big bodies forward... ${taker.name} over the flag.`,
     `<b style="color:${TEAMS[att].color}">Corner to ${tm(att)}</b> — the box fills. ${taker.name} whips it...`,
     `<b style="color:${TEAMS[att].color}">Corner!</b> ${taker.name} raises an arm... here it comes...`]),true);
-  restartHold=performance.now()+1300;
+  restartHold=performance.now()+2600;   // shortened once he's over the ball
 }
 
 function stagePenalty(){
@@ -1690,8 +1707,8 @@ function stagePenalty(){
   say(pick([
     `${shooter.name} places the ball on the spot... the keeper crouches...`,
     `${shooter.name} steps up. The stadium holds its breath...`,
-    `Just ${shooter.name} and the keeper now. Twelve paces of silence...`,
-    `${shooter.name} wipes the ball on his shirt. Spot. Run-up. Here we go...`]),true);
+    `Twelve yards between ${shooter.name} and glory. The keeper waits...`,
+    `${shooter.name} takes a long breath and starts the run-up...`]),true);
   resumeAt=performance.now()+1000;
 }
 
@@ -1859,7 +1876,7 @@ document.getElementById("btnStart").onclick=()=>{
   oobRule=document.getElementById("setOob").checked;
   foulMult=parseFloat(document.getElementById("setRef").value);
   setupEl.classList.remove("show");
-  camX=camTX=CX; camY=camTY=CY; resumeAt=0; camFocusP=null; camFocusUntil=0; restartHold=0;
+  camX=camTX=CX; camY=camTY=CY; resumeAt=0; camFocusP=null; camFocusUntil=0; restartHold=0; pendingRestart=null;
   walkOff=null; walkPending=null;
   resetMatch(); updateBars(); draw();
   running=true; setPlayBtn();
