@@ -1584,7 +1584,7 @@ function pickVoice(){
   narrator=vs.find(v=>v.lang==="en-GB")||vs.find(v=>v.lang&&v.lang.startsWith("en"))||vs[0]||null;
 }
 if(speechOK){ pickVoice(); speechSynthesis.onvoiceschanged=pickVoice; }
-function speak(html){
+function speak(html,prio){
   if(!voiceOn||!speechOK)return;
   const text=html
     .replace(/<[^>]*>/g,"")
@@ -1594,7 +1594,13 @@ function speak(html){
     .replace(/\+1/g,"plus one").replace(/−1/g,"minus one")
     .replace(/—/g,", ").trim();
   if(!text)return;
-  if(queuedUtter>2){ speechSynthesis.cancel(); queuedUtter=0; }  // never fall behind the play
+  if(prio==="high"){
+    // the big call cuts off whatever the booth was saying, mid-word
+    speechSynthesis.cancel(); queuedUtter=0;
+  } else {
+    // chatter only fills silence — never queues behind anything
+    if(queuedUtter>0||speechSynthesis.speaking)return;
+  }
   const u=new SpeechSynthesisUtterance(text);
   if(narrator)u.voice=narrator;
   u.rate=1.12; u.pitch=1;
@@ -1618,14 +1624,15 @@ function colorNames(html){
 function say(html,force,voice){
   html=colorNames(html);
   // Low-priority chatter is dropped if the booth spoke in the last 3 seconds.
-  if(!force && clockSec-lastSayAt<3) return;
+  if(!force && clockSec-lastSayAt<2) return;
   lastSayAt=clockSec;
   const mm=String(Math.floor(clockSec/60)).padStart(2,"0"), ss=String(Math.floor(clockSec%60)).padStart(2,"0");
   feed.unshift(`<div><span class="t">${mm}:${ss}</span>${html}</div>`);
   matchLog.push(`**${mm}:${ss}** ${html.replace(/<[^>]*>/g,"")}`);
   if(feed.length>40)feed.pop();
   feedEl.innerHTML=feed.join("");
-  if(voice===undefined?force:voice) speak(html);
+  const wantVoice=(voice===undefined)?true:voice;
+  if(wantVoice) speak(html, force?"high":"low");
 }
 
 // ---------- SVG ----------
