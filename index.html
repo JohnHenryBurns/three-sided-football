@@ -596,7 +596,14 @@ function think(dt){
       const rteam=pendingRestart?pendingRestart.team:(ball.owner?ball.owner.team:-1);
       if(p.team!==rteam){
         const dd2=Math.hypot(p.x-rx,p.y-ry);
-        if(dd2<46){ steer(p, rx+(p.x-rx)/(dd2||1)*54, ry+(p.y-ry)/(dd2||1)*54, 2.0); return; }
+        if(dd2<46){
+          let tx2=rx+(p.x-rx)/(dd2||1)*54, ty2=ry+(p.y-ry)/(dd2||1)*54;
+          for(const e2 of EDGES){                       // never ask a man to stand off the pitch
+            const de=(tx2-e2.p1.x)*e2.nx+(ty2-e2.p1.y)*e2.ny;
+            if(de<20){ tx2+=e2.nx*(20-de); ty2+=e2.ny*(20-de); }
+          }
+          steer(p, tx2, ty2, 2.0); return;
+        }
       }
     }
     const own=goalCenter(p.team), tgt=goalCenter(targets[p.team]);
@@ -913,7 +920,8 @@ function physics(dt){
     const pv=Math.hypot(p.vx,p.vy);
     if(pv>0.15){ p.hx=p.hx*0.85+(p.vx/pv)*0.15; p.hy=p.hy*0.85+(p.vy/pv)*0.15; }
     p.x+=p.vx*S; p.y+=p.vy*S;
-    if(!p.sentOff) clampInside(p, p.role==="K"?12:14);
+    const staging=(pendingRestart&&pendingRestart.p===p)||cornerTaker===p||throwPending===p;
+    if(!p.sentOff&&!staging) clampInside(p, p.role==="K"?12:14);
     const v=Math.hypot(p.vx,p.vy), effort=v/2.35;
     p.stamina-=effort*effort*0.0012*S*(0.85+0.5*T(p.team).press);
     p.stamina+=0.0004*S;
@@ -942,7 +950,7 @@ function physics(dt){
         a.x+=ux*push; a.y+=uy*push; b.x-=ux*push; b.y-=uy*push;
       }
     }
-    players.forEach(p=>{ if(!p.sentOff) clampInside(p, p.role==="K"?12:14); });
+    players.forEach(p=>{ if(!p.sentOff&&!((pendingRestart&&pendingRestart.p===p)||cornerTaker===p||throwPending===p)) clampInside(p, p.role==="K"?12:14); });
   }
   if(ball.owner){
     const o=ball.owner, v=Math.hypot(o.vx,o.vy);
@@ -1869,7 +1877,7 @@ function outOfBounds(k,e){
   } else stageThrowIn(toucher,e,ex,ey);
 }
 function stageThrowIn(toucher,e,ex,ey){
-  const sx=ex+e.nx*22, sy=ey+e.ny*22;
+  const sx=ex+e.nx*6, sy=ey+e.ny*6;   // he throws FROM the line, not from midfield
   const cands=players.filter(q=>q.team!==toucher&&q.role!=="K"&&!q.out&&!q.sentOff)
     .sort((a,b)=>dist(a,{x:sx,y:sy})-dist(b,{x:sx,y:sy}));
   const thr=cands[0];
@@ -1992,7 +2000,7 @@ function loop(now){
         if(clockSec>=matchLen+stoppageLen) resolveFullTime();
       }
       if(phase!=="over" && now>=resumeAt && menuTeam===null){
-        const step=dt*speed;
+        const step=dt*speed*0.75;   // baseline pace rebalance: old 0.75x is the new 1x
         clockSec+=step;
         retargetTimer+=step;
         if(retargetTimer>6){retargetTimer=0;computeTargets();}
