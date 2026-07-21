@@ -2421,10 +2421,10 @@ document.getElementById("btnStart").onclick=()=>{
   foulMult=parseFloat(document.getElementById("setRef").value);
   setupEl.classList.remove("show");
   camX=camTX=CX; camY=camTY=CY; resumeAt=0; camFocusP=null; camFocusUntil=0; restartHold=0; pendingRestart=null;
-  startCountdown();   // AFTER the reset zeroes resumeAt — the hold survives
   walkOff=null; walkPending=null;
   resetMatch(); updateBars(); draw();
   running=true; setPlayBtn();
+  startCountdown();   // LAST: nothing downstream may touch resumeAt before the whistle
   say(scoreMode==="conceded"
     ?`Classic Jorn rules today — fewest conceded after ${matchLen/60} minute${matchLen>=120?"s":""} takes it.`
     :`±1 rules — ${matchLen/60} minute${matchLen>=120?"s":""} on the clock, tiebreaks by goals scored, then golden-concession overtime.`,true);
