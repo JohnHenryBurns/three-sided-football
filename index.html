@@ -1610,7 +1610,7 @@ function speak(html,prio){
 }
 
 let lastSayAt=-99;
-let NAME_COL=null, matchLog=[], champInfo=null;
+let NAME_COL=null, matchLog=[], champInfo=null, matchLive=false;
 function refreshNameColors(){
   NAME_COL=players.map(p=>[p.name,TEAMS[p.team].color])
     .sort((a,b)=>b[0].length-a[0].length);
@@ -1631,7 +1631,7 @@ function say(html,force,voice){
   matchLog.push(`**${mm}:${ss}** ${html.replace(/<[^>]*>/g,"")}`);
   if(feed.length>40)feed.pop();
   feedEl.innerHTML=feed.join("");
-  const wantVoice=(voice===undefined)?true:voice;
+  const wantVoice=((voice===undefined)?true:voice)&&matchLive;   // the booth is silent between matches
   if(wantVoice) speak(html, force?"high":"low");
 }
 
@@ -2270,6 +2270,8 @@ function cardTap(t){
 // ---------- Match setup dialog ----------
 const setupEl=document.getElementById("setup");
 function showSetup(){
+  matchLive=false;
+  if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; }
   running=false;
   if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; }
   hideCelebration(); pendingKickoff=null;
@@ -2283,6 +2285,7 @@ document.getElementById("btnStart").onclick=()=>{
   zoneRule=document.getElementById("setZone").checked;
   oobRule=document.getElementById("setOob").checked;
   voiceOn=speechOK&&document.getElementById("setVoice").checked;
+  matchLive=true;
   setVoiceUI();
   if(voiceOn&&!welcomed){ speak("Welcome to the hex — three teams, one ball, no permanent friends."); welcomed=true; }
   foulMult=parseFloat(document.getElementById("setRef").value);
