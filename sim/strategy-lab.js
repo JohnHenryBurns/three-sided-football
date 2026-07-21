@@ -121,6 +121,7 @@ class Match {
   }
   kick(tx,ty,power,isShot){
     const b=this.ball,o=b.owner;
+    b.ev=isShot?"shot":"pass";
     if(this.o.disc&&!isShot){
       for(const e of EDGES){                       // clamp the aim point inside the lines
         const d=(tx-e.p1.x)*e.nx+(ty-e.p1.y)*e.ny;
@@ -456,7 +457,7 @@ class Match {
         if(this.clock<this.boostUntil[o.team])tc*=1.3;
         if(dist(o,owner)<tackleR&&RNG()<tc*dt*60){
           const victim=owner;
-          b.owner=o;b.lastTouch=o.team;b.isShot=false;
+          b.owner=o;b.lastTouch=o.team;b.isShot=false;b.ev="tackle";
           if(o.role!=="K"){this.m.tackles++;}
           this.stam(o,+0.10);this.stam(victim,-0.12);
           b.x=o.x;b.y=o.y;b.touchT=0;
@@ -522,9 +523,9 @@ class Match {
         b.vx+=hx*pw;b.vy+=hy*pw;
         b.touchT=long?0.75:0.45;
       }
-      // spatial dispossession: ball strayed — it's loose
+      // spatial dispossession: ball strayed — it's loose (tagged below)
       if(dist(b,o)>30){
-        b.owner=null;b.noClaim=o;b.noClaimF=8;
+        b.owner=null;b.noClaim=o;b.noClaimF=8;b.ev="stray";
         this.m.dispossessSpatial++;
       }
     } else {
@@ -582,10 +583,15 @@ class Match {
             // parried! pushed wide, not held
             this.m2.parries=(this.m2.parries||0)+1;
             const e2=EDGES[GOAL_EDGE[best.team]];
-            const lat=RNG()<0.5?1:-1;
+            const hw3=e2.len*GOAL_HALF;
+            const along=(best.x-e2.mx)*e2.ux+(best.y-e2.my)*e2.uy;
+            const lat=along>=0?1:-1;                    // push toward the NEARER post
+            const need=(hw3+16)-lat*along;              // lateral distance to clear the mouth
+            let dx3=e2.ux*lat*need-e2.nx*10, dy3=e2.uy*lat*need-e2.ny*10;
+            const dl3=Math.hypot(dx3,dy3)||1;
             b.owner=null; b.lastTouch=best.team; b.lastKicker=best;
-            b.vx=(e2.ux*lat*1.0-e2.nx*0.28)*spd*0.5;
-            b.vy=(e2.uy*lat*1.0-e2.ny*0.28)*spd*0.5;
+            b.vx=dx3/dl3*spd*0.68; b.vy=dy3/dl3*spd*0.68;
+            b.ev="parry";
             b.noClaim=best; b.noClaimF=10;
           }
         } else if(kicker&&spd>2.2&&best!==kicker){
@@ -677,7 +683,11 @@ class Match {
     if(legit){this.score[scorerTeam]++;this.scored[scorerTeam]++;
       if(trailing)this.boostUntil[scorerTeam]=this.clock+20;
       const sc=b.owner||b.lastKicker;if(sc)this.stam(sc,+0.2);
-    } else this.m.own++;
+    } else {
+      this.m.own++;
+      const k=(b.ev||"unknown")+((b.lastKicker&&dist(b.lastKicker,goalCenter(conceder))<130)?"_nearOwnBox":"");
+      this.m2.ogBy=this.m2.ogBy||{}; this.m2.ogBy[k]=(this.m2.ogBy[k]||0)+1;
+    }
     this.m.goals++;
     this.computeTargets();
     this.endSpell();
@@ -824,6 +834,20 @@ if(process.env.POWER==="1"){
     console.log(JSON.stringify({nation:nm,coal,n:N2,pts:+(pts/N2).toFixed(2),
       gf:+(gf/N2).toFixed(1),ga:+(ga/N2).toFixed(1),winPct:+(wins/N2*100).toFixed(0)}));
   });
+  process.exit(0);
+}
+if(process.env.OGRATE==="1"){
+  const B={tempo:.5,risk:.5,direct:.5,line:.5,press:.5,bunker:0,aggF:1,aggT:1};
+  const agg={}; let own=0,goals=0,N2=30;
+  for(let i=0;i<N2;i++){
+    setSeed(31000+i*211);
+    const m=natMatch([{tac:{...B}},{tac:{...B}},{tac:{...B}}]);
+    m.run();
+    own+=m.m.own; goals+=m.m.goals;
+    for(const k in (m.m2.ogBy||{})) agg[k]=(agg[k]||0)+m.m2.ogBy[k];
+  }
+  console.log(JSON.stringify({matches:N2,minutes:MIN,ogPerMatch:+(own/N2).toFixed(2),
+    ogShareOfGoals:+(own/goals*100).toFixed(1)+"%",causes:agg}));
   process.exit(0);
 }
 if(process.env.AGGAB==="1"){

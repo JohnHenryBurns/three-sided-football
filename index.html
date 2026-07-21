@@ -1083,10 +1083,14 @@ function physics(dt){
         if(spd>8.5 && Math.random()<0.4){
           // parried! pushed wide, not held
           const e2=EDGES[GOAL_EDGE[best.team]];
-          const lat=Math.random()<0.5?1:-1;
+          const hw3=e2.len*GOAL_HALF;
+          const along=(best.x-e2.mx)*e2.ux+(best.y-e2.my)*e2.uy;
+          const lat=along>=0?1:-1;                    // push toward the NEARER post
+          const need=(hw3+16)-lat*along;              // enough lateral to clear the mouth
+          let dx3=e2.ux*lat*need-e2.nx*10, dy3=e2.uy*lat*need-e2.ny*10;
+          const dl3=Math.hypot(dx3,dy3)||1;
           ball.owner=null; ball.lastTouch=best.team; ball.lastKicker=best;
-          ball.vx=(e2.ux*lat*1.0-e2.nx*0.28)*spd*0.5;
-          ball.vy=(e2.uy*lat*1.0-e2.ny*0.28)*spd*0.5;
+          ball.vx=dx3/dl3*spd*0.68; ball.vy=dy3/dl3*spd*0.68;
           ball.noClaim=best; ball.noClaimF=10; ball.isShot=false;
           spawnNote(best.x,best.y-22,"tipped wide!","#ffd166");
           if(Math.random()<0.6) say(pick([
