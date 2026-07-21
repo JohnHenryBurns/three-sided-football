@@ -237,6 +237,7 @@
   </select></div>
   <div class="formrow chk"><label for="setMom">Underdog fire</label><input id="setMom" type="checkbox" checked></div>
   <div class="formrow chk"><label for="setZone" title="Attackers can't enter the penalty area before the ball">Enforce offsides</label><input id="setZone" type="checkbox" checked></div>
+  <div class="formrow chk"><label for="setOob" title="Touchlines in play: throw-ins, goal kicks, corners, keeper parries">Out of bounds</label><input id="setOob" type="checkbox" checked></div>
   <div class="formrow"><label for="setRef">Referee</label><select id="setRef">
     <option value="0">Off — let them play</option>
     <option value="1" selected>Balanced</option>
@@ -365,6 +366,7 @@ function kickoff(toTeam){
   for(let t=0;t<3;t++){ formation(t).forEach(f=>{const p=players[i++]; p.x=f.x;p.y=f.y;p.vx=0;p.vy=0;}); }
   ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
   ball.touchT=0; ball.strayer=null; ball.strayF=0; ball.z=0; ball.zv=0;
+  cornerTaker=null; cornerGoal=null;
   const fwd=players.find(p=>p.team===toTeam&&p.role==="F"&&!p.out&&!p.sentOff)
     ||players.find(p=>p.team===toTeam&&p.role!=="K"&&!p.out&&!p.sentOff)
     ||players.find(p=>p.team===toTeam&&p.role==="K"&&!p.out);
@@ -435,6 +437,20 @@ function steer(p,tx,ty,maxV){
 }
 function kick(tx,ty,power,isShot){
   const o=ball.owner;
+  if(oobRule&&!isShot){
+    for(const e of EDGES){                       // aim inside the lines
+      const dd=(tx-e.p1.x)*e.nx+(ty-e.p1.y)*e.ny;
+      if(dd<26){tx+=e.nx*(26-dd);ty+=e.ny*(26-dd);}
+    }
+    let ux2=tx-ball.x, uy2=ty-ball.y; const ul=Math.hypot(ux2,uy2)||1; ux2/=ul; uy2/=ul;
+    let ahead=1e9;                                // don't overhit into touch
+    for(const e of EDGES){
+      const den=-(ux2*e.nx+uy2*e.ny);
+      if(den>0.05){const db=(ball.x-e.p1.x)*e.nx+(ball.y-e.p1.y)*e.ny;
+        ahead=Math.min(ahead,(db-8)/den);}
+    }
+    power=Math.min(power,4+ahead*0.035);
+  }
   const dx=tx-ball.x, dy=ty-ball.y, d=Math.hypot(dx,dy)||1;
   ball.vx=dx/d*power; ball.vy=dy/d*power;
   ball.lastTouch=o.team; ball.lastKicker=o; ball.isShot=!!isShot;
@@ -468,7 +484,8 @@ function think(dt){
       for(const e2 of EDGES){const d2=(p.x-e2.p1.x)*e2.nx+(p.y-e2.p1.y)*e2.ny; if(d2<wd){wd=d2;we=e2;}}
       const inMouth=we&&we.goal&&we===EDGES[GOAL_EDGE[targets[p.team]]]&&
         Math.abs((p.x-we.mx)*we.ux+(p.y-we.my)*we.uy)<we.len*GOAL_HALF*1.3;
-      if(wd<70&&!inMouth){ const w=(70-wd)/70*1.1; dx+=we.nx*w; dy+=we.ny*w; }
+      const wallR=oobRule?95:70, wallW=oobRule?1.6:1.1;
+      if(wd<wallR&&!inMouth){ const w=(wallR-wd)/wallR*wallW; dx+=we.nx*w; dy+=we.ny*w; }
       steer(p,p.x+dx*80,p.y+dy*80,2.05);
     } else if(p.role==="K"&&fieldersLeft(p.team)>0){
       const e=EDGES[GOAL_EDGE[p.team]];
@@ -518,6 +535,16 @@ function think(dt){
   }
   // owner decisions
   if(owner){
+    if(cornerTaker===owner){
+      cornerTaker=null;
+      const e2=EDGES[GOAL_EDGE[cornerGoal]], g=goalCenter(cornerGoal);
+      const off2=(Math.random()*2-1)*e2.len*GOAL_HALF*0.7;
+      const txc=g.x+e2.ux*off2+e2.nx*44, tyc=g.y+e2.uy*off2+e2.ny*44;
+      kick(txc,tyc,7.2,false);
+      ball.zv=3.0;                       // it swings in high, whatever the distance
+      cornerGoal=null;
+      return;
+    }
     if(penaltyShooter===owner){
       penaltyShooter=null;
       const e=EDGES[GOAL_EDGE[penaltyGoalTeam]], g=goalCenter(penaltyGoalTeam);
@@ -805,6 +832,21 @@ function physics(dt){
         // a save: keeper glory, shooter deflation
         stats.saves[best.team]++; best.saves++;
         stam(best,+0.12); stam(kicker,-0.05);
+        if(spd>8.5 && Math.random()<0.4){
+          // parried! pushed wide, not held
+          const e2=EDGES[GOAL_EDGE[best.team]];
+          const lat=Math.random()<0.5?1:-1;
+          ball.owner=null; ball.lastTouch=best.team; ball.lastKicker=best;
+          ball.vx=(e2.ux*lat*1.0-e2.nx*0.28)*spd*0.5;
+          ball.vy=(e2.uy*lat*1.0-e2.ny*0.28)*spd*0.5;
+          ball.noClaim=best; ball.noClaimF=10; ball.isShot=false;
+          spawnNote(best.x,best.y-22,"tipped wide!","#ffd166");
+          if(Math.random()<0.6) say(pick([
+            `${best.name} can only parry it away!`,
+            `Strong hands from ${best.name} — pushed wide, still live!`,
+            `${best.name} tips it around... danger not cleared!`]),true);
+          return;
+        }
         spawnNote(best.x,best.y-20,"SAVE!","#ffd166");
         if(Math.random()<0.5) say(pick([
           `<span class="goal">SAVE!</span> ${best.name} denies ${kicker.name}!`,
@@ -835,6 +877,17 @@ function physics(dt){
         if(d<-6){
           if(ball.z<28){ goalScored(GOAL_EDGE.indexOf(k)); return; }
           else if(ball.isShot){ spawnNote(ball.x,ball.y-20,"over the bar!","#ffd166"); ball.isShot=false; }
+          if(oobRule){ outOfBounds(k,e); return; }
+        }
+      } else if(oobRule){
+        if(d<2){
+          if(ball.isShot && ball.lastKicker){
+            say(pick([
+              `${ball.lastKicker.name} drags it wide!`,
+              `Off target — ${ball.lastKicker.name} will want that one back.`]));
+            ball.isShot=false;
+          }
+          outOfBounds(k,e); return;
         }
       } else {
         if(ball.isShot && ball.lastKicker){
@@ -857,6 +910,7 @@ function physics(dt){
 let celebrateUntil=0, pendingKickoff=null;
 let suppress=null, pendingPenalty=null, penaltyShooter=null, penaltyGoalTeam=null;
 let stoppageLen=0, stoppageAnnounced=false, zoneRule=true, foulMult=1;
+let oobRule=true, cornerTaker=null, cornerGoal=null;
 let camFocusP=null, camFocusUntil=0, walkOff=null, walkPending=null;
 function addStoppage(sec){ stoppageLen=Math.min(Math.min(65,matchLen*0.30), stoppageLen+sec); }
 const celeEl=document.getElementById("celebrate"), celeCard=document.getElementById("celeCard"),
@@ -1455,6 +1509,62 @@ function draw(){
   }
 }
 
+function outOfBounds(k,e){
+  const toucher=ball.lastTouch;
+  const ex=ball.x, ey=ball.y;
+  ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
+  addStoppage(0.8);
+  if(e.goal){
+    const ownerT=GOAL_EDGE.indexOf(k);
+    if(toucher===ownerT && !out[ownerT]) stageCorner(ownerT,e,ex,ey);
+    else if(!out[ownerT]) stageGoalKick(ownerT);
+    else stageThrowIn(toucher,e,ex,ey);
+  } else stageThrowIn(toucher,e,ex,ey);
+}
+function stageThrowIn(toucher,e,ex,ey){
+  const sx=ex+e.nx*22, sy=ey+e.ny*22;
+  const cands=players.filter(q=>q.team!==toucher&&q.role!=="K"&&!q.out&&!q.sentOff)
+    .sort((a,b)=>dist(a,{x:sx,y:sy})-dist(b,{x:sx,y:sy}));
+  const thr=cands[0];
+  if(!thr){ ball.x=CX; ball.y=CY; return; }
+  thr.x=sx; thr.y=sy; thr.vx=0; thr.vy=0;
+  players.forEach(q=>{ if(q===thr||q.out)return;
+    const dq=dist(q,thr); if(dq<45){ q.x=thr.x+(q.x-thr.x)/(dq||1)*48; q.y=thr.y+(q.y-thr.y)/(dq||1)*48; }});
+  ball.owner=thr; ball.lastTouch=thr.team; ball.lastKicker=thr;
+  ball.x=sx; ball.y=sy; ball.touchT=0.4;
+  suppress={team:toucher,until:clockSec+0.8};
+  spawnNote(sx,sy-24,"throw-in!",TEAMS[thr.team].color,TEAMS[thr.team].accent);
+  if(Math.random()<0.4) say(`Out of play — throw-in ${tm(thr.team)}, quickly taken.`);
+  resumeAt=performance.now()+650;
+}
+function stageGoalKick(t){
+  const gk=players.find(q=>q.team===t&&q.role==="K"&&!q.out);
+  if(!gk){ ball.x=CX; ball.y=CY; return; }
+  ball.owner=gk; ball.lastTouch=t; ball.lastKicker=gk;
+  ball.x=gk.x; ball.y=gk.y; ball.touchT=0.4;
+  spawnNote(gk.x,gk.y-24,"goal kick",TEAMS[t].color,TEAMS[t].accent);
+  if(Math.random()<0.35) say(`Behind for a goal kick — ${tm(t)} restart.`);
+  resumeAt=performance.now()+550;
+}
+function stageCorner(ownerT,e,ex,ey){
+  const alive=[0,1,2].filter(x=>x!==ownerT&&!out[x]);
+  const att=alive.find(x=>targets[x]===ownerT)??alive[0];
+  if(att===undefined){ ball.x=CX; ball.y=CY; return; }
+  const vtx=dist({x:e.p1.x,y:e.p1.y},{x:ex,y:ey})<dist({x:e.p2.x,y:e.p2.y},{x:ex,y:ey})?e.p1:e.p2;
+  const taker=players.filter(q=>q.team===att&&q.role!=="K"&&!q.out&&!q.sentOff)
+    .sort((a,b)=>dist(a,vtx)-dist(b,vtx))[0];
+  if(!taker){ stageGoalKick(ownerT); return; }
+  taker.x=vtx.x+e.nx*14; taker.y=vtx.y+e.ny*14; taker.vx=0; taker.vy=0;
+  players.forEach(q=>{ if(q===taker||q.out)return;
+    const dq=dist(q,taker); if(dq<60){ q.x=taker.x+(q.x-taker.x)/(dq||1)*64; q.y=taker.y+(q.y-taker.y)/(dq||1)*64; }});
+  ball.owner=taker; ball.lastTouch=att; ball.lastKicker=taker;
+  ball.x=taker.x; ball.y=taker.y; ball.touchT=99;
+  cornerTaker=taker; cornerGoal=ownerT;
+  spawnNote(taker.x,taker.y-26,"corner!",TEAMS[att].color,TEAMS[att].accent);
+  say(`<b style="color:${TEAMS[att].color}">Corner to ${tm(att)}</b> — ${taker.name} to swing it in...`,true);
+  resumeAt=performance.now()+1100;
+}
+
 function stagePenalty(){
   const pen=pendingPenalty; pendingPenalty=null;
   const shooter=pen.shooter, conceder=pen.conceder;
@@ -1632,6 +1742,7 @@ document.getElementById("btnStart").onclick=()=>{
   matchLen=parseInt(document.getElementById("setLen").value,10);
   momentumOn=document.getElementById("setMom").checked;
   zoneRule=document.getElementById("setZone").checked;
+  oobRule=document.getElementById("setOob").checked;
   foulMult=parseFloat(document.getElementById("setRef").value);
   setupEl.classList.remove("show");
   camX=camTX=CX; camY=camTY=CY; resumeAt=0; camFocusP=null; camFocusUntil=0;
@@ -1642,6 +1753,7 @@ document.getElementById("btnStart").onclick=()=>{
     ?`Classic Jorn rules today — fewest conceded after ${matchLen/60} minute${matchLen>=120?"s":""} takes it.`
     :`±1 rules — ${matchLen/60} minute${matchLen>=120?"s":""} on the clock, tiebreaks by goals scored, then golden-concession overtime.`,true);
   if(zoneRule) say(`Offsides enforced: no attacker may enter the penalty area before the ball.`);
+  if(oobRule) say(`Touchlines in play — throw-ins, goal kicks, and corners.`);
   if(foulMult===0) say(`🤼 No referee today — anything goes.`);
   else if(foulMult>3) say(`🚨 <b>MAYHEM</b> rules — the referee has brought extra cards and a grudge.`);
   else if(foulMult>1) say(`🟨 The referee is in a mood tonight.`);
