@@ -1488,7 +1488,41 @@ function styleLines(){
       L.push(`${tm(t)} are pressing in coalition — half the bill, twice the menace.`);
   return L;
 }
+function ambientChatter(){
+  if(!matchLive||!voiceOn||!speechOK) return;
+  if(queuedUtter>0||speechSynthesis.speaking) return;
+  if(clockSec-lastChatterAt<7) return;
+  const cand=[];
+  const o=ball.owner;
+  if(o&&o.role!=="K"){
+    const tgt=targets[o.team];
+    cand.push(
+      `${o.name} on the ball for ${TEAMS[o.team].name}.`,
+      `${o.name} carries it forward.`,
+      `Patient stuff from ${TEAMS[o.team].name} — ${o.name} surveying.`,
+      tgt!==null?`${o.name} looking toward the ${TEAMS[tgt].name} end.`:`${o.name} in space.`);
+    let nd=1e9; oppOf(o.team).forEach(q=>nd=Math.min(nd,dist(q,o)));
+    if(nd<40) cand.push(`${o.name} under pressure...`,`They're closing ${o.name} down fast.`);
+    if(nd>90) cand.push(`Acres of space for ${o.name}.`);
+  }
+  if(clockSec>30){
+    const totP=stats.poss.reduce((a,b)=>a+b,0)||1;
+    const lead=[0,1,2].sort((a,b)=>stats.poss[b]-stats.poss[a])[0];
+    cand.push(`${TEAMS[lead].name} seeing most of the ball — ${Math.round(100*stats.poss[lead]/totP)} percent possession.`);
+    const tk=[0,1,2].sort((a,b)=>stats.tackles[b]-stats.tackles[a])[0];
+    if(stats.tackles[tk]>3) cand.push(`${TEAMS[tk].name} lead the tackle count with ${stats.tackles[tk]}.`);
+  }
+  cand.push(
+    `Great atmosphere around the hex tonight.`,
+    `The crowd's in good voice.`,
+    `Three goals, three keepers, no permanent friends — this sport is undefeated.`,
+    `The floodlights doing their work on a beautiful evening for it.`);
+  if(matchBoards.length&&Math.random()<0.25)
+    cand.push(`Tonight's match brought to you in part by ${matchBoards[Math.floor(Math.random()*matchBoards.length)].toLowerCase()}.`);
+  if(cand.length){ lastChatterAt=clockSec; speak(pick(cand),"low"); }
+}
 function colorCommentary(){
+  ambientChatter();
   // style & matchup color (~every 45s)
   if(clockSec-lastStyleAt>45&&Math.random()<0.4){
     const ls=styleLines();
@@ -1593,25 +1627,34 @@ function speak(html,prio){
     .replace(/G+O+A+L+/gi,"goooooooooal")
     .replace(/GOOOAL!/g,"Goal!")
     .replace(/\+1/g,"plus one").replace(/−1/g,"minus one")
+    .replace(/\+(\d+)s\b/g,"plus $1 seconds")
+    .replace(/(\d+)s\b/g,"$1 seconds")
     .replace(/—/g,", ").trim();
   if(!text)return;
+  const fire=()=>{
+    const u=new SpeechSynthesisUtterance(text);
+    if(narrator)u.voice=narrator;
+    u.rate=1.12; u.pitch=1;
+    queuedUtter++;
+    u.onend=u.onerror=()=>{ queuedUtter=Math.max(0,queuedUtter-1); };
+    speechSynthesis.speak(u);
+  };
   if(prio==="high"){
-    // the big call cuts off whatever the booth was saying, mid-word
-    speechSynthesis.cancel(); queuedUtter=0;
+    // the big call cuts off whatever the booth was saying, mid-word.
+    // Android drops an utterance queued in the same tick as cancel() — defer it.
+    if(speechSynthesis.speaking||speechSynthesis.pending){
+      speechSynthesis.cancel(); queuedUtter=0;
+      setTimeout(fire,80);
+    } else { fire(); }
   } else {
     // chatter only fills silence — never queues behind anything
     if(queuedUtter>0||speechSynthesis.speaking)return;
+    fire();
   }
-  const u=new SpeechSynthesisUtterance(text);
-  if(narrator)u.voice=narrator;
-  u.rate=1.12; u.pitch=1;
-  queuedUtter++;
-  u.onend=u.onerror=()=>{ queuedUtter=Math.max(0,queuedUtter-1); };
-  speechSynthesis.speak(u);
 }
 
 let lastSayAt=-99;
-let NAME_COL=null, matchLog=[], champInfo=null, matchLive=false;
+let NAME_COL=null, matchLog=[], champInfo=null, matchLive=false, matchBoards=[], lastChatterAt=-99;
 function refreshNameColors(){
   NAME_COL=players.map(p=>[p.name,TEAMS[p.team].color])
     .sort((a,b)=>b[0].length-a[0].length);
@@ -1655,6 +1698,7 @@ function drawBoards(){
   if(!boardsG)return;
   while(boardsG.firstChild) boardsG.removeChild(boardsG.firstChild);
   const lore=[...SPONSOR_LORE].sort(()=>Math.random()-0.5).slice(0,6);
+  matchBoards=lore;
   const W=236, H=30;
   lore.forEach((txt,i)=>{
     const e=EDGES[i];
