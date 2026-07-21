@@ -443,8 +443,7 @@ function resetMatch(){
   stats={shots:[0,0,0],saves:[0,0,0],tackles:[0,0,0],poss:[0,0,0]};
   goalsLog=[]; goldenScorer=null; matchLog=[];
   goalEls.forEach(g=>g&&g.setAttribute("opacity",1));
-  drawBoards();
-  refreshNameColors();   // AFTER squads exist — mapping an empty roster colors nothing   // fresh sponsors every match
+  drawBoards();   // fresh sponsors every match
   suppress=null; pendingPenalty=null; penaltyShooter=null; penaltyGoalTeam=null;
   stoppageAnnounced=false;
   stoppageLen=Math.min(55,matchLen*0.2)*(0.85+Math.random()*0.3);
@@ -495,6 +494,7 @@ function computeTargets(){
     const others=aliveTeams().filter(o=>o!==t);
     if(!others.length){ targets[t]=null; continue; }
     others.sort((a,b)=>(rating(b)-rating(a))||(conceded[a]-conceded[b]));
+  refreshNameColors();   // players now truly exist
     targets[t]=others[0];
   }
   if(old){
