@@ -233,3 +233,12 @@ lane, or angle — open carriers just dribbled to the keeper (report confirmed a
 mechanism level). New branch: 125–250 range + clear lane + decent angle + space
 = a ripped 11.2-power drive with distance-scaled scatter. Lab: 1.05 long
 strikes/min, goals flat (accuracy tax works), headers +44% via rebounds/corners.
+
+**Own-goal investigation (from a champion-card field report):** breadcrumb-instrumented
+the lab ball (shot/pass/tackle/stray/parry tags) and classified every OG over 30
+matches. Verdict: UNANIMOUS — 53/53 own goals were keeper parries crossing their own
+line ("wide-and-out" exits through the mouth when lateral speed can't clear it in
+time; rate 1.77/match, 12.4% of ALL goals). Fix: the parry now aims past the NEAREST
+post (computed from the keeper's along-mouth offset) at higher speed. Result: OG
+0.07/match (0.5% of goals — football's natural rate), corners fully preserved at
+1.1/min, headers 0.72. One cause, one geometric fix, pipeline intact.
