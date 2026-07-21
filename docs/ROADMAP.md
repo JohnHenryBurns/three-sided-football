@@ -126,3 +126,9 @@ Full package (discipline + restarts + keeper parries): 3.68 stoppages/min
 adds rebound chaos. Parry direction must push wide-and-out, not infield. Port list:
 discipline kicks (clamp + power cap), stronger line-avoidance, throw-in/goal-kick/corner
 staging (FAST — ~1.2s, not penalty ceremony), parries with visuals, setup toggle.
+
+## House rule addition (born from the first post-touchlines crash)
+`sim/game-smoke.js` runs the REAL index.html script headlessly (stubbed DOM, pumped
+loop) across multiple Mayhem matches and reports any exception with a stack trace.
+It found a scope bug in the restart hold gate within 60 simulated seconds.
+**Protocol: `node sim/game-smoke.js` must pass before any push that touches index.html.**
