@@ -149,13 +149,20 @@
   #tpCard{background:var(--panel);border:3px solid #fff;border-radius:16px;
     padding:1rem 1.1rem;max-width:min(28rem,94vw);max-height:88vh;overflow-y:auto}
   .tpTeam{border:2px solid rgba(255,255,255,.18);border-radius:12px;padding:.55rem .7rem;
-    margin-top:.5rem;cursor:pointer;background:rgba(255,255,255,.03)}
+    margin-top:.5rem;cursor:pointer;background:rgba(255,255,255,.03);
+    display:flex;gap:.65rem;align-items:flex-start}
+  .tpDot{flex:0 0 44px;padding-top:.15rem}
+  .tpBody{flex:1;min-width:0}
   .tpTeam:active{background:rgba(255,255,255,.09)}
   .tpTeam.taken{opacity:.45}
   .tpName{font-weight:800;font-size:1.02rem;letter-spacing:.04em}
   .tpId{font-size:.72rem;color:var(--ink-dim);letter-spacing:.1em;margin-left:.4rem}
-  .tpBars{display:flex;gap:.7rem;font-size:.66rem;color:var(--ink-dim);margin-top:.2rem;
-    letter-spacing:.05em;flex-wrap:wrap}
+  .tpBars{display:grid;grid-template-columns:1fr 1fr;gap:.22rem .9rem;margin-top:.32rem}
+  .tpStat{display:flex;align-items:center;gap:.35rem}
+  .tpStat b{font-size:.6rem;color:var(--ink-dim);width:2.9rem;text-align:right;
+    letter-spacing:.06em;font-weight:600}
+  .tpBarBg{flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.13)}
+  .tpBarF{height:100%;border-radius:3px}
   .tpBlurb{font-size:.74rem;color:var(--ink-dim);margin-top:.22rem;line-height:1.3}
   .setupCard .big{font-size:2rem}
   .formrow{display:flex;flex-direction:column;align-items:stretch;gap:.3rem;margin-top:.9rem;font-size:.95rem;text-align:left}
@@ -2202,20 +2209,36 @@ function renderTeamSlots(){
 }
 function openTeamPick(slot){
   const card=document.getElementById("tpCard");
-  const bar=(n)=>"▰".repeat(n)+"▱".repeat(5-n);
+  const sbar=(lbl,n,col)=>`<div class="tpStat"><b>${lbl}</b><div class="tpBarBg">
+    <div class="tpBarF" style="width:${n*20}%;background:${col}"></div></div></div>`;
   card.innerHTML=`<div class="big2">Slot ${slot+1}: choose a nation</div>`+
     TEAM_LIBRARY.map((L,idx)=>{
       const st=statBars(L), taken=selTeams.includes(idx)&&selTeams[slot]!==idx;
+      const barCol=lum(L.color)>0.72?L.accent:L.color;
       return `<div class="tpTeam${taken?" taken":""}" data-idx="${idx}" style="border-color:${L.color}">
-        <span class="tpName" style="color:${L.color}">${L.name}</span>
-        <span class="tpId">${ATK_AB[L.id.atk]}·${DEF_AB[L.id.def]}·${L.id.agg.toUpperCase()}</span>
-        <div class="tpBars">
-          <span>ATT ${bar(st.ATT)}</span><span>DEF ${bar(st.DEF)}</span>
-          <span>PRESS ${bar(st.PRS)}</span><span>FLAIR ${bar(st.FLR)}</span>
-          <span>AGGRO ${bar(st.AGG)}</span></div>
-        <div class="tpBlurb">${L.blurb} ⭐ ${L.star}</div>
+        <div class="tpDot" data-dot="${idx}"></div>
+        <div class="tpBody">
+          <span class="tpName" style="color:${lum(L.color)>0.72?"#fff":L.color}">${L.name}</span>
+          <span class="tpId">${ATK_AB[L.id.atk]}·${DEF_AB[L.id.def]}·${L.id.agg.toUpperCase()}</span>
+          <div class="tpBars">
+            ${sbar("ATT",st.ATT,barCol)}${sbar("DEF",st.DEF,barCol)}
+            ${sbar("PRESS",st.PRS,barCol)}${sbar("FLAIR",st.FLR,barCol)}
+            ${sbar("AGGRO",st.AGG,"#e05656")}
+          </div>
+          <div class="tpBlurb">${L.blurb} ⭐ ${L.star}</div>
+        </div>
       </div>`;
     }).join("");
+  card.querySelectorAll("[data-dot]").forEach(slotEl=>{
+    const L=TEAM_LIBRARY[parseInt(slotEl.dataset.dot)];
+    const sv=document.createElementNS(NS,"svg");
+    sv.setAttribute("viewBox","-21 -21 42 42"); sv.setAttribute("width","44"); sv.setAttribute("height","44");
+    const g2=el("g",{},sv);
+    el("circle",{r:14,fill:L.color,stroke:lum(L.color)>0.72?"#222":"rgba(0,0,0,.4)","stroke-width":2.2},g2);
+    drawMotif(g2,L);
+    el("path",{d:"M20,0 L12,-5 L12,5 Z",fill:L.accent,stroke:"rgba(0,0,0,.4)","stroke-width":1},g2);
+    slotEl.appendChild(sv);
+  });
   card.querySelectorAll(".tpTeam").forEach(elx=>elx.onclick=()=>{
     const idx=parseInt(elx.dataset.idx);
     const other=selTeams.indexOf(idx);
