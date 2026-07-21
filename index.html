@@ -294,12 +294,12 @@ const TEAM_LIBRARY=[
    third:"#28418f", motif:{t:"cross",c:["#cf1020"]},
    id:{atk:"RouteOne",def:"Balanced",agg:"Firm"}, star:"Bellingham",
    blurb:"Over the top, second balls, and belief that hurts to watch."},
-  {name:"Brazil", short:"BRA", color:"#2fa84f", accent:"#ffdf00",
+  {name:"Brazil", short:"BRA", color:"#f7d117", accent:"#1d8a4e",
    roster:["Alisson","Marquinhos","Militão","Bruno Guimarães","Vinícius Jr"],
-   third:"#2a4db8", motif:{t:"diamond",c:["#ffdf00","#2a4db8"]},
+   third:"#2a4db8", motif:{t:"diamond",c:["#1d8a4e","#2a4db8"]},
    id:{atk:"Swashbuckle",def:"Balanced",agg:"Clean"}, star:"Vinícius Jr",
    blurb:"Jogo bonito. Goals at both ends and no apologies at either."},
-  {name:"Germany", short:"GER", color:"#4a4f55", accent:"#ffce00",
+  {name:"Germany", short:"GER", color:"#6a7280", accent:"#ffce00",
    roster:["ter Stegen","Rüdiger","Tah","Musiala","Havertz"],
    third:"#c8102e", motif:{t:"hbands2",c:["#c8102e","#ffce00"]},
    id:{atk:"Balanced",def:"Gegenpress",agg:"Firm"}, star:"Musiala",
@@ -319,24 +319,24 @@ const TEAM_LIBRARY=[
    third:"#28418f", motif:{t:"hbands3",c:["#c8102e","#f5f5f5","#28418f"]},
    id:{atk:"TikiTaka",def:"Gegenpress",agg:"Firm"}, star:"Van Dijk",
    blurb:"Total football, high line, higher self-regard."},
-  {name:"Morocco", short:"MAR", color:"#1d8a4e", accent:"#e63946",
-   roster:["Bounou","Hakimi","Aguerd","Amrabat","En-Nesyri"],
-   third:"#e63946", motif:{t:"star",c:["#e63946"]},
-   id:{atk:"RouteOne",def:"ParkTheBus",agg:"Firm"}, star:"Hakimi",
-   blurb:"The bus is parked and the counters are lightning."},
-  {name:"Japan", short:"JPN", color:"#22315e", accent:"#d7003a",
+  {name:"Mexico", short:"MEX", color:"#1d8a4e", accent:"#f5f5f5",
+   roster:["Ochoa","Montes","Araujo","Edson Álvarez","Santiago Giménez"],
+   third:"#d22d3d", motif:{t:"vbands",c:["#1d8a4e","#f5f5f5","#d22d3d"]},
+   id:{atk:"TikiTaka",def:"Trap",agg:"Nasty"}, star:"Santiago Giménez",
+   blurb:"El Tri: slick touches, high drama, and the Azteca travels with them."},
+  {name:"Japan", short:"JPN", color:"#f5f0e8", accent:"#d7003a",
    roster:["Zion Suzuki","Tomiyasu","Itakura","Kamada","Mitoma"],
-   third:"#f5f5f5", motif:{t:"disc",c:["#d7003a"]},
+   third:"#b3002d", motif:{t:"disc",c:["#d7003a"]},
    id:{atk:"TikiTaka",def:"Gegenpress",agg:"Clean"}, star:"Mitoma",
    blurb:"Relentless tempo, immaculate manners, zero mercy."},
-  {name:"Portugal", short:"POR", color:"#8a1538", accent:"#1d8a4e",
+  {name:"Portugal", short:"POR", color:"#a91d45", accent:"#1d8a4e",
    roster:["Diogo Costa","Rúben Dias","Cancelo","Vitinha","Ronaldo"],
    third:"#1d8a4e", motif:{t:"vsplit",c:["#1d8a4e","#c8102e","#f7c948"]},
    id:{atk:"Swashbuckle",def:"Trap",agg:"Firm"}, star:"Ronaldo",
    blurb:"Flair everywhere, and a 41-year-old who still believes."},
-  {name:"USA", short:"USA", color:"#3c3b6e", accent:"#f0f0f0",
+  {name:"USA", short:"USA", color:"#2a4d9b", accent:"#f0f0f0",
    roster:["Turner","Richards","Robinson","McKennie","Pulisic"],
-   third:"#c73a45", motif:{t:"stars",c:["#f0f0f0","#c73a45"]},
+   third:"#d22d3d", motif:{t:"stars",c:["#f0f0f0","#d22d3d"]},
    id:{atk:"Balanced",def:"Gegenpress",agg:"Firm"}, star:"Pulisic",
    blurb:"Grit, lungs, and a nation that just learned the rules."},
 ];
@@ -1698,8 +1698,9 @@ function drawMotif(g,L){
       el("rect",{x:0,y:-6,width:8,height:12,rx:2,fill:c[1],opacity:.92},g);
       el("circle",{r:2.6,fill:c[2]},g); break;
     case "stars":
-      el("rect",{x:-8,y:3.4,width:16,height:2.1,fill:c[1],opacity:.9},g);
-      el("rect",{x:-8,y:6.3,width:16,height:1.7,fill:c[1],opacity:.9},g);
+      el("rect",{x:-8,y:3.2,width:16,height:2,fill:c[1],opacity:.95},g);
+      el("rect",{x:-8,y:5.4,width:16,height:2,fill:c[0],opacity:.95},g);
+      el("rect",{x:-8,y:7.6,width:16,height:1.6,fill:c[1],opacity:.95},g);
       el("path",{d:"M0,-6.5 L1.7,-2.2 L6,-2.2 L2.5,0.5 L3.5,4.6 L0,2 L-3.5,4.6 L-2.5,0.5 L-6,-2.2 L-1.7,-2.2 Z",fill:c[0]},g); break;
   }
 }
