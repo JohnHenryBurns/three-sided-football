@@ -419,7 +419,7 @@ class Match {
         if(dist(o,owner)>=28)continue;
         const T=this.tac(o.team);
         const inBox=dist(owner,goalCenter(o.team))<110;
-        const fc=0.0022*(0.4+1.2*T.press)*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
+        const fc=0.0022*(T.aggF||1)*(0.4+1.2*T.press)*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
         if(Math.random()<fc*dt*60){
           this.m2.fouls++;
           const ownGoal=goalCenter(o.team);
@@ -447,7 +447,7 @@ class Match {
       const tackleBase=this.o.dribble?0.010:0.012;
       oppOf(owner.team).forEach(o=>{
         if(this.suppress&&this.suppress.team===o.team&&this.clock<this.suppress.until)return;
-        let tc=tackleBase*(0.6+0.8*this.tac(o.team).press);
+        let tc=tackleBase*(0.6+0.8*this.tac(o.team).press)*(this.tac(o.team).aggT||1);
         tc*=(0.55+0.45*o.stamina);
         tc*=(1.35-0.5*owner.stamina);
         if(this.clock<this.boostUntil[o.team])tc*=1.3;
@@ -768,6 +768,64 @@ if(process.env.ZONE==="1"){
     }
     console.log(JSON.stringify({cell:an+" vs Bus (zone rule)",AbeatsB:+(100*aWins/games).toFixed(1),was:{TikiTaka:60,RouteOne:53.3,Swashbuckle:58.3,Probe:62.5}[an]}));
   }
+  process.exit(0);
+}
+const NATIONS={
+  ESP:{atk:"TikiTaka",def:"Gegenpress",agg:"Clean"},
+  ARG:{atk:"Probe",def:"Trap",agg:"Nasty"},
+  ENG:{atk:"RouteOne",def:"Balanced",agg:"Firm"},
+  BRA:{atk:"Swashbuckle",def:"Balanced",agg:"Clean"},
+  GER:{atk:"Balanced",def:"Gegenpress",agg:"Firm"},
+  ITA:{atk:"Probe",def:"ParkTheBus",agg:"Nasty"},
+  FRA:{atk:"Swashbuckle",def:"Trap",agg:"Firm"},
+  NED:{atk:"TikiTaka",def:"Gegenpress",agg:"Firm"},
+  MEX:{atk:"TikiTaka",def:"Trap",agg:"Nasty"},
+  JPN:{atk:"TikiTaka",def:"Gegenpress",agg:"Clean"},
+  POR:{atk:"Swashbuckle",def:"Trap",agg:"Firm"},
+  USA:{atk:"Balanced",def:"Gegenpress",agg:"Firm"}};
+const N_ATK={TikiTaka:{tempo:.9,risk:.3,direct:.15},RouteOne:{tempo:.3,risk:.7,direct:.95},
+  Swashbuckle:{tempo:.8,risk:.95,direct:.5},Probe:{tempo:.35,risk:.25,direct:.3},
+  Balanced:{tempo:.5,risk:.5,direct:.5}};
+const N_DEF={Gegenpress:{line:.8,press:.95,bunker:0},ParkTheBus:{line:.15,press:.2,bunker:1},
+  Trap:{line:.35,press:.6,bunker:0},Balanced:{line:.5,press:.5,bunker:0}};
+const N_AGG={Clean:{aggF:.55,aggT:.92},Firm:{aggF:1,aggT:1},Nasty:{aggF:1.8,aggT:1.18},Filthy:{aggF:2.8,aggT:1.38}};
+function natTac(n){const d=NATIONS[n];return {tac:{...N_ATK[d.atk],...N_DEF[d.def],...N_AGG[d.agg]}};}
+const BALREF={tac:{tempo:.5,risk:.5,direct:.5,line:.5,press:.5,bunker:0,aggF:1,aggT:1}};
+function natMatch(flags){
+  return new Match({minutes:MIN,dribble:true,aerial:true,zoneRule:true,anticipate:true,
+    oob:true,disc:true,restarts:true,parries:true,ally:{},teamFlags:flags});
+}
+if(process.env.POWER==="1"){
+  const names=Object.keys(NATIONS);
+  const group=process.env.GROUP==="B"?names.slice(6):names.slice(0,6);
+  group.forEach(n=>{
+    let pts=0,gf=0,ga=0,wins=0;
+    for(let i=0;i<8;i++){
+      const m=natMatch([natTac(n),BALREF,BALREF]);
+      m.run();
+      pts+=m.score[0]; gf+=m.scored[0]; ga+=m.conceded[0];
+      const mx=Math.max(...m.score);
+      if(m.score[0]===mx&&m.score.filter(x=>x===mx).length===1)wins++;
+    }
+    console.log(JSON.stringify({nation:n,pts:+(pts/8).toFixed(2),gf:+(gf/8).toFixed(1),
+      ga:+(ga/8).toFixed(1),winPct:+(wins/8*100).toFixed(0)}));
+  });
+  process.exit(0);
+}
+if(process.env.DERBY==="1"){
+  const trios=[["ESP","ITA","BRA"],["GER","FRA","ENG"],["ARG","BRA","GER"],
+    ["JPN","NED","USA"],["MEX","ARG","POR"],["ITA","FRA","NED"]];
+  trios.forEach(tr=>{
+    const agg=[[0,0],[0,0],[0,0]];
+    for(let i=0;i<8;i++){
+      const m=natMatch(tr.map(natTac)); m.run();
+      const mx=Math.max(...m.score);
+      for(let t=0;t<3;t++){agg[t][0]+=m.score[t];
+        if(m.score[t]===mx&&m.score.filter(x=>x===mx).length===1)agg[t][1]++;}
+    }
+    console.log(JSON.stringify({trio:tr.join("/"),
+      result:tr.map((n,t)=>`${n} ${(agg[t][0]/8).toFixed(1)}pts/${agg[t][1]}W`)}));
+  });
   process.exit(0);
 }
 if(process.env.LONG==="1"){
