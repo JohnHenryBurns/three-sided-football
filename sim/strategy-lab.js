@@ -111,6 +111,20 @@ class Match {
   }
   kick(tx,ty,power,isShot){
     const b=this.ball,o=b.owner;
+    if(this.o.disc&&!isShot){
+      for(const e of EDGES){                       // clamp the aim point inside the lines
+        const d=(tx-e.p1.x)*e.nx+(ty-e.p1.y)*e.ny;
+        if(d<26){tx+=e.nx*(26-d);ty+=e.ny*(26-d);}
+      }
+      let dxn=tx-b.x,dyn=ty-b.y;const dl=Math.hypot(dxn,dyn)||1;dxn/=dl;dyn/=dl;
+      let ahead=1e9;                                // cap power by room along the pass
+      for(const e of EDGES){
+        const den=-(dxn*e.nx+dyn*e.ny);
+        if(den>0.05){const db=(b.x-e.p1.x)*e.nx+(b.y-e.p1.y)*e.ny;
+          ahead=Math.min(ahead,(db-8)/den);}
+      }
+      power=Math.min(power,4+ahead*0.035);
+    }
     const dx=tx-b.x,dy=ty-b.y,d=Math.hypot(dx,dy)||1;
     b.vx=dx/d*power;b.vy=dy/d*power;
     b.lastTouch=o.team;b.lastKicker=o;b.isShot=!!isShot;
@@ -164,7 +178,8 @@ class Match {
         const {wd,we}=this.wallDist(p);
         const inMouth=we&&we.goal&&we===EDGES[GOAL_EDGE[this.targets[p.team]]]&&
           Math.abs((p.x-we.mx)*we.ux+(p.y-we.my)*we.uy)<we.len*GOAL_HALF*1.3;
-        if(wd<70&&!inMouth){const w=(70-wd)/70*1.1;dx+=we.nx*w;dy+=we.ny*w;}
+        const wallR=this.o.disc?95:70, wallW=this.o.disc?1.6:1.1;
+        if(wd<wallR&&!inMouth){const w=(wallR-wd)/wallR*wallW;dx+=we.nx*w;dy+=we.ny*w;}
         this.steer(p,p.x+dx*80,p.y+dy*80,2.05);
       } else if(p.role==="K"){
         const e=EDGES[GOAL_EDGE[p.team]];
@@ -502,6 +517,16 @@ class Match {
         }
         if(wasShot&&best.role==="K"&&kicker&&best.team!==kicker.team&&spd>5){
           this.m.saves++;this.stam(best,+0.12);this.stam(kicker,-0.05);
+          if(this.o.parries&&spd>8.5&&Math.random()<0.4){
+            // parried! pushed wide, not held
+            this.m2.parries=(this.m2.parries||0)+1;
+            const e2=EDGES[GOAL_EDGE[best.team]];
+            const lat=Math.random()<0.5?1:-1;
+            b.owner=null; b.lastTouch=best.team; b.lastKicker=best;
+            b.vx=(e2.ux*lat*1.0-e2.nx*0.28)*spd*0.5;
+            b.vy=(e2.uy*lat*1.0-e2.ny*0.28)*spd*0.5;
+            b.noClaim=best; b.noClaimF=10;
+          }
         } else if(kicker&&spd>2.2&&best!==kicker){
           if(best.team===kicker.team){this.m.passOk++;this.stam(kicker,+0.05);this.stam(best,+0.03);}
           else if(!wasShot){this.stam(kicker,-0.08);this.stam(best,+0.06);}
@@ -520,7 +545,52 @@ class Match {
         }else if(this.o.oob){
           if(d<2){
             this.m2.oobs=(this.m2.oobs||0)+1;
-            b.x=CX;b.y=CY;b.vx=0;b.vy=0;b.z=0;b.zv=0;b.owner=null;b.noClaim=null;
+            if(!this.o.restarts){
+              b.x=CX;b.y=CY;b.vx=0;b.vy=0;b.z=0;b.zv=0;b.owner=null;b.noClaim=null;
+            } else {
+              const toucher=b.lastTouch;
+              const spotX=Math.max(-1e9,b.x+e.nx*24), spotY=b.y+e.ny*24;
+              b.vx=0;b.vy=0;b.z=0;b.zv=0;b.noClaim=null;b.isShot=false;
+              if(e.goal){
+                const ownerT=GOAL_EDGE.indexOf(k);
+                if(toucher===ownerT){
+                  // CORNER to the nearest hunter
+                  this.m2.corners=(this.m2.corners||0)+1;
+                  const att=[0,1,2].filter(x=>x!==ownerT&&(this.targets[x]===ownerT))[0]
+                    ??[0,1,2].find(x=>x!==ownerT);
+                  const vtx=dist({x:e.p1.x,y:e.p1.y},b)<dist({x:e.p2.x,y:e.p2.y},b)?e.p1:e.p2;
+                  const taker=this.players.filter(q=>q.team===att&&q.role!=="K")
+                    .sort((a2,b2)=>dist(a2,vtx)-dist(b2,vtx))[0];
+                  if(taker){
+                    taker.x=vtx.x+e.nx*14; taker.y=vtx.y+e.ny*14;
+                    b.owner=taker; b.lastTouch=att; b.x=taker.x; b.y=taker.y;
+                    const g=goalCenter(ownerT);
+                    const off=(Math.random()*2-1)*e.len*GOAL_HALF*0.7;
+                    const txc=g.x+e.ux*off+e.nx*44, tyc=g.y+e.uy*off+e.ny*44;
+                    const dd=Math.hypot(txc-b.x,tyc-b.y)||1;
+                    b.vx=(txc-b.x)/dd*6.8; b.vy=(tyc-b.y)/dd*6.8;
+                    b.lastKicker=taker; b.owner=null; b.noClaim=taker; b.noClaimF=14;
+                    b.zv=3.0; this.m2.crosses++;
+                  } else { b.x=CX;b.y=CY;b.owner=null; }
+                } else {
+                  // GOAL KICK
+                  this.m2.goalkicks=(this.m2.goalkicks||0)+1;
+                  const gk=this.players.find(q=>q.team===ownerT&&q.role==="K");
+                  b.owner=gk; b.lastTouch=ownerT; b.x=gk.x; b.y=gk.y;
+                }
+              } else {
+                // THROW-IN to the nearest non-toucher
+                this.m2.throwins=(this.m2.throwins||0)+1;
+                const cands=this.players.filter(q=>q.team!==toucher&&q.role!=="K"&&!q.out);
+                cands.sort((a2,b2)=>dist(a2,{x:spotX,y:spotY})-dist(b2,{x:spotX,y:spotY}));
+                const thr=cands[0];
+                if(thr){
+                  thr.x=spotX; thr.y=spotY;
+                  b.owner=thr; b.lastTouch=thr.team; b.x=thr.x; b.y=thr.y; b.touchT=0.4;
+                  this.suppress={team:toucher,until:this.clock+0.8};
+                } else { b.x=CX;b.y=CY;b.owner=null; }
+              }
+            }
           }
         }else{
           b.x+=e.nx*(7-d);b.y+=e.ny*(7-d);
@@ -642,14 +712,26 @@ if(process.env.ZONE==="1"){
 }
 if(process.env.OOB==="1"){
   const B={tempo:.5,risk:.5,line:.5,press:.5,direct:.5,bunker:0};
-  const rs=[];
-  for(let i=0;i<10;i++){
-    const m=new Match({minutes:MIN,dribble:true,aerial:true,zoneRule:true,anticipate:true,oob:true,
-      teamFlags:[{tac:{...B}},{tac:{...B}},{tac:{...B}}]});
-    const r=m.run(); r.oobs=+((m.m2.oobs||0)/MIN).toFixed(1); rs.push(r);
+  function world(label,opts){
+    const rs=[];
+    for(let i=0;i<10;i++){
+      const m=new Match({minutes:MIN,dribble:true,aerial:true,zoneRule:true,anticipate:true,oob:true,...opts,
+        teamFlags:[{tac:{...B}},{tac:{...B}},{tac:{...B}}]});
+      const r=m.run();
+      r.oobs=+((m.m2.oobs||0)/MIN).toFixed(2);
+      r.ti=+((m.m2.throwins||0)/MIN).toFixed(2);
+      r.co=+((m.m2.corners||0)/MIN).toFixed(2);
+      r.gk2=+((m.m2.goalkicks||0)/MIN).toFixed(2);
+      rs.push(r);
+    }
+    console.log(JSON.stringify({label,oob:avg(rs,"oobs"),goals:avg(rs,"goalsPerMin"),
+      headers:avg(rs,"headersPerMin"),throwins:avg(rs,"ti"),corners:avg(rs,"co"),
+      goalkicks:avg(rs,"gk2"),spell:avg(rs,"avgSpellSec"),pens:avg(rs,"pensPerMatch")}));
   }
-  console.log(JSON.stringify({oobPerMin:avg(rs,"oobs"),goals:avg(rs,"goalsPerMin"),
-    headers:avg(rs,"headersPerMin"),spell:avg(rs,"avgSpellSec")}));
+  world("naive (no discipline)",{});
+  world("+discipline",{disc:true});
+  world("+discipline +restarts",{disc:true,restarts:true});
+  world("+parries (the full package)",{disc:true,restarts:true,parries:true});
   process.exit(0);
 }
 if(process.env.ZONE2==="1"){
