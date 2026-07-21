@@ -314,9 +314,31 @@ class Match {
       }
       {
         const RK=this.tac(owner.team).risk;
+        // THE LONG STRIKE: open lane + decent angle + space = have a go from range
+        if(this.o.longshots&&dGoal>125&&dGoal<250&&pressure>42){
+          const hw2=e.len*GOAL_HALF;
+          const latOff=Math.abs((owner.x-tgt.x)*e.ux+(owner.y-tgt.y)*e.uy);
+          if(latOff<hw2*1.5){
+            let laneClear=true;
+            oppOf(owner.team).forEach(o=>{
+              const tt=((o.x-owner.x)*(tgt.x-owner.x)+(o.y-owner.y)*(tgt.y-owner.y))/(dGoal*dGoal);
+              if(tt>0.12&&tt<0.85){const lx=owner.x+(tgt.x-owner.x)*tt,ly=owner.y+(tgt.y-owner.y)*tt;
+                if(o.role!=="K"&&Math.hypot(o.x-lx,o.y-ly)<26)laneClear=false;}
+            });
+            if(laneClear&&Math.random()<0.016*(0.4+1.2*RK)*dt*60){
+              this.m2.shotD=this.m2.shotD||[]; this.m2.shotD.push(dGoal);
+              this.m2.longs=(this.m2.longs||0)+1;
+              const scL=(0.6+0.8*RK)*(0.75+dGoal*0.0035);   // range punishes accuracy
+              const offL=(Math.random()*2-1)*hw2*scL;
+              this.kick(tgt.x+e.ux*offL,tgt.y+e.uy*offL,11.2,true);
+              return;
+            }
+          }
+        }
         const open=pressure>60, smothered=pressure<32;
         const shotChance=0.025*(0.5+1.0*RK)*(open?1.5:smothered?0.55:1.0);
         if(dGoal<(150+50*RK)&&Math.random()<shotChance*dt*60){
+          this.m2.shotD=this.m2.shotD||[]; this.m2.shotD.push(dGoal);
           let scatter=(open?0.55:smothered?1.5:1.0)*(0.6+0.8*RK);   // patience = precision
           // a bunkered box deflects and crowds every strike
           if(this.tac(this.targets[owner.team]).bunker>0.5) scatter*=1.35;
@@ -746,6 +768,28 @@ if(process.env.ZONE==="1"){
     }
     console.log(JSON.stringify({cell:an+" vs Bus (zone rule)",AbeatsB:+(100*aWins/games).toFixed(1),was:{TikiTaka:60,RouteOne:53.3,Swashbuckle:58.3,Probe:62.5}[an]}));
   }
+  process.exit(0);
+}
+if(process.env.LONG==="1"){
+  const B={tempo:.5,risk:.5,line:.5,press:.5,direct:.5,bunker:0};
+  function lw(label,longshots){
+    const rs=[]; let ds=[], longs=0, parries=0;
+    for(let i=0;i<8;i++){
+      const m=new Match({minutes:MIN,dribble:true,aerial:true,zoneRule:true,anticipate:true,
+        oob:true,disc:true,restarts:true,parries:true,ally:{},longshots,
+        teamFlags:[{tac:{...B}},{tac:{...B}},{tac:{...B}}]});
+      const r=m.run(); rs.push(r);
+      ds=ds.concat(m.m2.shotD||[]); longs+=(m.m2.longs||0); parries+=(m.m2.parries||0);
+    }
+    const mean=ds.length?ds.reduce((a,b)=>a+b,0)/ds.length:0;
+    const farShare=ds.length?ds.filter(d=>d>120).length/ds.length:0;
+    console.log(JSON.stringify({label,goals:avg(rs,"goalsPerMin"),shots:avg(rs,"shotsPerMin"),
+      meanShotDist:+mean.toFixed(0),shareBeyond120:+(farShare*100).toFixed(0)+"%",
+      longsPerMin:+(longs/8/MIN).toFixed(2),parriesPerMin:+(parries/8/MIN).toFixed(2),
+      headers:avg(rs,"headersPerMin")}));
+  }
+  lw("long shots OFF",false);
+  lw("long shots ON",true);
   process.exit(0);
 }
 if(process.env.NATS==="1"){

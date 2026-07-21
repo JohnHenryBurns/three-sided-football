@@ -723,6 +723,31 @@ function think(dt){
     }
     {
       const RK=T(owner.team).risk;
+      // THE LONG STRIKE: open lane + decent angle + space = have a go from range
+      if(oobRule!==undefined&&dGoal>125&&dGoal<250&&pressure>42){
+        const hw2=e.len*GOAL_HALF;
+        const latOff=Math.abs((owner.x-tgt.x)*e.ux+(owner.y-tgt.y)*e.uy);
+        if(latOff<hw2*1.5){
+          let laneClear=true;
+          oppOf(owner.team).forEach(o=>{
+            const tt=((o.x-owner.x)*(tgt.x-owner.x)+(o.y-owner.y)*(tgt.y-owner.y))/(dGoal*dGoal);
+            if(tt>0.12&&tt<0.85){const lx=owner.x+(tgt.x-owner.x)*tt,ly=owner.y+(tgt.y-owner.y)*tt;
+              if(o.role!=="K"&&Math.hypot(o.x-lx,o.y-ly)<26)laneClear=false;}
+          });
+          if(laneClear&&Math.random()<0.016*(0.4+1.2*RK)*dt*60){
+            const scL=(0.6+0.8*RK)*(0.75+dGoal*0.0035);   // range punishes accuracy
+            const offL=(Math.random()*2-1)*hw2*scL;
+            spawnNote(owner.x,owner.y-24,"from distance!",TEAMS[owner.team].accent);
+            if(Math.random()<0.4) say(pick([
+              `${owner.name} sees the lane and LETS FLY from range!`,
+              `${owner.name} has a go from distance — dip and swerve!`,
+              `No hesitation — ${owner.name} rips one from ${Math.round(dGoal/8)} yards!`,
+              `${owner.name} says why not, and unloads!`]),true);
+            kick(tgt.x+e.ux*offL, tgt.y+e.uy*offL, 11.2, true);
+            return;
+          }
+        }
+      }
       if(dGoal<(150+50*RK) && Math.random()<0.025*(0.5+1.0*RK)*dt*60){
         let sc=0.6+0.8*RK;                                   // patience = precision
         if(T(targets[owner.team]).bunker>0.5) sc*=1.35;      // packed boxes deflect
