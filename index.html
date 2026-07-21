@@ -1686,7 +1686,20 @@ function ambientChatter(){
     `The pre-match anthem was fine, but it was no Grandma Gloria karaoke. That voice fills a parish hall.`,
     `Grandma Gloria could take this microphone and improve the broadcast instantly. Everyone knows it.`,
     `California sunshine and unconditional love — that's Grandma Gloria's scouting report on every grandchild.`,
-    `Grandma Gloria loves nothing on this earth more than her grandchildren. The trophy is a distant second.`);
+    `Grandma Gloria loves nothing on this earth more than her grandchildren. The trophy is a distant second.`,
+    // ---- the family watchlist ----
+    `That tackle had John Wick energy: efficient, personal, and somebody's going to regret it.`,
+    `He moves through this midfield like John Wick through a nightclub. Everyone else is furniture.`,
+    `The pincer closes like a Fortnite storm — the only safe zone is wherever the leader isn't.`,
+    `That defender just got sent back to the lobby.`,
+    `The winners will do Fortnite dances at full time. The losers will pretend not to know them.`,
+    `A save with Astro Bot precision: small, cheerful, impossibly clean.`,
+    `That back line was clearly built in creative mode — lovely to look at, zero survival instincts.`,
+    `Tactically speaking, he just mined straight down. Everyone knows the rule.`,
+    `Diamond-tier footwork from the man on the ball.`,
+    `Keepy-uppy rules in this buildup: the ball simply refuses to touch the ground.`,
+    `A move so wholesome it belongs in a Bluey episode. The adults in the crowd are suspiciously misty.`,
+    `Even Bandit would say that dad-strength tackle was a bit much.`);
   let fresh=cand.filter(l=>!recentChatter.includes(l));
   if(!fresh.length) fresh=cand;
   const line=pick(fresh);
