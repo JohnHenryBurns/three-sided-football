@@ -84,3 +84,35 @@ identity viable, matchup texture without a dominant meta. Rock-paper-scissors ed
 **Coach flow:** pick team at match setup → pause anytime for the coach menu → swap preset
 cards mid-match (with a short "instructions reaching the pitch" delay) → call bounded plays
 (give-and-go v2, kickoff set plays) as one-shot commands.
+
+## Out of bounds, throw-ins, and the stadium (probed, not yet built)
+
+**Probe result:** removing walls entirely, with zero AI changes, yields **2.84 OOB/min**
+(lab, balanced world). Prior wall-avoidance work (dribbler steering, pinned outlets,
+teammate-targeted passing) already keeps play interior — the feared AI overhaul is
+actually a modest discipline pass.
+
+**Build phases (sim-first, per house rules):**
+1. **Discipline** — clamp all kick targets inside a ~24px margin polygon; cap pass power
+   by distance-to-line along the pass direction; strengthen dribbler line-avoidance.
+   Target: ~1.5–2 OOB/min.
+2. **Restarts** — staged like penalties (brief freeze, thrower at the spot, opponents
+   stand off):
+   - *Throw-ins* on the neutral edges — short-range restart, cannot score directly
+   - *Goal kicks* when the attacker puts it behind; *CORNERS* when the defender does —
+     a corner is an automatic lofted delivery from the vertex into the box, which feeds
+     directly into the header-duel and timed-run systems already built. Corners should
+     raise headers/min meaningfully; measure it.
+   - **Three-team question** (open design decision): who gets the throw when the toucher
+     concedes it? Candidates: nearest non-touching opponent (spatial, simple — leading
+     candidate), the lower-ranked non-toucher (underdog throw, juicy house rule), or
+     alternating. Decide in the lab by watching which produces the least weirdness.
+3. **Wall retirement** — the pinned-outlet mechanic and wall-aware dribbling get retuned
+   or retired; lofted balls that clear the line are simply out (they currently bounce
+   off infinitely tall walls).
+
+**Stadium dressing** (can ship independently, and OOB needs the visual space anyway):
+extend the viewBox beyond the pitch — concentric crowd rings with team-colored sections
+behind each goal, benches on a neutral edge (the coach-sim tie-in: your bench is visible;
+the sent-off player's walk of shame ends AT the bench, head in hands), a tunnel, maybe
+hex-league ad boards. Crowd opacity pulse on goals later.
