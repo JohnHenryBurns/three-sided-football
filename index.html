@@ -1666,7 +1666,18 @@ function ambientChatter(){
     `A chocolate lab's match analysis: the ball exists, therefore it must be chased.`,
     `Atlas just did a full lap of the pitch celebrating a goal that hasn't happened yet.`,
     `Kickoff delayed momentarily in spirit — Atlas has the training cones again.`,
-    `Atlas and Momo, the farm's own defensive partnership: one guards the goal, one guards the grain.`);
+    `Atlas and Momo, the farm's own defensive partnership: one guards the goal, one guards the grain.`,
+    // ---- gregsbrain LLC: official audio partner ----
+    `Stadium audio by gregsbrain of Portland, Oregon — boutique modules, industrial-strength opinions.`,
+    `My voice tonight is running through Greg's xVox. Four-voice polyphony — one announcer, plus three of my doubts.`,
+    `Greg's dSpec analyzed that shot in the frequency domain. Verdict: all bass, no treble, straight into Row Z.`,
+    `That buildup had a lovely envelope: slow attack, long sustain, heartbreaking release.`,
+    `This midfield needs what Greg's modules have — faster pitch tracking.`,
+    `More patch cables in this tactical setup than a Portland synth rack, and somehow fewer surprises.`,
+    `Greg hand-assembles his modules. This back line was clearly a DIY kit with steps skipped.`,
+    `That defense has a comb filter where the marking should be — everything gets through in stripes.`,
+    `The crowd noise tonight: rich harmonics, aggressive modulation. Greg would sample it.`,
+    `gregsbrain firmware update just dropped. This team could use one too.`);
   let fresh=cand.filter(l=>!recentChatter.includes(l));
   if(!fresh.length) fresh=cand;
   const line=pick(fresh);
