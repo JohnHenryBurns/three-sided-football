@@ -679,12 +679,12 @@ function think(dt){
           const leftTxt=left===1?`only the goalkeeper remains for ${tm(o.team)}!`:`${tm(o.team)} down to ${left} men.`;
           showNotice(col, card==="second"?"🟨🟥 SECOND YELLOW":"🟥 RED CARD",
             `${o.name} (${shortT})`,
-            `The offense: ${off}.${penTag}<br>OFF! The walk of shame begins — ${leftTxt}`, 5200);
-          say(`🟥 <b>RED CARD!</b> ${o.name} sent off for ${off}. ${tm(o.team)} play on a man short!`,true);
+            `His crime: he ${off}.${penTag}<br>OFF! The walk of shame begins — ${leftTxt}`, 5200);
+          say(`🟥 <b>RED CARD!</b> ${o.name} is off — he ${off}. ${tm(o.team)} play on a man short!`,true);
         } else if(card==="yellow"){
           addStoppage(3);
           showNotice(col,"🟨 YELLOW CARD",`${o.name} (${shortT})`,
-            `The offense: ${off}. Into the book he goes.${penTag}`, 4200);
+            `His crime: he ${off}. Into the book he goes.${penTag}`, 4200);
           say(`🟨 ${o.name} is booked — ${off}.`,true);
         } else if(inBox){
           showNotice(TEAMS[victim.team].color,"⚠️ PENALTY!",
@@ -1028,7 +1028,7 @@ const YELLOW_OFFENSES=[
   "delayed the restart to retie both boots and his life choices",
   "committed a foul so slow the referee aged during it"];
 const RED_OFFENSES=[
-  "a two-footed lunge visible from space",
+  "launched a two-footed lunge visible from space",
   "rugby-tackled {V} out of pure nostalgia",
   "attempted a full WWE clothesline — the crowd gasped",
   "challenged {V} to a duel, glove and all",
