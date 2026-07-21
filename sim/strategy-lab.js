@@ -78,6 +78,16 @@ class Match {
     }
     return "direct";
   }
+  applyOuts(){
+    const outs=this.o.outs||[0,0,0];
+    for(let t=0;t<3;t++){
+      let need=outs[t];
+      for(const p of this.players){
+        if(need<=0)break;
+        if(p.team===t&&(p.role==="D"||p.role==="M")&&!p.out){ p.out=true; need--; }
+      }
+    }
+  }
   kickoff(toTeam){
     let i=0;
     for(let t=0;t<3;t++) formation(t).forEach(f=>{const p=this.players[i++];p.x=f.x;p.y=f.y;p.vx=0;p.vy=0;});
@@ -708,6 +718,29 @@ if(process.env.ZONE==="1"){
     }
     console.log(JSON.stringify({cell:an+" vs Bus (zone rule)",AbeatsB:+(100*aWins/games).toFixed(1),was:{TikiTaka:60,RouteOne:53.3,Swashbuckle:58.3,Probe:62.5}[an]}));
   }
+  process.exit(0);
+}
+if(process.env.UNEVEN==="1"){
+  const B={tempo:.5,risk:.5,line:.5,press:.5,direct:.5,bunker:0};
+  function uw(label,outs){
+    const agg=[[0,0,0],[0,0,0],[0,0,0]]; // per team: [pts, gf, ga]
+    let errs=0;
+    for(let i=0;i<12;i++){
+      try{
+        const m=new Match({minutes:MIN,dribble:true,aerial:true,zoneRule:true,anticipate:true,
+          oob:true,disc:true,restarts:true,parries:true,outs,
+          teamFlags:[{tac:{...B}},{tac:{...B}},{tac:{...B}}]});
+        m.applyOuts();
+        m.run();
+        for(let t=0;t<3;t++){ agg[t][0]+=m.score[t]; agg[t][1]+=m.scored[t]; agg[t][2]+=m.conceded[t]; }
+      }catch(e){ errs++; console.log("  ERROR:",e.message); }
+    }
+    console.log(JSON.stringify({label,errors:errs,
+      perTeam:agg.map((a,t)=>({team:t,men:5-(outs[t]||0),pts:+(a[0]/12).toFixed(1),
+        gf:+(a[1]/12).toFixed(1),ga:+(a[2]/12).toFixed(1)}))}));
+  }
+  uw("5-5-4: one team a man down",[0,0,1]);
+  uw("5-4-3: staggered disadvantage",[0,1,2]);
   process.exit(0);
 }
 if(process.env.OOB==="1"){
