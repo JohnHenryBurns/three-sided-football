@@ -360,11 +360,27 @@ class Match {
               if(Math.hypot(o.x-lx,o.y-ly)<blockR)laneOk=false;}
           });
           let s=gain*(0.6+0.8*DIR)+schemeBonus+openBonus*(1.4-0.8*DIR)+(laneOk?0:-500)+Math.random()*30;
-          if(allyOk) s-=matesLeft>0?(pressure>32?AW.press:AW.base):AW.solo;
+          if(allyOk){
+            const fl=t2=>P.filter(q2=>q2.team===t2&&!q2.out&&q2.role!=="K").length;
+            const foe=this.targets[owner.team];
+            const foeLead=this.score[foe]-this.score[owner.team];
+            const shortfall=fl(foe)-fl(owner.team);
+            let desp=Math.max(0,foeLead)*0.28+Math.max(0,shortfall)*0.4+(fl(owner.team)===0?0.45:0);
+            let pen=850*Math.max(0,1-desp);
+            if(matesLeft===0) pen-=80;
+            if(pressure>32) pen*=0.8;
+            s-=pen;
+          }
           if(s>bs){bs=s;best=m;}
         });
         if(best&&bs>-100){
-          if(best.team!==owner.team) this.m2.ally=(this.m2.ally||0)+1;
+          if(best.team!==owner.team){
+            this.m2.ally=(this.m2.ally||0)+1;
+            const mx=Math.max(...this.score), mn=Math.min(...this.score);
+            if(mx-mn<=1) this.m2.allyTied=(this.m2.allyTied||0)+1;
+            const foe2=this.targets[owner.team];
+            if(this.score[foe2]-this.score[owner.team]>=3) this.m2.allyRun=(this.m2.allyRun||0)+1;
+          }
           this.m.passTry++;
           const passer=owner;
           this.kick(best.x+best.vx*8,best.y+best.vy*8,Math.min(9,dist(best,owner)*0.045+4));
@@ -737,7 +753,7 @@ if(process.env.ALLY==="1"){
   const sd=a=>{const mu=a.reduce((x,y)=>x+y,0)/a.length;
     return Math.sqrt(a.reduce((x,y)=>x+(y-mu)**2,0)/a.length);};
   function aw(label,ally,outs){
-    const rs=[]; let allyN=0, leadN=0, spread=0;
+    const rs=[]; let allyN=0, leadN=0, spread=0, aTied=0, aRun=0;
     for(let i=0;i<8;i++){
       const m=new Match({minutes:MIN,dribble:true,aerial:true,zoneRule:true,anticipate:true,
         oob:true,disc:true,restarts:true,parries:true,ally,outs,
@@ -745,9 +761,13 @@ if(process.env.ALLY==="1"){
       if(outs)m.applyOuts();
       const r=m.run(); rs.push(r);
       allyN+=(m.m2.ally||0); leadN+=(m.m2.leadHit||0); spread+=sd(m.score);
+      aTied+=(m.m2.allyTied||0); aRun+=(m.m2.allyRun||0);
     }
     console.log(JSON.stringify({label,goals:avg(rs,"goalsPerMin"),
-      allyPerMin:+(allyN/8/MIN).toFixed(2),leaderConcededPerMatch:+(leadN/8).toFixed(1),
+      allyPerMin:+(allyN/8/MIN).toFixed(2),
+      allyWhileTied:rs.reduce((x,r,i)=>x,0)+(aTied/8).toFixed(1)*1,
+      allyVsRunaway:+(aRun/8).toFixed(1),
+      leaderConcededPerMatch:+(leadN/8).toFixed(1),
       scoreSpread:+(spread/8).toFixed(2),spell:avg(rs,"avgSpellSec")}));
   }
   const MODE=process.env.MODE||"sweep";
