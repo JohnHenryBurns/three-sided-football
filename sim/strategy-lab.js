@@ -41,15 +41,15 @@ class Match {
     this.clock=0; this.retarget=0; this.boostUntil=[0,0,0];
     for(let t=0;t<3;t++) formation(t).forEach(f=>this.players.push(
       {team:t,role:f.role,x:f.x,y:f.y,vx:0,vy:0,stamina:1,
-       k1:0.64+Math.random()*0.10,k2:0.82+Math.random()*0.16,hx:1,hy:0}));
+       k1:0.64+RNG()*0.10,k2:0.82+RNG()*0.16,hx:1,hy:0}));
     this.ball={x:CX,y:CY,vx:0,vy:0,owner:null,lastTouch:null,lastKicker:null,isShot:false,
       noClaim:null,noClaimF:0,touchT:0,z:0,zv:0};
     this.m2={headers:0,crosses:0,fouls:0,pens:0,penGoals:0};
     this.suppress=null;   // {team, until}: fouling team stands off during the free kick
     this.play=null; // give-and-go contract {passer,receiver,until}
-    this.offSeed=[Math.random()*9,Math.random()*9,Math.random()*9];
+    this.offSeed=[RNG()*9,RNG()*9,RNG()*9];
     this.computeTargets();
-    this.kickoff(Math.floor(Math.random()*3));
+    this.kickoff(Math.floor(RNG()*3));
     // metrics
     this.m={goals:0,own:0,shots:0,saves:0,tackles:0,turnovers:0,passOk:0,passTry:0,
       spells:[],curSpell:0,curTeam:null,dispossessSpatial:0};
@@ -158,6 +158,8 @@ class Match {
   think(dt){
     const b=this.ball,owner=b.owner;
     const P=this.players;
+    this.HA=[0,1,2].map(a=>[0,1,2].some(b2=>b2!==a&&this.targets[a]!==null
+      &&this.targets[a]===this.targets[b2]&&this.targets[a]!==b2&&this.targets[b2]!==a));
     const oppOf=t=>P.filter(p=>p.team!==t);
     const chaser=[];
     for(let t=0;t<3;t++){
@@ -252,7 +254,7 @@ class Match {
           // sample alternatives, keep the most open progressive spot
           let bestX=sx,bestY=sy,bs=this.spaceScore(p.team,sx,sy,tgt);
           for(let k=0;k<4;k++){
-            const cx2=sx+(Math.random()*2-1)*70,cy2=sy+(Math.random()*2-1)*70;
+            const cx2=sx+(RNG()*2-1)*70,cy2=sy+(RNG()*2-1)*70;
             const s2=this.spaceScore(p.team,cx2,cy2,tgt);
             if(s2>bs){bs=s2;bestX=cx2;bestY=cy2;}
           }
@@ -291,7 +293,7 @@ class Match {
         const ps=this.play.passer;
         let psOpen=1e9;
         this.players.forEach(o=>{if(o.team!==ps.team){const d=dist(o,ps);if(d<psOpen)psOpen=d;}});
-        if(psOpen>45&&dist(ps,owner)>60&&dist(ps,owner)<280&&Math.random()<0.25*dt*60){
+        if(psOpen>45&&dist(ps,owner)>60&&dist(ps,owner)<280&&RNG()<0.25*dt*60){
           this.m.passTry++;
           this.kick(ps.x+ps.vx*10,ps.y+ps.vy*10,Math.min(9,dist(ps,owner)*0.045+4));
           this.play=null;
@@ -302,7 +304,7 @@ class Match {
       {
         const {wd,we}=this.wallDist(owner);
         const mouth=we&&we.goal&&Math.abs((owner.x-we.mx)*we.ux+(owner.y-we.my)*we.uy)<we.len*GOAL_HALF*1.3;
-        if(wd<34&&pressure<58&&!mouth&&Math.random()<0.22*dt*60){
+        if(wd<34&&pressure<58&&!mouth&&RNG()<0.22*dt*60){
           let best=null,bs=1e9;
           P.forEach(m=>{if(m.team===owner.team&&m!==owner&&m.role!=="K"){
             const dc=dist(m,{x:CX,y:CY});if(dc<bs){bs=dc;best=m;}}});
@@ -325,11 +327,11 @@ class Match {
               if(tt>0.12&&tt<0.85){const lx=owner.x+(tgt.x-owner.x)*tt,ly=owner.y+(tgt.y-owner.y)*tt;
                 if(o.role!=="K"&&Math.hypot(o.x-lx,o.y-ly)<26)laneClear=false;}
             });
-            if(laneClear&&Math.random()<0.016*(0.4+1.2*RK)*dt*60){
+            if(laneClear&&RNG()<0.016*(0.4+1.2*RK)*dt*60){
               this.m2.shotD=this.m2.shotD||[]; this.m2.shotD.push(dGoal);
               this.m2.longs=(this.m2.longs||0)+1;
               const scL=(0.6+0.8*RK)*(0.75+dGoal*0.0035);   // range punishes accuracy
-              const offL=(Math.random()*2-1)*hw2*scL;
+              const offL=(RNG()*2-1)*hw2*scL;
               this.kick(tgt.x+e.ux*offL,tgt.y+e.uy*offL,11.2,true);
               return;
             }
@@ -337,17 +339,17 @@ class Match {
         }
         const open=pressure>60, smothered=pressure<32;
         const shotChance=0.025*(0.5+1.0*RK)*(open?1.5:smothered?0.55:1.0);
-        if(dGoal<(150+50*RK)&&Math.random()<shotChance*dt*60){
+        if(dGoal<(150+50*RK)&&RNG()<shotChance*dt*60){
           this.m2.shotD=this.m2.shotD||[]; this.m2.shotD.push(dGoal);
           let scatter=(open?0.55:smothered?1.5:1.0)*(0.6+0.8*RK);   // patience = precision
           // a bunkered box deflects and crowds every strike
           if(this.tac(this.targets[owner.team]).bunker>0.5) scatter*=1.35;
-          const off2=(Math.random()*2-1)*e.len*GOAL_HALF*scatter;
-          this.kick(tgt.x+e.ux*off2,tgt.y+e.uy*off2,9.5+Math.random()*1.5,true);
+          const off2=(RNG()*2-1)*e.len*GOAL_HALF*scatter;
+          this.kick(tgt.x+e.ux*off2,tgt.y+e.uy*off2,9.5+RNG()*1.5,true);
           return;
         }
       }
-      if(pressure<48&&Math.random()<(0.05+0.10*this.tac(owner.team).tempo)*dt*60){
+      if(pressure<48&&RNG()<(0.05+0.10*this.tac(owner.team).tempo)*dt*60){
         let best=null,bs=-1e9;
         const AW=this.o.ally;   // {base, press, solo} penalties, or null = alliance passing off
         const allied=(a,b)=>a!==b&&this.targets[a]!==null&&this.targets[a]===this.targets[b]
@@ -381,7 +383,7 @@ class Match {
               const blockR=(30-12*this.tac(owner.team).risk)+5*(this.tac(o.team).press-0.5)*2;
               if(Math.hypot(o.x-lx,o.y-ly)<blockR)laneOk=false;}
           });
-          let s=gain*(0.6+0.8*DIR)+schemeBonus+openBonus*(1.4-0.8*DIR)+(laneOk?0:-500)+Math.random()*30;
+          let s=gain*(0.6+0.8*DIR)+schemeBonus+openBonus*(1.4-0.8*DIR)+(laneOk?0:-500)+RNG()*30;
           if(allyOk){
             const fl=t2=>P.filter(q2=>q2.team===t2&&!q2.out&&q2.role!=="K").length;
             const foe=this.targets[owner.team];
@@ -419,14 +421,15 @@ class Match {
         if(dist(o,owner)>=28)continue;
         const T=this.tac(o.team);
         const inBox=dist(owner,goalCenter(o.team))<110;
-        const fc=0.0022*(T.aggF||1)*(0.4+1.2*T.press)*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
-        if(Math.random()<fc*dt*60){
+        const cc2=this.o.coalition&&this.HA&&this.HA[o.team]?0.7:1;
+        const fc=0.0022*(T.aggF||1)*(0.4+1.2*T.press*cc2)*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
+        if(RNG()<fc*dt*60){
           this.m2.fouls++;
           const ownGoal=goalCenter(o.team);
           if(dist(owner,ownGoal)<110){
             // PENALTY: fouled in the box — spot kick
             this.m2.pens++;
-            if(Math.random()<0.72){
+            if(RNG()<0.72){
               this.m2.penGoals++;
               b.owner=null;b.lastTouch=owner.team;b.lastKicker=owner;
               this.goal(o.team);
@@ -451,7 +454,7 @@ class Match {
         tc*=(0.55+0.45*o.stamina);
         tc*=(1.35-0.5*owner.stamina);
         if(this.clock<this.boostUntil[o.team])tc*=1.3;
-        if(dist(o,owner)<tackleR&&Math.random()<tc*dt*60){
+        if(dist(o,owner)<tackleR&&RNG()<tc*dt*60){
           const victim=owner;
           b.owner=o;b.lastTouch=o.team;b.isShot=false;
           if(o.role!=="K"){this.m.tackles++;}
@@ -466,7 +469,10 @@ class Match {
     P.forEach(p=>{
       p.x+=p.vx*S;p.y+=p.vy*S;this.clampIn(p,p.role==="K"?12:14);
       const v=Math.hypot(p.vx,p.vy),eff=v/2.35;
-      p.stamina-=eff*eff*0.0012*S*(0.85+0.5*this.tac(p.team).press);
+      {
+        const cc=this.o.coalition&&this.HA&&this.HA[p.team]?0.7:1;
+        p.stamina-=eff*eff*0.0012*S*(0.85+0.5*this.tac(p.team).press*cc);
+      }
       p.stamina+=0.0004*S;
       p.stamina=Math.max(0,Math.min(1,p.stamina));
     });
@@ -532,12 +538,12 @@ class Match {
           if(near.length>=2&&teams.size>=2&&this.o.aerial){
             this.m2.headers++;
             let win=null,wt=0;
-            near.forEach(p=>{const w=(1/(dist(p,b)+8))*(0.6+0.8*Math.random());if(w>wt){wt=w;win=p;}});
+            near.forEach(p=>{const w=(1/(dist(p,b)+8))*(0.6+0.8*RNG());if(w>wt){wt=w;win=p;}});
             const tgt2=goalCenter(this.targets[win.team]);
             b.lastTouch=win.team;b.lastKicker=win;
             if(dist(b,tgt2)<160&&win.role!=="K"){
               const e2=EDGES[GOAL_EDGE[this.targets[win.team]]];
-              const off2=(Math.random()*2-1)*e2.len*GOAL_HALF*1.35;
+              const off2=(RNG()*2-1)*e2.len*GOAL_HALF*1.35;
               const ddx=tgt2.x+e2.ux*off2-b.x,ddy=tgt2.y+e2.uy*off2-b.y,dl2=Math.hypot(ddx,ddy)||1;
               b.vx=ddx/dl2*8.5;b.vy=ddy/dl2*8.5;b.isShot=true;this.m.shots++;
             } else {
@@ -564,19 +570,19 @@ class Match {
         if(kicker&&best.team===kicker.team&&best.role!=="K"){
           const tgt2=goalCenter(this.targets[best.team]);
           let pr=1e9;P.forEach(o=>{if(o.team!==best.team){const d2=dist(o,best);if(d2<pr)pr=d2;}});
-          if(dist(best,tgt2)<175&&pr>55&&Math.random()<0.5){
+          if(dist(best,tgt2)<175&&pr>55&&RNG()<0.5){
             const e2=EDGES[GOAL_EDGE[this.targets[best.team]]];
-            const off2=(Math.random()*2-1)*e2.len*GOAL_HALF*0.5;
-            this.kick(tgt2.x+e2.ux*off2,tgt2.y+e2.uy*off2,9.5+Math.random()*1.5,true);
+            const off2=(RNG()*2-1)*e2.len*GOAL_HALF*0.5;
+            this.kick(tgt2.x+e2.ux*off2,tgt2.y+e2.uy*off2,9.5+RNG()*1.5,true);
           }
         }
         if(wasShot&&best.role==="K"&&kicker&&best.team!==kicker.team&&spd>5){
           this.m.saves++;this.stam(best,+0.12);this.stam(kicker,-0.05);
-          if(this.o.parries&&spd>8.5&&Math.random()<0.4){
+          if(this.o.parries&&spd>8.5&&RNG()<0.4){
             // parried! pushed wide, not held
             this.m2.parries=(this.m2.parries||0)+1;
             const e2=EDGES[GOAL_EDGE[best.team]];
-            const lat=Math.random()<0.5?1:-1;
+            const lat=RNG()<0.5?1:-1;
             b.owner=null; b.lastTouch=best.team; b.lastKicker=best;
             b.vx=(e2.ux*lat*1.0-e2.nx*0.28)*spd*0.5;
             b.vy=(e2.uy*lat*1.0-e2.ny*0.28)*spd*0.5;
@@ -620,7 +626,7 @@ class Match {
                     taker.x=vtx.x+e.nx*14; taker.y=vtx.y+e.ny*14;
                     b.owner=taker; b.lastTouch=att; b.x=taker.x; b.y=taker.y;
                     const g=goalCenter(ownerT);
-                    const off=(Math.random()*2-1)*e.len*GOAL_HALF*0.7;
+                    const off=(RNG()*2-1)*e.len*GOAL_HALF*0.7;
                     const txc=g.x+e.ux*off+e.nx*44, tyc=g.y+e.uy*off+e.ny*44;
                     const dd=Math.hypot(txc-b.x,tyc-b.y)||1;
                     b.vx=(txc-b.x)/dd*6.8; b.vy=(tyc-b.y)/dd*6.8;
@@ -770,6 +776,11 @@ if(process.env.ZONE==="1"){
   }
   process.exit(0);
 }
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296;}}
+let RNG=Math.random;
+function setSeed(x){RNG=mulberry32(x>>>0);}
 const NATIONS={
   ESP:{atk:"TikiTaka",def:"Gegenpress",agg:"Clean"},
   ARG:{atk:"Probe",def:"Trap",agg:"Nasty"},
@@ -796,6 +807,44 @@ function natMatch(flags){
     oob:true,disc:true,restarts:true,parries:true,ally:{},teamFlags:flags});
 }
 if(process.env.POWER==="1"){
+  const N2=parseInt(process.env.N||"20");
+  const groupCsv=(process.env.GROUP||"").split(",").filter(x=>NATIONS[x]);
+  const coal=process.env.COAL==="1";
+  groupCsv.forEach(nm=>{
+    let pts=0,gf=0,ga=0,wins=0;
+    for(let i=0;i<N2;i++){
+      setSeed(90000+i*131);
+      const slot=i%3;
+      const flags=[BALREF,BALREF,BALREF]; flags[slot]=natTac(nm);
+      const m=natMatch(flags); m.o.coalition=coal; m.run();
+      pts+=m.score[slot]; gf+=m.scored[slot]; ga+=m.conceded[slot];
+      const mx=Math.max(...m.score);
+      if(m.score[slot]===mx&&m.score.filter(x=>x===mx).length===1)wins++;
+    }
+    console.log(JSON.stringify({nation:nm,coal,n:N2,pts:+(pts/N2).toFixed(2),
+      gf:+(gf/N2).toFixed(1),ga:+(ga/N2).toFixed(1),winPct:+(wins/N2*100).toFixed(0)}));
+  });
+  process.exit(0);
+}
+if(process.env.AGGAB==="1"){
+  ["Clean","Firm","Nasty","Filthy"].forEach(a=>{
+    const N2=16; let pts=0,wins=0,gf=0,ga=0;
+    for(let i=0;i<N2;i++){
+      setSeed(70000+i*97);
+      const slot=i%3;
+      const flags=[BALREF,BALREF,BALREF];
+      flags[slot]={tac:{tempo:.5,risk:.5,direct:.5,line:.5,press:.5,bunker:0,...N_AGG[a]}};
+      const m=natMatch(flags); m.run();
+      pts+=m.score[slot]; gf+=m.scored[slot]; ga+=m.conceded[slot];
+      const mx=Math.max(...m.score);
+      if(m.score[slot]===mx&&m.score.filter(x=>x===mx).length===1)wins++;
+    }
+    console.log(JSON.stringify({agg:a,pts:+(pts/16).toFixed(2),gf:+(gf/16).toFixed(1),
+      ga:+(ga/16).toFixed(1),winPct:+(wins/16*100).toFixed(0)}));
+  });
+  process.exit(0);
+}
+if(false){
   const names=Object.keys(NATIONS);
   const group=process.env.GROUP==="B"?names.slice(6):names.slice(0,6);
   group.forEach(n=>{

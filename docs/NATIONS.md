@@ -79,3 +79,51 @@ tactical decision of the match.
 
 *Caveats: n=8 per cell; aggression newly ported to the lab; the live game adds human
 coaching and scoreboard-priced alliances on top of everything measured here.*
+
+---
+# Addendum: The Rigorous Edition (seeded, rotated, n=20)
+
+The follow-up study upgraded the method: **seeded RNG with paired streams** (every
+nation faces the identical random universe per match index), **slot rotation**
+(featured nation cycles all three positions), n=20. Proof the pairing works:
+identical-identity nations now post IDENTICAL results (FRA=POR, GER=USA, ESP=JPN to
+the decimal) — within-style variance eliminated; differences are signal. Bonus
+evidence for the noise thesis: three independent n=8 replicates of the old method
+crowned three different champions (England, then Argentina, then Germany).
+
+## Power table v2 (by style, vs neutral field)
+| Style | Nations | Pts | Win% |
+|---|---|---|---|
+| Swash·Balanced | BRA | **+0.65** | 45% |
+| Swash·Trap | FRA, POR | +0.15 | 50% |
+| Balanced·Gegen | GER, USA | −0.45 | 25% |
+| Route1·Balanced | ENG | −0.75 | 25% |
+| Tiki·Trap | MEX | −0.85 | 25% |
+| Tiki·Gegen | ESP, JPN, NED | −0.95..−1.10 | 20% |
+| Probe·Bus | ITA | −1.30 (0.9 GF!) | 15% |
+| Probe·Trap | ARG | −1.40 | 20% |
+
+Revisions to v1: **Swashbuckle, not Route One, rules the neutral field** (England's
+crown was noise); Italy's bus barely scores against balanced opposition — its derby
+dominance is pure matchup craft; the pressing tax is real but milder than v1 implied.
+
+## Experiment: aggression, isolated (paired seeds, n=16)
+Clean, Firm, and Nasty all score **exactly −0.75 pts** — the tackle bite pays the foul
+bill to the decimal. **Filthy costs −0.56 pts**: a genuine self-tax. Verdict: the
+aggression economy is fairly priced; Filthy remains the coach's dare, as designed.
+No rebalance.
+
+## Experiment: coalition pressing (SHIPPED)
+*Mechanic:* when a team shares its hunt target with an ally, its pressing bill
+(stamina surcharge + press-driven fouls) is scaled ×0.7 — allied presses share
+coverage. *Paired deltas vs baseline:* ESP **+0.90**, JPN **+0.90** (both −1.10 →
+−0.20, wins 20%→40%), GER +0.20, NED +0.25. The pressing cluster becomes competitive
+without flattening the table (Brazil stays top; the matchup teams stay matchup teams).
+Very Jorn: cooperation literally makes the press affordable. **Live in the game.**
+
+## Signature nudges (SHIPPED)
+Identity twins gained small dial accents, active only while playing their national
+identity (coach overrides untouched): Japan tempo .95 (the fastest touches), the
+Netherlands line .9 (the highest line), France line .28 (the deepest trap), Portugal
+risk 1.0 (maximum artillery), USA direct .65 (the grit ball). Picker stat bars derive
+from bundles, so the UI stays honest automatically.
