@@ -519,7 +519,7 @@ function computeTargets(){
         say(pick([
           `${tm(a2)} and ${tm(b2)} turn on EACH OTHER — no more pretending!`,
           `It's personal now: ${tm(a2)} and ${tm(b2)} set their sights on each other.`,
-          `The hex delivers a grudge match — ${tm(a2)} and ${tm(b2)}, eye to eye.`]),true);
+          `The hex delivers a grudge match — ${tm(a2)} and ${tm(b2)}, eye to eye.`]),true,"lowvoice");
       }
     for(let t=0;t<3;t++) if(changed(t)&&!mutualDone[t])
     say(pick([
@@ -530,7 +530,7 @@ function computeTargets(){
       `${tm(t)} have seen enough of ${tm(targets[t])}'s lead. Here they come.`,
       `Friendship over — ${tm(t)} set their sights on ${tm(targets[t])}.`,
       `The hex has no loyalty: ${tm(t)} pivot onto ${tm(targets[t])}.`,
-      `${tm(t)} redraw the map. ${tm(targets[t])} are the enemy now.`]),true);
+      `${tm(t)} redraw the map. ${tm(targets[t])} are the enemy now.`]),true,"lowvoice");
   }
   renderScore();
 }
@@ -1857,7 +1857,9 @@ function speak(html,prio){
       u.rate=isGoalCall?0.98:1.12; u.pitch=isGoalCall?1.06:1;   // the goal call slows and rises
       u.onend=u.onerror=()=>{
         queuedUtter=Math.max(0,queuedUtter-1); speakStartedAt=performance.now(); speakingPrio=null;
-        if(highQ.length){                        // drain the big calls IN ORDER
+        if(highQ.length&&!pendingHighFire){      // drain IN ORDER — but a waiting deferred call goes first
+                                                 // (Android fires onend for CANCELLED utterances; without this
+                                                 //  guard the ghost drains the queue ahead of the goal)
           const nxt=highQ.shift();
           highLockUntil=performance.now()+2000;
           setTimeout(()=>{ try{
@@ -1938,6 +1940,8 @@ function colorNames(html){
 }
 function say(html,force,voice){
   html=colorNames(html);
+  const lowVoice=(voice==="lowvoice");   // prominent in the feed, humble on the mic
+  if(lowVoice) voice=true;
   // Low-priority chatter is dropped if the booth spoke in the last 3 seconds.
   if(!force && clockSec-lastSayAt<2) return;
   lastSayAt=clockSec;
@@ -1947,7 +1951,7 @@ function say(html,force,voice){
   if(feed.length>40)feed.pop();
   feedEl.innerHTML=feed.join("");
   const wantVoice=((voice===undefined)?true:voice)&&matchLive;   // the booth is silent between matches
-  if(wantVoice) speak(html, force?"high":"low");
+  if(wantVoice) speak(html, (force&&!lowVoice)?"high":"low");
 }
 
 // ---------- SVG ----------
