@@ -440,7 +440,7 @@ function resetMatch(){
   }
   menuTeam=null; document.getElementById("coachMenu")?.classList.remove("show");
   stats={shots:[0,0,0],saves:[0,0,0],tackles:[0,0,0],poss:[0,0,0]};
-  goalsLog=[]; goldenScorer=null; refreshNameColors();
+  goalsLog=[]; goldenScorer=null; refreshNameColors(); matchLog=[];
   goalEls.forEach(g=>g&&g.setAttribute("opacity",1));
   drawBoards();   // fresh sponsors every match
   suppress=null; pendingPenalty=null; penaltyShooter=null; penaltyGoalTeam=null;
@@ -495,7 +495,18 @@ function computeTargets(){
     others.sort((a,b)=>(rating(b)-rating(a))||(conceded[a]-conceded[b]));
     targets[t]=others[0];
   }
-  if(old){ for(let t=0;t<3;t++) if(targets[t]!==null&&old[t]!==targets[t]&&old[t]!==undefined&&!coached[t])
+  if(old){
+    const changed=t=>targets[t]!==null&&old[t]!==targets[t]&&old[t]!==undefined&&!coached[t];
+    const mutualDone=[false,false,false];
+    for(let a2=0;a2<3;a2++) for(let b2=a2+1;b2<3;b2++)
+      if(changed(a2)&&changed(b2)&&targets[a2]===b2&&targets[b2]===a2){
+        mutualDone[a2]=mutualDone[b2]=true;
+        say(pick([
+          `${tm(a2)} and ${tm(b2)} turn on EACH OTHER — no more pretending!`,
+          `It's personal now: ${tm(a2)} and ${tm(b2)} set their sights on each other.`,
+          `The hex delivers a grudge match — ${tm(a2)} and ${tm(b2)}, eye to eye.`]),true);
+      }
+    for(let t=0;t<3;t++) if(changed(t)&&!mutualDone[t])
     say(pick([
       `Tactical switch — ${tm(t)} turn their guns on ${tm(targets[t])}!`,
       `The alliance shifts: ${tm(t)} now hunting ${tm(targets[t])}.`,
@@ -1327,8 +1338,41 @@ function eliminateTeam(t){
   players.forEach(p=>{ if(p.team===t){ p.out=true; if(ball.owner===p) ball.owner=null; }});
   if(ball.lastKicker&&ball.lastKicker.out) ball.isShot=false;
 }
+function buildMatchReport(){
+  const totPoss=stats.poss.reduce((a,b)=>a+b,0)||1;
+  const idOf=t=>`${teamATK[t]} · ${teamDEF[t]} · ${teamAGG[t]}`;
+  let md=`# Three-Sided World Cup — Match Report\n\n`;
+  md+=`*${new Date().toLocaleString()}*\n\n`;
+  md+=`## Lineup\n\n`;
+  for(let t=0;t<3;t++)
+    md+=`- **${TEAMS[t].name}** (${TEAMS[t].short}) — ${idOf(t)} — ⭐ ${TEAMS[t].star}\n`;
+  if(champInfo) md+=`\n## 🏆 ${TEAMS[champInfo.t].name} are champions — ${champInfo.how}\n`;
+  md+=`\n## Final\n\n| Team | Pts | G | Sv | Tk | Poss |\n|---|---|---|---|---|---|\n`;
+  for(const m of [0,1,2].sort(rankCmp))
+    md+=`| ${TEAMS[m].short} | ${score[m]>0?"+":""}${score[m]} | ${scored[m]} | ${stats.saves[m]} | ${stats.tackles[m]} | ${Math.round(100*stats.poss[m]/totPoss)}% |\n`;
+  md+=`\n## Goals\n\n`;
+  if(!goalsLog.length) md+=`None. A siege.\n`;
+  goalsLog.forEach(g=>{
+    const mm2=String(Math.floor(g.t/60)).padStart(2,"0"), ss2=String(Math.floor(g.t%60)).padStart(2,"0");
+    md+=g.own?`- 😱 ${mm2}:${ss2} own goal — ${TEAMS[g.conceder].short}${g.ot?" (OT)":""}\n`
+      :`- ⚽ ${mm2}:${ss2} ${g.name} (${TEAMS[g.scorer].short}) v ${TEAMS[g.conceder].short}${g.ot?" (OT)":""}\n`;
+  });
+  md+=`\n## Full play-by-play\n\n`+matchLog.map(l=>`- ${l}`).join("\n")+"\n";
+  return md;
+}
+function downloadReport(){
+  const md=buildMatchReport();
+  const blob=new Blob([md],{type:"text/markdown"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  const names=[0,1,2].map(t=>TEAMS[t].short).join("-");
+  a.download=`match-report-${names}.md`;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
 function crownChampion(t,how){
   phase="over";
+  champInfo={t,how};
   const order=[0,1,2].sort(rankCmp);
   const line=m=>scoreMode==="conceded"
     ?`${TEAMS[m].short} ${conceded[m]}`
@@ -1365,7 +1409,8 @@ function crownChampion(t,how){
     <div class="who">${tm(t)} take the title</div>
     <div class="sub">${order.map(line).join(" · ")}${how?" — "+how:""}</div>
     ${grid}${hl}${potmLine}
-    <button id="btnRematch">Rematch</button>`;
+    <button id="btnRematch">Rematch</button>
+    <button id="btnReport" style="margin-left:.4rem">📄 Match report</button>`;
   confettiBox.innerHTML="";
   const palette=[TEAMS[t].color,"#ffd166","#ffffff"];
   for(let i=0;i<28;i++){
@@ -1377,6 +1422,7 @@ function crownChampion(t,how){
   celeEl.classList.add("show");
   celebrateUntil=Infinity; pendingKickoff=null;
   document.getElementById("btnRematch").onclick=()=>{ hideCelebration(); showSetup(); };
+  const br=document.getElementById("btnReport"); if(br) br.onclick=downloadReport;
 }
 function resolveFullTime(){
   // rank by mode metric, tiebreak on goals scored (FIFA-style)
@@ -1556,7 +1602,7 @@ function speak(html){
 }
 
 let lastSayAt=-99;
-let NAME_COL=null;
+let NAME_COL=null, matchLog=[], champInfo=null;
 function refreshNameColors(){
   NAME_COL=players.map(p=>[p.name,TEAMS[p.team].color])
     .sort((a,b)=>b[0].length-a[0].length);
@@ -1574,6 +1620,7 @@ function say(html,force,voice){
   lastSayAt=clockSec;
   const mm=String(Math.floor(clockSec/60)).padStart(2,"0"), ss=String(Math.floor(clockSec%60)).padStart(2,"0");
   feed.unshift(`<div><span class="t">${mm}:${ss}</span>${html}</div>`);
+  matchLog.push(`**${mm}:${ss}** ${html.replace(/<[^>]*>/g,"")}`);
   if(feed.length>40)feed.pop();
   feedEl.innerHTML=feed.join("");
   if(voice===undefined?force:voice) speak(html);
