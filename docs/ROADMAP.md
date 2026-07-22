@@ -255,3 +255,20 @@ the field — territory profit even on losses. Goals 2.95/min (top of healthy).
 Journey: naive punts hit 11.5/min at 21% (possession donation); fixed via
 distance-scaled power, cadence gating, outlet damping (goals had spiked to 4.2),
 and openness-scored targets. gk-study.js committed as the measurement harness.
+
+**Set-piece choreography study (real-engine, 10–12 match batches):**
+Coached positioning now begins the moment a restart is called: throw-in receiving
+lanes (staggered infield), coached marking of lane runners (shadow the passing
+line, stand-off ring respected), corner box-flooding by the attacking team,
+near-zone packing by the conceding team, and — the three-sided twist — the third
+team reads its alliance: allied → joins the attack (deep outlets at throws,
+second wave at corners); hostile → counter stations at midfield. Measured at
+delivery: attackers-in-box 1.37→2.0 (hustle 1.75 + corner hold 2.9s), defenders
+2.0, ALLIED THIRD-TEAM BODIES 1.94 when alliances active — coalition corners are
+sieges. Far-post deliveries 45%-dialed (~55–63% measured after fallback deliveries
+vanished), each with a chance of Coach Eric's "FAR POST!" carrying across the
+pitch. Delivery softened (6.8 pw, 2.8 zv) after the buffed flood pushed goals to
+3.48; settled at 3.05/min with corners as a legitimate weapon. Keeper suite
+stayed stable throughout (rolls ~100% forward, scrum ≤0.29). Harness fixes en
+route: __forceRules() headless port (stub checkboxes read falsy → oobRule was
+off, zero restarts), and a NaN aggregation bug that hid all new counters.

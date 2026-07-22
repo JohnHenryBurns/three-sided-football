@@ -630,7 +630,7 @@ function think(dt){
       const R=pendingRestart;
       if(p===R.p){
         steer(p,R.x,R.y,2.6);
-        if(dist(p,{x:R.x,y:R.y})<10||performance.now()>R.cap){
+        if((dist(p,{x:R.x,y:R.y})<10&&performance.now()>(R.readyAt||0))||performance.now()>R.cap){
           p.x=R.x; p.y=R.y; p.vx=0; p.vy=0;
           ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.touchT=0.4;
           restartHold=performance.now()+(cornerTaker===p?500:260);
@@ -664,15 +664,66 @@ function think(dt){
     if(holdActive){
       const rx=pendingRestart?pendingRestart.x:ball.x, ry=pendingRestart?pendingRestart.y:ball.y;
       const rteam=pendingRestart?pendingRestart.team:(ball.owner?ball.owner.team:-1);
+      GKSTAT.holdEnter=(GKSTAT.holdEnter||0)+1;
       const isThrow=pendingRestart&&pendingRestart.p&&pendingRestart.p!==cornerTaker&&pendingRestart.p.role!=="K";
+      if(isThrow)GKSTAT.isThrowFrames=(GKSTAT.isThrowFrames||0)+1;
+      const isCorner=cornerTaker&&pendingRestart&&pendingRestart.p===cornerTaker;
       if(isThrow&&p.team===rteam&&p!==pendingRestart.p&&p.role!=="K"){
         // receiving lanes: staggered infield options, not a shuffle on the line
         const inx=CX-rx, iny=CY-ry, il=Math.hypot(inx,iny)||1;
         const nix=inx/il, niy=iny/il, pux=-niy, puy=nix;
+        GKSTAT.laneSteer=(GKSTAT.laneSteer||0)+1;
         const lat2=((p.k1*997)%1-0.5)*260;
         const dep2=70+((p.k2*613)%1)*95;
         steer(p, rx+nix*dep2+pux*lat2, ry+niy*dep2+puy*lat2, 1.35);
         return;
+      }
+      if(isThrow&&p.team!==rteam&&p.role!=="K"&&allied(p.team,rteam)){
+        // allied third team: deep supplementary outlets across battle lines
+        const inx=CX-rx, iny=CY-ry, il=Math.hypot(inx,iny)||1;
+        const nix=inx/il, niy=iny/il, pux=-niy, puy=nix;
+        const lat5=((p.k1*733)%1-0.5)*330;
+        const dep5=140+((p.k2*541)%1)*90;
+        steer(p, rx+nix*dep5+pux*lat5, ry+niy*dep5+puy*lat5, 1.15);
+        return;
+      }
+      if(isThrow&&p.team!==rteam&&p.role!=="K"){
+        // coached marking: pick a lane runner and shadow the passing line
+        const recs=players.filter(m=>m.team===rteam&&m!==pendingRestart.p&&!m.out&&!m.sentOff&&m.role!=="K");
+        if(recs.length){
+          const r2=recs[Math.floor(((p.k1*769)%1)*recs.length)%recs.length];
+          const dx4=rx-r2.x, dy4=ry-r2.y, dl4=Math.hypot(dx4,dy4)||1;
+          let mx=r2.x+dx4/dl4*26, my=r2.y+dy4/dl4*26;
+          const dspot=Math.hypot(mx-rx,my-ry);
+          if(dspot<54){ mx=rx+(mx-rx)/dspot*54; my=ry+(my-ry)/dspot*54; }   // ring respected
+          steer(p,mx,my,1.25); return;
+        }
+      }
+      if(isCorner&&p!==cornerTaker&&p.role!=="K"){
+        const g4=goalCenter(cornerGoal), e4=EDGES[GOAL_EDGE[cornerGoal]];
+        const u4x=-e4.ny, u4y=e4.nx;
+        if(p.team===rteam){
+          // attackers flood the mouth: big bodies forward, staggered slots
+          const lat4=((p.k1*883)%1-0.5)*e4.len*GOAL_HALF*1.5;
+          const dep4=30+((p.k2*577)%1)*42;
+          steer(p, g4.x+e4.nx*dep4+u4x*lat4, g4.y+e4.ny*dep4+u4y*lat4, 1.75); return;
+        }
+        if(p.team===cornerGoal){
+          // defenders pack the near zone, goal-side of the flood
+          const lat4=((p.k1*883)%1-0.5)*e4.len*GOAL_HALF*1.2;
+          const dep4=16+((p.k2*577)%1)*18;
+          steer(p, g4.x+e4.nx*dep4+u4x*lat4, g4.y+e4.ny*dep4+u4y*lat4, 1.45); return;
+        }
+        if(allied(p.team,rteam)){
+          // allied third team: second wave at the edge of the mix
+          const lat4=((p.k1*733)%1-0.5)*e4.len*GOAL_HALF*1.9;
+          const dep4=62+((p.k2*541)%1)*40;
+          GKSTAT.allySiege=(GKSTAT.allySiege||0)+1;
+          steer(p, g4.x+e4.nx*dep4+u4x*lat4, g4.y+e4.ny*dep4+u4y*lat4, 1.2); return;
+        }
+        // third team: counter stations near midfield — vultures with patience
+        const og4=goalCenter(p.team);
+        steer(p, og4.x+(CX-og4.x)*0.85, og4.y+(CY-og4.y)*0.85, 1.0); return;
       }
       if(p.team!==rteam){
         const dd2=Math.hypot(p.x-rx,p.y-ry);
@@ -793,10 +844,26 @@ function think(dt){
     if(cornerTaker===owner){
       cornerTaker=null;
       const e2=EDGES[GOAL_EDGE[cornerGoal]], g=goalCenter(cornerGoal);
-      const off2=(Math.random()*2-1)*e2.len*GOAL_HALF*0.7;
+      GKSTAT.cornerDel=(GKSTAT.cornerDel||0)+1;
+      players.forEach(q=>{ if(q.out||q.sentOff||q.role==="K")return;
+        const dg=dist(q,g);
+        if(q.team===owner.team&&dg<150)GKSTAT.cornerAtk=(GKSTAT.cornerAtk||0)+1;
+        if(q.team===cornerGoal&&dg<110)GKSTAT.cornerDef=(GKSTAT.cornerDef||0)+1;
+        if(q.team!==owner.team&&q.team!==cornerGoal&&allied(q.team,owner.team)&&dg<170)GKSTAT.cornerAllyIn=(GKSTAT.cornerAllyIn||0)+1; });
+      const nearSign=Math.sign((owner.x-g.x)*e2.ux+(owner.y-g.y)*e2.uy)||1;
+      const farPost=Math.random()<0.45;
+      const off2=farPost
+        ? -nearSign*e2.len*GOAL_HALF*(0.5+Math.random()*0.25)   // whipped to the FAR stick
+        : (Math.random()*2-1)*e2.len*GOAL_HALF*0.7;
       const txc=g.x+e2.ux*off2+e2.nx*44, tyc=g.y+e2.uy*off2+e2.ny*44;
-      kick(txc,tyc,7.2,false);
-      ball.zv=3.0;                       // it swings in high, whatever the distance
+      kick(txc,tyc,6.8,false);
+      ball.zv=2.8;                       // it swings in high, whatever the distance
+      if(farPost){ GKSTAT.farPost=(GKSTAT.farPost||0)+1;
+        if(Math.random()<0.6) say(pick([
+          `Coach Eric's voice carries clear across the pitch: FAR POST! FAR POST!`,
+          `You can hear Coach Eric from here — "FAR POST!" — and the ball obeys.`,
+          `Far post, just like Coach Eric drills it at 91 Bulldogs practice.`]),true,"lowvoice");
+      }
       cornerGoal=null;
       return;
     }
@@ -1316,7 +1383,9 @@ let stoppageLen=0, stoppageAnnounced=false, zoneRule=true, foulMult=1;
 let oobRule=true, cornerTaker=null, cornerGoal=null, restartHold=0, pendingRestart=null, throwPending=null;
 let gkHoldUntil=-1, gkHolder=null;
 const GKSTAT={holds:0,sweepSec:0,punts:0,puntSame:0,puntSeen:0,rolls:0,rollsFwd:0,scrumSamples:0,scrumOpp:0};
-function __probe(){ return {GK:GKSTAT, scored:scored?scored.slice():[0,0,0], clockSec}; }   // headless measurement port
+function __forceRules(v){ if(v&&("oob" in v))oobRule=!!v.oob; if(v&&("zone" in v))zoneRule=!!v.zone; }   // headless rules port
+function __probe(){ return {GK:GKSTAT, scored:scored?scored.slice():[0,0,0], clockSec,
+  EDGES, GOAL_EDGE, players, ball, oob:oobRule, pendingRestart, cornerTaker}; }   // headless measurement port
 const gkHolding=()=>ball.owner&&ball.owner===gkHolder&&clockSec<gkHoldUntil;
 let camFocusP=null, camFocusUntil=0, walkOff=null, walkPending=null;
 function addStoppage(sec){ stoppageLen=Math.min(Math.min(65,matchLen*0.30), stoppageLen+sec); }
@@ -2519,14 +2588,15 @@ function outOfBounds(k,e){
     else stageThrowIn(toucher,e,ex,ey);
   } else stageThrowIn(toucher,e,ex,ey);
 }
-function stageThrowIn(toucher,e,ex,ey){
+function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)+1;
+  restartHold=Math.max(restartHold,performance.now()+2400);   // staging owns its hold
   const sx=ex+e.nx*6, sy=ey+e.ny*6;   // he throws FROM the line, not from midfield
   const cands=players.filter(q=>q.team!==toucher&&q.role!=="K"&&!q.out&&!q.sentOff)
     .sort((a,b)=>dist(a,{x:sx,y:sy})-dist(b,{x:sx,y:sy}));
   const thr=cands[0];
   if(!thr){ ball.x=CX; ball.y=CY; return; }
   ball.owner=null; ball.x=sx; ball.y=sy;
-  pendingRestart={p:thr, x:sx, y:sy, team:thr.team, cap:performance.now()+2000};
+  pendingRestart={p:thr, x:sx, y:sy, team:thr.team, cap:performance.now()+2000, readyAt:performance.now()+1100};
   suppress={team:toucher,until:clockSec+0.8};
   spawnNote(sx,sy-24,"throw-in!",TEAMS[thr.team].color,TEAMS[thr.team].accent);
   if(Math.random()<0.4) say(pick([
@@ -2550,6 +2620,7 @@ function stageGoalKick(t){
   restartHold=performance.now()+650;
 }
 function stageCorner(ownerT,e,ex,ey){
+  restartHold=Math.max(restartHold,performance.now()+2400);   // staging owns its hold
   const alive=[0,1,2].filter(x=>x!==ownerT&&!out[x]);
   const att=alive.find(x=>targets[x]===ownerT)??alive[0];
   if(att===undefined){ ball.x=CX; ball.y=CY; return; }
@@ -2559,8 +2630,9 @@ function stageCorner(ownerT,e,ex,ey){
   if(!taker){ stageGoalKick(ownerT); return; }
   const cx2=vtx.x+e.nx*14, cy2=vtx.y+e.ny*14;
   ball.owner=null; ball.x=cx2; ball.y=cy2;
-  pendingRestart={p:taker, x:cx2, y:cy2, team:att, cap:performance.now()+2400};
+  pendingRestart={p:taker, x:cx2, y:cy2, team:att, cap:performance.now()+2400, readyAt:performance.now()+1250};
   cornerTaker=taker; cornerGoal=ownerT;
+  restartHold=Math.max(restartHold,performance.now()+2900);   // corners earn a longer ceremony — let the box fill GKSTAT.cornerStage=(GKSTAT.cornerStage||0)+1;
   spawnNote(taker.x,taker.y-26,"corner!",TEAMS[att].color,TEAMS[att].accent);
   say(pick([
     `<b style="color:${TEAMS[att].color}">Corner to ${tm(att)}</b> — ${taker.name} to swing it in...`,
