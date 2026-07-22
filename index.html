@@ -636,6 +636,16 @@ function think(dt){
         return;
       }
     }
+    if(gkHolding()&&p.team===ball.owner.team&&p!==ball.owner&&p.role!=="K"){
+      // spread into outlet positions: the roll should never have to go backwards
+      const og3=goalCenter(p.team);
+      const ax=CX-og3.x, ay=CY-og3.y, al=Math.hypot(ax,ay)||1;
+      const ux3=ax/al, uy3=ay/al, px3=-uy3, py3=ux3;
+      const depth=(p.role==="D"?0.42:p.role==="M"?0.72:1.0);
+      const lat=((p.k1*997)%1-0.5)*300;
+      steer(p, og3.x+ux3*al*depth+px3*lat, og3.y+uy3*al*depth+py3*lat, 1.25);
+      return;
+    }
     if(gkHolding()&&p.team!==ball.owner.team&&p.role!=="K"){
       const dd3=dist(p,ball.owner);
       if(dd3<64){
@@ -650,6 +660,16 @@ function think(dt){
     if(holdActive){
       const rx=pendingRestart?pendingRestart.x:ball.x, ry=pendingRestart?pendingRestart.y:ball.y;
       const rteam=pendingRestart?pendingRestart.team:(ball.owner?ball.owner.team:-1);
+      const isThrow=pendingRestart&&pendingRestart.p&&pendingRestart.p!==cornerTaker&&pendingRestart.p.role!=="K";
+      if(isThrow&&p.team===rteam&&p!==pendingRestart.p&&p.role!=="K"){
+        // receiving lanes: staggered infield options, not a shuffle on the line
+        const inx=CX-rx, iny=CY-ry, il=Math.hypot(inx,iny)||1;
+        const nix=inx/il, niy=iny/il, pux=-niy, puy=nix;
+        const lat2=((p.k1*997)%1-0.5)*260;
+        const dep2=70+((p.k2*613)%1)*95;
+        steer(p, rx+nix*dep2+pux*lat2, ry+niy*dep2+puy*lat2, 1.35);
+        return;
+      }
       if(p.team!==rteam){
         const dd2=Math.hypot(p.x-rx,p.y-ry);
         if(dd2<46){
@@ -677,6 +697,15 @@ function think(dt){
       if(wd<wallR&&!inMouth){ const w=(wallR-wd)/wallR*wallW; dx+=we.nx*w; dy+=we.ny*w; }
       steer(p,p.x+dx*80,p.y+dy*80,2.05);
     } else if(p.role==="K"&&(FL[p.team]>0||dist(ball,goalCenter(p.team))<210)){
+      if(!ball.owner&&!holdActive){
+        const og2=goalCenter(p.team), bd2=dist(ball,og2);
+        if(bd2<190){
+          let oppNear=1e9;
+          players.forEach(q=>{ if(q.team!==p.team&&!q.out&&!q.sentOff&&q.role!=="K")
+            oppNear=Math.min(oppNear,dist(q,ball)); });
+          if(dist(p,ball)<oppNear-18||oppNear>120){ steer(p,ball.x,ball.y,1.5); return; }
+        }
+      }
       const e=EDGES[GOAL_EDGE[p.team]];
       let along=(ball.x-e.mx)*e.ux+(ball.y-e.my)*e.uy;
       const lim=e.len*GOAL_HALF*0.9; along=Math.max(-lim,Math.min(lim,along));
@@ -790,12 +819,14 @@ function think(dt){
       }
       gkHolder=null;
       // DISTRIBUTION: roll it short, or launch it across the county
-      let near=null,nd2=1e9, far=null,fd=-1;
+      let near=null,nd2=1e9, far=null,fd=-1, anyNear=null,anyD=1e9;
       players.forEach(m=>{ if(m.team!==owner.team||m===owner||m.out||m.sentOff||m.role==="K")return;
         const d=dist(m,owner);
-        if(d<nd2){nd2=d;near=m;}
         const adv2=dist(m,og);
+        if(adv2>dist(owner,og)+15){ if(d<nd2){nd2=d;near=m;} }   // forward outlets first
+        if(d<anyD){anyD=d;anyNear=m;}
         if(adv2>fd){fd=adv2;far=m;}});
+      if(!near){ near=anyNear; nd2=anyD; }                       // backwards only if truly alone
       const wantPunt=far&&(fd>320)&&(Math.random()<0.6||nd2>150);
       if(wantPunt){
         kick(far.x+far.vx*14, far.y+far.vy*14, 13.5, false);
