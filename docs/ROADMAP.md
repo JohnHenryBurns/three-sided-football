@@ -242,3 +242,16 @@ time; rate 1.77/match, 12.4% of ALL goals). Fix: the parry now aims past the NEA
 post (computed from the keeper's along-mouth offset) at higher speed. Result: OG
 0.07/match (0.5% of goals — football's natural rate), corners fully preserved at
 1.1/min, headers 0.72. One cause, one geometric fix, pipeline intact.
+
+**Keeper's-moment study (real-engine headless measurement, 12-match batches):**
+Instrumented the live game via a __probe() port and iterated four times. Final:
+holds ~30/min; sweeper activity ~9 s/min (keeper genuinely claims loose balls);
+**rolls 100% forward** (the backward roll is extinct — outlet spreading + forward-
+first selection); **scrum density during holds 0.15–0.22 opponents** (goalmouth
+pileups dissolved — the feature's primary goal); punts 5.5/min at distance-scaled
+power with space-aware targeting (deep AND alone). Punt retention 35%: in a
+three-team contest neutral parity is 33%, so launches beat parity WHILE flipping
+the field — territory profit even on losses. Goals 2.95/min (top of healthy).
+Journey: naive punts hit 11.5/min at 21% (possession donation); fixed via
+distance-scaled power, cadence gating, outlet damping (goals had spiked to 4.2),
+and openness-scored targets. gk-study.js committed as the measurement harness.
