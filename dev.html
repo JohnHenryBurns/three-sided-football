@@ -1230,15 +1230,31 @@ function think(dt){
           const leftTxt=left===1?`only the goalkeeper remains for ${tm(o.team)}!`:`${tm(o.team)} down to ${left} men.`;
           showNotice(col, card==="second"?"🟨🟥 SECOND YELLOW":"🟥 RED CARD",
             `${o.name} (${shortT})`,
-            `His crime: he ${off}.${penTag}<br>OFF! The walk of shame begins — ${leftTxt}`, 5200);
-          say(Math.random()<0.25
-            ?`🟥 <b>RED CARD!</b> ${o.name} is EXCOMMUNICADO — ${PRN(o).he} ${off}. No services, no help, and ${tm(o.team)} play a ${PRN(o).man} short!`
-            :`🟥 <b>RED CARD!</b> ${o.name} is off — ${PRN(o).he} ${off}. ${tm(o.team)} play on a ${PRN(o).man} short!`,true);
+            `${PRN(o).His} crime: ${PRN(o).he} ${off}.${penTag}<br>OFF! The walk of shame begins — ${leftTxt}`, 5200);
+          say(pick([
+            `🟥 <b>RED CARD!</b> ${o.name} is off — ${PRN(o).he} ${off}. ${tm(o.team)} play on a ${PRN(o).man} short!`,
+            `🟥 <b>RED CARD!</b> ${o.name} is EXCOMMUNICADO — ${PRN(o).he} ${off}. No services, no help, and ${tm(o.team)} play a ${PRN(o).man} short!`,
+            `🟥 <b>RED CARD!</b> Hasta la vista, ${o.name} — ${PRN(o).he} ${off}. ${PRN(o).He}'ll be back next match. ${tm(o.team)} a ${PRN(o).man} short!`,
+            `🟥 <b>RED CARD!</b> ${o.name}, that is a DIRECT violation — ${PRN(o).he} ${off}. ${PRN(o).He} has the right to remain benched.`,
+            `🟥 <b>RED CARD!</b> WITNESS ${o.name.toUpperCase()}! ${PRN(o).He} ${off}, and now rides shiny and chrome to the Valhalla of the bench!`,
+            `🟥 <b>RED CARD!</b> ${o.name} ${off}. "'Tis but a scratch," ${PRN(o).he} protests. The referee begs to differ — OFF!`,
+            `🟥 <b>RED CARD!</b> ${o.name} ${off}. As the family says: just do the next right thing. The next right thing is the bench.`,
+            `🟥 <b>RED CARD!</b> ${o.name} ${off} — and gets taken to the train station, hex edition. ${tm(o.team)} a ${PRN(o).man} short!`]),true);
         } else if(card==="yellow"){
           addStoppage(3);
           showNotice(col,"🟨 YELLOW CARD",`${o.name} (${shortT})`,
             `His crime: he ${off}. Into the book he goes.${penTag}`, 4200);
-          say(`🟨 ${o.name} is booked — ${off}.`,true);
+          say(pick([
+            `🟨 ${o.name} is booked — ${off}.`,
+            `🟨 ${o.name} booked — ${off}. The High Table has been notified.`,
+            `🟨 A citation for ${o.name} — ${off}. One more directive violation and it's over.`,
+            `🟨 ${o.name} booked — ${off}. Judgment Day is exactly one more card away.`,
+            `🟨 ${o.name} into the book — ${off}. "MEDIOCRE!" shouts someone from the cheap seats.`,
+            `🟨 ${o.name} booked — ${off}. The physio's flesh-wound report is under review.`,
+            `🟨 ${o.name} booked — ${off}. Best to let this one go before it becomes two.`,
+            `🟨 ${o.name} running hot — ${off}. The referee attenuates the signal with a yellow.`,
+            `🟨 ${o.name} booked — ${off}. Coaches Eric and Dan teach cleaner timing than THAT.`,
+            `🟨 ${o.name} booked — ${off}. No instruments required — the whole stadium saw it.`]),true);
         } else if(inBox){
           showNotice(TEAMS[victim.team].color,"⚠️ PENALTY!",
             `${victim.name} is brought down in the box!`,
@@ -2206,7 +2222,15 @@ function ambientChatter(){
     `Regarding the airspeed velocity of that punt: African or European? The lab refuses to say.`,
     `Nobody press in the far corner. It's Camelot over there. A silly place.`,
     `Careful with the striker lurking in the box. That's no ordinary striker — look at the bones!`,
-    `And now for something completely different: several minutes of actual football.`);
+    `And now for something completely different: several minutes of actual football.`,
+    `That winger runs on pure guzzoline. WITNESS HIM.`,
+    `Shiny and chrome, that counterattack. All it needs is a flame-throwing guitar.`,
+    `The back line has three prime directives: protect the goal, protect the lead, and never discuss the third.`,
+    `I'd buy that buildup for a dollar.`,
+    `That defender is basically a T-1000 — melts under pressure, reforms directly behind you.`,
+    `Hasta la vista to THAT scoring chance.`,
+    `The keeper guards that goal like it's the last water in the wasteland.`,
+    `Somewhere a machine just learned what a pincer movement is. Try not to think about it.`);
   let fresh=cand.filter(l=>!recentChatter.includes(l));
   if(!fresh.length) fresh=cand;
   const line=pick(fresh);
