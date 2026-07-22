@@ -382,7 +382,7 @@ const TEAM_LIBRARY=[
   {name:"Sparkle Princesses", short:"SPK", color:"#f26bb5", accent:"#ffd166",
    roster:["Margo Tillo","Marg Niboaur","Reese Waite","Sloan Ellars","Solana Burns"],
    third:"#b58ae0", motif:{t:"sparkle",c:["#6b2d8f"]},
-   id:{atk:"Swashbuckle",def:"Balanced",agg:"Clean"}, star:"Solana Burns",
+   id:{atk:"Swashbuckle",def:"Balanced",agg:"Clean"}, star:"Solana Burns", she:true,
    blurb:"Dramatic entrances, perfect landings, a ten from every judge. Performance AND presentation."},
 ];
 let selTeams=[0,1,2];
@@ -583,6 +583,9 @@ function blazeCall(p2){
     `${p2.name} lights it up! Burst of the night, surely!`,
     `Flames off the boots of ${p2.name}! The Sparkle Princesses want that as a home kit!`]),true,"lowvoice");
 }
+function PRN(x){ const f=x&&TEAMS[x.team]&&TEAMS[x.team].she;
+  return f?{he:"she",He:"She",his:"her",His:"Her",him:"her",man:"woman"}
+          :{he:"he",He:"He",his:"his",His:"His",him:"him",man:"man"}; }
 function speedMult(p){
   let m=0.55+0.45*p.stamina;                       // fatigue: the size of the tank
   if(momentumOn && clockSec<boostUntil[p.team]) m*=1.15;  // underdog fire
@@ -1033,7 +1036,7 @@ function think(dt){
           `${owner.name} LAUNCHES it — a drop kick clearing the county line!`,
           `${owner.name} sends it to the MOON. Somebody on the far side has a decision to make.`,
           `A monster punt from ${owner.name} — the ball has its own weather now.`,
-          `${owner.name} with the full field-flip. From his box to their problem.`]),true,"lowvoice");
+          `${owner.name} with the full field-flip. From ${PRN(owner).his} box to their problem.`]),true,"lowvoice");
       } else if(near&&nd2<180){
         GKSTAT.rolls++; if(fwdRoll)GKSTAT.rollsFwd++;
         kick(near.x+near.vx*8, near.y+near.vy*8, Math.min(6.5,nd2*0.04+3.5), false);
@@ -1181,8 +1184,8 @@ function think(dt){
             `${o.name} (${shortT})`,
             `His crime: he ${off}.${penTag}<br>OFF! The walk of shame begins — ${leftTxt}`, 5200);
           say(Math.random()<0.25
-            ?`🟥 <b>RED CARD!</b> ${o.name} is EXCOMMUNICADO — he ${off}. No services, no help, and ${tm(o.team)} play a man short!`
-            :`🟥 <b>RED CARD!</b> ${o.name} is off — he ${off}. ${tm(o.team)} play on a man short!`,true);
+            ?`🟥 <b>RED CARD!</b> ${o.name} is EXCOMMUNICADO — ${PRN(o).he} ${off}. No services, no help, and ${tm(o.team)} play a ${PRN(o).man} short!`
+            :`🟥 <b>RED CARD!</b> ${o.name} is off — ${PRN(o).he} ${off}. ${tm(o.team)} play on a ${PRN(o).man} short!`,true);
         } else if(card==="yellow"){
           addStoppage(3);
           showNotice(col,"🟨 YELLOW CARD",`${o.name} (${shortT})`,
@@ -1419,7 +1422,7 @@ function physics(dt){
           if(Math.random()<0.18) say(pick([
             `${best.name} wants none of that scramble — hoofed clear!`,
             `No dwelling from ${best.name}. First time, out of the furnace.`,
-            `${best.name} clears his lines. Tidy is for open field.`]),false);
+            `${best.name} clears ${PRN(best).his} lines. Tidy is for open field.`]),false);
         }
       }
       ball.touchT=0.3; ball.strayer=null; ball.strayF=0;
@@ -1669,7 +1672,7 @@ function goalScored(concederTeam){
       `<span class="goal">⚽ GOOOAL!</span> ${name} with ice in the veins — ${scoreline}!`,
       `<span class="goal">⚽ GOOOAL!</span> Nothing ${keeper.name} could do! ${name}! ${scoreline}!`,
       `<span class="goal">⚽ THE NET BULGES!</span> ${name}! ${scoreline}!`,
-      `<span class="goal">⚽ GOOOAL!</span> ${name} writes his name on this match — ${scoreline}!`,
+      `<span class="goal">⚽ GOOOAL!</span> ${name} writes ${scorer?PRN(scorer).his:"their"} name on this match — ${scoreline}!`,
       `<span class="goal">⚽ GOOOAL!</span> ${name} with John Wick calm — one look, one finish. ${scoreline}!`,
       `<span class="goal">⚽ GOOOAL!</span> ${name}! Absolute Victory Royale form! ${scoreline}!`,
       `<span class="goal">⚽ GOOOAL!</span> ${name}! Grandma Gloria's candle is WORKING — ${scoreline}!`,
@@ -1961,7 +1964,7 @@ function ambientChatter(){
     // shorthanded valor & bedlam
     for(let t2=0;t2<3;t2++){
       const men=players.filter(p2=>p2.team===t2&&!p2.out&&p2.sentOff).length;
-      if(men===1&&!out[t2]) cand.push(`${TEAMS[t2].name} a man down and refusing to die. Respect.`);
+      if(men===1&&!out[t2]) cand.push(`${TEAMS[t2].name} a ${TEAMS[t2].she?"woman":"man"} down and refusing to die. Respect.`);
       if(men>=2&&!out[t2]) cand.push(`${TEAMS[t2].name} down to the bare bones. This is siege survival now.`);
     }
     // scoreline drama
@@ -2918,11 +2921,11 @@ function loop(now){
           q.benched=true;
           q.seat=players.filter(o=>o.team===q.team&&o.benched).length-1;
           say(pick([
-            `${q.name} takes his seat on the bench, head in hands. ${tm(q.team)} regroup a man light.`,
-            `${q.name} sits down in the dugout and studies his boots. ${tm(q.team)} play on without him.`,
+            `${q.name} takes ${PRN(q).his} seat on the bench, head in hands. ${tm(q.team)} regroup a ${PRN(q).man} light.`,
+            `${q.name} sits down in the dugout and studies ${PRN(q).his} boots. ${tm(q.team)} play on without ${PRN(q).him}.`,
             `A towel over the head for ${q.name}. The bench is a lonely place tonight.`,
             `${q.name} takes the long seat. His teammates don't look over.`,
-            `Down he sits — ${q.name}'s evening is over, and he knows exactly whose fault it is.`]));
+            `Down ${PRN(q).he} sits — ${q.name}'s evening is over, and ${PRN(q).he} knows exactly whose fault it is.`]));
           if(fieldersLeft(q.team)===0)
             say(`${tm(q.team)} are down to just the goalkeeper. He abandons his line — needs must.`,true);
           if([0,1,2].every(tt=>out[tt]||fieldersLeft(tt)===0))
