@@ -57,6 +57,10 @@ if(process.env.RECHG)sandbox.__BURST_RECHG=+process.env.RECHG;
 if(process.env.NOCLEAR)sandbox.__NOCLEAR=1;
 
 vm.createContext(sandbox);
+if(process.env.SEED){
+  const sd=(parseInt(process.env.SEED)>>>0)||1;
+  vm.runInContext(`Math.random=(function(){let t=${sd};return function(){t+=0x6D2B79F5;let r=Math.imul(t^t>>>15,1|t);r=r+Math.imul(r^r>>>7,61|r)^r;return((r^r>>>14)>>>0)/4294967296}})()`,sandbox);
+}
 try{ vm.runInContext(script,sandbox,{filename:"game.js"}); }
 catch(e){ console.log("LOAD CRASH:\n",e.stack); process.exit(1); }
 
