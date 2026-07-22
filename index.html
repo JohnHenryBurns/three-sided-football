@@ -1385,7 +1385,7 @@ let gkHoldUntil=-1, gkHolder=null;
 const GKSTAT={holds:0,sweepSec:0,punts:0,puntSame:0,puntSeen:0,rolls:0,rollsFwd:0,scrumSamples:0,scrumOpp:0};
 function __forceRules(v){ if(v&&("oob" in v))oobRule=!!v.oob; if(v&&("zone" in v))zoneRule=!!v.zone; }   // headless rules port
 function __probe(){ return {GK:GKSTAT, scored:scored?scored.slice():[0,0,0], clockSec,
-  EDGES, GOAL_EDGE, players, ball, oob:oobRule, pendingRestart, cornerTaker}; }   // headless measurement port
+  EDGES, GOAL_EDGE, players, ball, oob:oobRule, pendingRestart, cornerTaker, phase, champ:champInfo?true:false}; }   // headless measurement port
 const gkHolding=()=>ball.owner&&ball.owner===gkHolder&&clockSec<gkHoldUntil;
 let camFocusP=null, camFocusUntil=0, walkOff=null, walkPending=null;
 function addStoppage(sec){ stoppageLen=Math.min(Math.min(65,matchLen*0.30), stoppageLen+sec); }
