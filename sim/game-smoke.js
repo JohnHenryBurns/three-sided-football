@@ -52,12 +52,16 @@ sandbox.speechSynthesis={
 sandbox.SpeechSynthesisUtterance=function(t){ this.text=t; };
 
 vm.createContext(sandbox);
+if(process.env.SEED){
+  const sd=(parseInt(process.env.SEED)>>>0)||1;
+  vm.runInContext(`Math.random=(function(){let t=${sd};return function(){t+=0x6D2B79F5;let r=Math.imul(t^t>>>15,1|t);r=r+Math.imul(r^r>>>7,61|r)^r;return((r^r>>>14)>>>0)/4294967296}})()`,sandbox);
+}
 try{ vm.runInContext(script,sandbox,{filename:"game.js"}); }
 catch(e){ console.log("LOAD CRASH:\n",e.stack); process.exit(1); }
 
 // press Kick off
 simNow=1000;
-try{ byId["btnStart"]._onclick(); }
+try{ byId["btnStart"]._onclick(); if(process.env.FORCE_OOB!==undefined)sandbox.__forceRules&&sandbox.__forceRules({oob:process.env.FORCE_OOB==="1",zone:process.env.FORCE_OOB==="1"}); }
 catch(e){ console.log("START CRASH:\n",e.stack); process.exit(1); }
 
 // module mode: expose the booted sandbox + a frame stepper for drills
@@ -67,7 +71,7 @@ if(process.env.NOPUMP==="1") return;
 // pump: N simulated minutes at 60fps, multiple runs for randomness
 const RUNS=parseInt(process.env.RUNS||"6");
 for(let run=0;run<RUNS;run++){
-  if(run>0){ try{ byId["btnStart"]._onclick(); }catch(e){ console.log(`RESTART CRASH run ${run}:\n`,e.stack); process.exit(1);} }
+  if(run>0){ try{ byId["btnStart"]._onclick(); if(process.env.FORCE_OOB!==undefined)sandbox.__forceRules&&sandbox.__forceRules({oob:process.env.FORCE_OOB==="1",zone:process.env.FORCE_OOB==="1"}); }catch(e){ console.log(`RESTART CRASH run ${run}:\n`,e.stack); process.exit(1);} }
   const frames=60*90; // 90s covers a blitz + stoppage + some OT
   for(let f=0;f<frames;f++){
     simNow+=16.7;

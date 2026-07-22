@@ -354,3 +354,15 @@ specced. Shared-tank competition is real: denial rose to ~55% because shots,
 dives, and sprints all drain the same meter — a striker who empties the clip has
 no legs for the recovery run. Booth: John Wick pool (Baba Yaga, empties the clip,
 sudden terrible intent), duel calls, keeper explosion lines.
+
+**Process upgrade (after the wild night):**
+1. CANARY CHANNEL — dev.html beside index.html on main. All new work lands on
+   /dev.html first (tagged "DEV · canary" in the setup corner); index.html
+   ("LIVE") only advances on John's promotion word. The family icon always
+   points at blessed code.
+2. THE GATE — sim/suite.js: one command, one verdict. Runs the speech-priority
+   test, a seeded smoke MATRIX (rules on/off x seeds — the holdActive scope bug
+   hid in an unexercised config), and the 12-match study against hard metric
+   bands (goals 0.9-4.6, throw loops <=10%, churn <=32%, rolls >=88% forward,
+   denial 10-75%). Failures print their SEED and replay exactly. No shell pipes
+   near exit codes (the tail -1 lesson).
