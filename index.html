@@ -1403,7 +1403,12 @@ function physics(dt){
           cx9=best.x+(cx9-best.x)*0.7+(CX-best.x)*0.3*0.4;                       // bent toward safety, not glory
           cy9=best.y+(cy9-best.y)*0.7+(CY-best.y)*0.3*0.4;
           const dl9=Math.hypot(cx9-best.x,cy9-best.y)||1;
-          kick(best.x+(cx9-best.x)/dl9*260, best.y+(cy9-best.y)/dl9*260, 7.6, false);
+          let kx9=best.x+(cx9-best.x)/dl9*260, ky9=best.y+(cy9-best.y)/dl9*260;
+          for(const e9 of EDGES){                     // a clear NEVER books its own throw-in
+            const de9=(kx9-e9.p1.x)*e9.nx+(ky9-e9.p1.y)*e9.ny;
+            if(de9<40){ kx9+=e9.nx*(40-de9); ky9+=e9.ny*(40-de9); }
+          }
+          kick(kx9, ky9, 7.6, false);
           ball.clearT=clockSec+0.4;                            // the escape guarantee: no claims, no headers, just OUT
           if(Math.random()<0.18) say(pick([
             `${best.name} wants none of that scramble — hoofed clear!`,
