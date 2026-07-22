@@ -613,6 +613,10 @@ function think(dt){
   const holdActive=performance.now()<restartHold;   // restart staging: ball dead, positioning live
   const FL=[fieldersLeft(0),fieldersLeft(1),fieldersLeft(2)];   // cached: avoids per-player array filters
   for(let a2=0;a2<3;a2++) coalAlly[a2]=allied(a2,(a2+1)%3)||allied(a2,(a2+2)%3);
+  if(gkHolding()){
+    GKSTAT.scrumSamples++;
+    players.forEach(q=>{ if(q.team!==ball.owner.team&&!q.out&&!q.sentOff&&q.role!=="K"&&dist(q,ball.owner)<55)GKSTAT.scrumOpp++; });
+  }
   const oppOf=t=>players.filter(p=>p.team!==t&&!p.out&&!p.sentOff);
   const chaser=[];
   for(let t=0;t<3;t++){
@@ -641,7 +645,7 @@ function think(dt){
       const og3=goalCenter(p.team);
       const ax=CX-og3.x, ay=CY-og3.y, al=Math.hypot(ax,ay)||1;
       const ux3=ax/al, uy3=ay/al, px3=-uy3, py3=ux3;
-      const depth=(p.role==="D"?0.42:p.role==="M"?0.72:1.0);
+      const depth=(p.role==="D"?0.34:p.role==="M"?0.6:0.85);
       const lat=((p.k1*997)%1-0.5)*300;
       steer(p, og3.x+ux3*al*depth+px3*lat, og3.y+uy3*al*depth+py3*lat, 1.25);
       return;
@@ -703,7 +707,7 @@ function think(dt){
           let oppNear=1e9;
           players.forEach(q=>{ if(q.team!==p.team&&!q.out&&!q.sentOff&&q.role!=="K")
             oppNear=Math.min(oppNear,dist(q,ball)); });
-          if(dist(p,ball)<oppNear-18||oppNear>120){ steer(p,ball.x,ball.y,1.5); return; }
+          if(dist(p,ball)<oppNear-18||oppNear>120){ GKSTAT.sweepSec+=dt; steer(p,ball.x,ball.y,1.5); return; }
         }
       }
       const e=EDGES[GOAL_EDGE[p.team]];
@@ -808,7 +812,7 @@ function think(dt){
       const og=goalCenter(owner.team);
       // THE GRAB: he's caught it — his ball, his moment, his name in lights
       if(gkHolder!==owner){
-        gkHolder=owner; gkHoldUntil=clockSec+1.6;
+        gkHolder=owner; gkHoldUntil=clockSec+1.6; GKSTAT.holds++;
         spawnNote(owner.x,owner.y-26,"🧤 secured!",TEAMS[owner.team].color,TEAMS[owner.team].accent);
       }
       if(clockSec<gkHoldUntil){
@@ -819,24 +823,33 @@ function think(dt){
       }
       gkHolder=null;
       // DISTRIBUTION: roll it short, or launch it across the county
-      let near=null,nd2=1e9, far=null,fd=-1, anyNear=null,anyD=1e9;
+      let near=null,nd2=1e9, far=null,fd=-1,fs=-1e9, anyNear=null,anyD=1e9;
       players.forEach(m=>{ if(m.team!==owner.team||m===owner||m.out||m.sentOff||m.role==="K")return;
         const d=dist(m,owner);
         const adv2=dist(m,og);
         if(adv2>dist(owner,og)+15){ if(d<nd2){nd2=d;near=m;} }   // forward outlets first
         if(d<anyD){anyD=d;anyNear=m;}
-        if(adv2>fd){fd=adv2;far=m;}});
+        let open2=1e9;
+        players.forEach(q=>{ if(q.team!==owner.team&&!q.out&&!q.sentOff&&q.role!=="K")
+          open2=Math.min(open2,dist(q,m)); });
+        const sc3=adv2+Math.min(open2,140)*1.5;                  // deep AND alone
+        if(sc3>fs){fs=sc3;far=m;fd=adv2;}});
+      const fwdRoll=!!near;
       if(!near){ near=anyNear; nd2=anyD; }                       // backwards only if truly alone
-      const wantPunt=far&&(fd>320)&&(Math.random()<0.6||nd2>150);
+      const wantPunt=far&&(fd>255)&&(nd2>140||Math.random()<0.11);
       if(wantPunt){
-        kick(far.x+far.vx*14, far.y+far.vy*14, 13.5, false);
+        const dTo=dist(owner,far);
+        const pw=Math.min(13.5, 5.5+dTo*0.014);   // drop it TO the man, not past him
+        kick(far.x+far.vx*7, far.y+far.vy*7, pw, false);
         ball.zv=3.4;   // up into the lights — headers await on the far side
+        GKSTAT.punts++; ball.puntBy=owner.team;
         say(pick([
           `${owner.name} LAUNCHES it — a drop kick clearing the county line!`,
           `${owner.name} sends it to the MOON. Somebody on the far side has a decision to make.`,
           `A monster punt from ${owner.name} — the ball has its own weather now.`,
           `${owner.name} with the full field-flip. From his box to their problem.`]),true,"lowvoice");
       } else if(near&&nd2<180){
+        GKSTAT.rolls++; if(fwdRoll)GKSTAT.rollsFwd++;
         kick(near.x+near.vx*8, near.y+near.vy*8, Math.min(6.5,nd2*0.04+3.5), false);
         if(Math.random()<0.35) say(pick([
           `${owner.name} rolls it out calmly. Playing from the back.`,
@@ -1178,6 +1191,7 @@ function physics(dt){
           `${ball.lastKicker.name} and ${best.name} wear different shirts and share one grudge.`]),true);
       }
       ball.allyPass=false;
+      if(ball.puntBy!==undefined){ GKSTAT.puntSeen++; if(best.team===ball.puntBy)GKSTAT.puntSame++; ball.puntBy=undefined; }
       ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
       ball.touchT=0.3; ball.strayer=null; ball.strayF=0;
       ball.lastKicker=best;   // person-level attribution follows possession
@@ -1301,6 +1315,8 @@ let suppress=null, pendingPenalty=null, penaltyShooter=null, penaltyGoalTeam=nul
 let stoppageLen=0, stoppageAnnounced=false, zoneRule=true, foulMult=1;
 let oobRule=true, cornerTaker=null, cornerGoal=null, restartHold=0, pendingRestart=null, throwPending=null;
 let gkHoldUntil=-1, gkHolder=null;
+const GKSTAT={holds:0,sweepSec:0,punts:0,puntSame:0,puntSeen:0,rolls:0,rollsFwd:0,scrumSamples:0,scrumOpp:0};
+function __probe(){ return {GK:GKSTAT, scored:scored?scored.slice():[0,0,0], clockSec}; }   // headless measurement port
 const gkHolding=()=>ball.owner&&ball.owner===gkHolder&&clockSec<gkHoldUntil;
 let camFocusP=null, camFocusUntil=0, walkOff=null, walkPending=null;
 function addStoppage(sec){ stoppageLen=Math.min(Math.min(65,matchLen*0.30), stoppageLen+sec); }
