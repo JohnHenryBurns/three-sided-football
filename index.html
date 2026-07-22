@@ -1243,7 +1243,7 @@ function think(dt){
         } else if(card==="yellow"){
           addStoppage(3);
           showNotice(col,"🟨 YELLOW CARD",`${o.name} (${shortT})`,
-            `His crime: he ${off}. Into the book he goes.${penTag}`, 4200);
+            `${PRN(o).His} crime: ${PRN(o).he} ${off}. Into the book he goes.${penTag}`, 4200);
           say(pick([
             `🟨 ${o.name} is booked — ${off}.`,
             `🟨 ${o.name} booked — ${off}. The High Table has been notified.`,
