@@ -170,6 +170,11 @@
     z-index:70;pointer-events:none;font-weight:900;font-size:7rem;color:#fff;
     text-shadow:0 4px 22px rgba(0,0,0,.75)}
   #countdown.show{display:flex}
+  #captions{position:absolute;left:50%;bottom:.6rem;transform:translateX(-50%);
+    max-width:92%;z-index:6;display:none;background:rgba(6,10,8,.78);color:#fff;
+    padding:.3rem .7rem;border-radius:8px;font-size:.98rem;line-height:1.28;
+    text-align:center;pointer-events:none;letter-spacing:.02em}
+  #captions.show{display:block}
   #countdown span{animation:countPop 1.06s ease-out forwards}
   @keyframes countPop{0%{transform:scale(1.7);opacity:0}22%{transform:scale(1);opacity:1}
     82%{opacity:1}100%{transform:scale(.92);opacity:0}}
@@ -247,6 +252,7 @@
 <div class="grid">
   <div class="stage">
     <div id="countdown"></div>
+    <div id="captions"></div>
     <div id="hud">
       <div id="scoreboard" class="chips" aria-label="Scoreboard"></div>
       <div class="hudclock" id="clock">00:00</div>
@@ -277,6 +283,7 @@
   <div class="formrow chk"><label for="setZone" title="Attackers can't enter the penalty area before the ball">Enforce offsides</label><input id="setZone" type="checkbox" checked></div>
   <div class="formrow chk"><label for="setOob" title="Touchlines in play: throw-ins, goal kicks, corners, keeper parries">Out of bounds</label><input id="setOob" type="checkbox" checked></div>
   <div class="formrow chk"><label for="setVoice" title="Spoken play-by-play (uses your phone's voice)">🎙️ Announcer</label><input id="setVoice" type="checkbox" checked></div>
+  <div class="formrow chk"><label for="setCaps" title="Show the announcer's words as TV-style captions over the pitch">💬 Captions</label><input id="setCaps" type="checkbox"></div>
   <div class="formrow"><label>Teams</label><div id="teamSlots" class="slotRow"></div></div>
   <div class="formrow"><label for="setRef">Referee</label><select id="setRef">
     <option value="0">Off — let them play</option>
@@ -1867,8 +1874,10 @@ function speak(html,prio){
       const u=new SpeechSynthesisUtterance(txt);
       if(narrator)u.voice=narrator;
       u.rate=isGoalCall?0.98:1.12; u.pitch=isGoalCall?1.06:1;   // the goal call slows and rises
+      showCaption(txt);
       u.onend=u.onerror=()=>{
         queuedUtter=Math.max(0,queuedUtter-1); speakStartedAt=performance.now(); speakingPrio=null;
+        hideCaptionSoon();
         if(highQ.length&&!pendingHighFire){      // drain IN ORDER — but a waiting deferred call goes first
                                                  // (Android fires onend for CANCELLED utterances; without this
                                                  //  guard the ghost drains the queue ahead of the goal)
@@ -1940,6 +1949,18 @@ if(speechOK) setInterval(()=>{
 
 let lastSayAt=-99;
 let NAME_COL=null, matchLog=[], champInfo=null, matchLive=false, matchBoards=[], lastChatterAt=-99;
+let captionsOn=false, capToken=0;
+function showCaption(t){
+  if(!captionsOn)return;
+  const el2=document.getElementById("captions");
+  el2.textContent=t; el2.classList.add("show");
+  capToken++;
+}
+function hideCaptionSoon(){
+  const mine=capToken;
+  setTimeout(()=>{ if(capToken===mine)
+    document.getElementById("captions").classList.remove("show"); },700);
+}
 function refreshNameColors(){
   NAME_COL=players.map(p=>[p.name,TEAMS[p.team].color])
     .sort((a,b)=>b[0].length-a[0].length);
@@ -2631,8 +2652,10 @@ function showSetup(){
   matchLive=false;
   document.getElementById("countdown").classList.remove("show");
   if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; highQ=[]; speakingPrio=null; }
+  document.getElementById("captions").classList.remove("show");
   running=false;
   if(speechOK){ speechSynthesis.cancel(); queuedUtter=0; highQ=[]; speakingPrio=null; }
+  document.getElementById("captions").classList.remove("show");
   hideCelebration(); pendingKickoff=null;
   setPlayBtn();
   setupEl.classList.add("show");
@@ -2644,6 +2667,7 @@ document.getElementById("btnStart").onclick=()=>{
   zoneRule=document.getElementById("setZone").checked;
   oobRule=document.getElementById("setOob").checked;
   voiceOn=speechOK&&document.getElementById("setVoice").checked;
+  captionsOn=document.getElementById("setCaps").checked;
   matchLive=true;
   keepAwake();
   setVoiceUI();
