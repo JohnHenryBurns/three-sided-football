@@ -2564,10 +2564,13 @@ function drawMotif(g,L){
       break;
     case "banana":
       el("circle",{r:6.8,fill:c[0]},g);                        // midnight disc
-      el("path",{d:"M-3.7,-1.2 Q0,4.8 3.7,-1.2",fill:"none",
-        stroke:"#ffe14d","stroke-width":2.8,"stroke-linecap":"round"},g);   // the smile IS the banana
-      el("path",{d:"M-3.7,-1.2 L-4.3,-2.4",fill:"none",
-        stroke:"#6b4a12","stroke-width":1.3,"stroke-linecap":"round"},g);   // one stem, one end
+      el("path",{d:"M-5.2,-0.8 Q0,6.4 5.2,-0.8 Q0,2.4 -5.2,-0.8 Z",
+        fill:"#ffe14d"},g);                                                  // full crescent: thick belly, POINTED tips
+      el("path",{d:"M-4,0.4 Q0,4.3 4,0.4",fill:"none",
+        stroke:"rgba(0,0,0,.5)","stroke-width":0.8},g);                      // the black seam
+      el("path",{d:"M-5.2,-0.8 L-6.1,-1.7",fill:"none",
+        stroke:"#6b4a12","stroke-width":1.7},g);                             // brown stem
+      el("circle",{cx:5.2,cy:-0.8,r:0.7,fill:"#3a2a10"},g);                  // dark tip
       break;
     case "bulldog":
       el("circle",{cx:-4.6,cy:-4.4,r:2.4,fill:c[0]},g);        // ears
