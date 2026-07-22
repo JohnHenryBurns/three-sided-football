@@ -146,10 +146,18 @@
   .slotRow{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.35rem;flex:1}
   .diceBtn{padding:.3rem .55rem;font-size:1rem}
   .slotBtn{font-weight:700;letter-spacing:.06em}
+  .sprintring{transform-box:fill-box;transform-origin:center;
+    animation:flame .38s ease-in-out infinite alternate}
+  @keyframes flame{
+    from{stroke:#ffd166;transform:scale(1)}
+    to{stroke:#ff5a00;transform:scale(1.12)}
+  }
+  .slotDice{background:none;border:none;font-size:1rem;cursor:pointer;padding:0 .15rem;opacity:.8}
+  .slotDice:active{transform:rotate(90deg)}
   #teamPick{position:fixed;inset:0;background:rgba(4,8,6,.66);backdrop-filter:blur(2px);
     display:none;align-items:center;justify-content:center;z-index:80;padding:1rem}
   #teamPick.show{display:flex}
-  #tpCard{background:var(--panel);border:3px solid #fff;border-radius:16px;
+  #tpCard{background:var(--panel);border:3px solid #fff;border-radius:16px;color:#fff;
     padding:1rem 1.1rem;max-width:min(28rem,94vw);max-height:88vh;overflow-y:auto}
   .tpTeam{border:2px solid rgba(255,255,255,.18);border-radius:12px;padding:.55rem .7rem;
     margin-top:.5rem;cursor:pointer;background:rgba(255,255,255,.03);
@@ -366,6 +374,11 @@ const TEAM_LIBRARY=[
    third:"#8a8d93", motif:{t:"bulldog",c:["#9aa0a8"]},
    id:{atk:"Swashbuckle",def:"Gegenpress",agg:"Clean"}, star:"Jupiter Burns",
    blurb:"Whiskey Hill Road's finest. Young legs, zero fear, show-and-tell on Monday."},
+  {name:"Banana Wizards", short:"BAN", color:"#f5c518", accent:"#141414",
+   roster:["Amos Baldwin","Wyatt Gingrich","Ezra Baldwin","Owen Gingrich","Maximus Burns"],
+   third:"#a67c00", motif:{t:"banana",c:["#141414"]},
+   id:{atk:"TikiTaka",def:"Balanced",agg:"Clean"}, star:"Maximus Burns",
+   blurb:"Two sets of twins and a wizard up front. The commentary box boggles; the banana abides."},
 ];
 let selTeams=[0,1,2];
 const TEAMS=[TEAM_LIBRARY[0],TEAM_LIBRARY[1],TEAM_LIBRARY[2]];
@@ -2537,6 +2550,13 @@ function drawMotif(g,L){
       el("rect",{x:-8,y:5.4,width:16,height:2,fill:c[0],opacity:.95},g);
       el("rect",{x:-8,y:7.6,width:16,height:1.6,fill:c[1],opacity:.95},g);
       el("path",{d:"M0,-6.5 L1.7,-2.2 L6,-2.2 L2.5,0.5 L3.5,4.6 L0,2 L-3.5,4.6 L-2.5,0.5 L-6,-2.2 L-1.7,-2.2 Z",fill:c[0]},g); break;
+    case "banana":
+      el("circle",{r:6.8,fill:c[0]},g);                        // midnight disc
+      el("path",{d:"M-3.6,2.4 Q0,5.4 3.6,2.4 Q4.6,1.5 4.1,0.5 Q1.4,3.3 -3.2,1.2 Q-4.1,1.7 -3.6,2.4 Z",
+        fill:"#ffe14d"},g);                                    // the banana abides
+      el("circle",{cx:-3.5,cy:1.7,r:0.7,fill:"#6b4a12"},g);    // stem
+      el("circle",{cx:4.1,cy:1,r:0.6,fill:"#6b4a12"},g);       // tip
+      break;
     case "bulldog":
       el("circle",{cx:-4.6,cy:-4.4,r:2.4,fill:c[0]},g);        // ears
       el("circle",{cx:4.6,cy:-4.4,r:2.4,fill:c[0]},g);
@@ -2553,7 +2573,7 @@ function buildActors(){
   players.forEach(p=>{
     const g=el("g",{});
     el("circle",{r:20,fill:"none",stroke:TEAMS[p.team].color,"stroke-width":3.5,opacity:0,class:"boostring"},g);
-    el("circle",{r:23,fill:"none",stroke:"#fff","stroke-width":2,opacity:0,"stroke-dasharray":"5 7",class:"sprintring"},g);
+    el("circle",{r:22,fill:"none",stroke:"#ff9f1c","stroke-width":3,opacity:0,class:"sprintring"},g);
     const ring=el("circle",{r:16,fill:"none","stroke-width":3.5,
       stroke:"#7ec97e","stroke-linecap":"round",transform:"rotate(-90)"},g);
     el("circle",{r:p.role==="K"?13:12,fill:TEAMS[p.team].color,
@@ -3117,6 +3137,16 @@ function renderTeamSlots(){
     b.style.boxShadow=`inset 0 -3.5px 0 ${L.accent}`;
     b.onclick=()=>openTeamPick(i);
     row.appendChild(b);
+    const d1=document.createElement("button");
+    d1.className="slotDice"; d1.textContent="🎲"; d1.title="Random team for this slot";
+    d1.onclick=()=>{
+      const pool=[...TEAM_LIBRARY.keys()].filter(k=>!selTeams.includes(k));
+      if(pool.length){
+        selTeams[i]=pool[Math.floor(Math.random()*pool.length)];
+        rebuildWorld(); renderTeamSlots();
+      }
+    };
+    row.appendChild(d1);
   }
   const dice=document.createElement("button");
   dice.className="diceBtn"; dice.textContent="🎲"; dice.title="Random matchup";
