@@ -57,13 +57,13 @@ catch(e){ console.log("LOAD CRASH:\n",e.stack); process.exit(1); }
 
 // press Kick off
 simNow=1000;
-try{ byId["btnStart"]._onclick(); }
+try{ byId["btnStart"]._onclick(); sandbox.__forceRules&&sandbox.__forceRules({oob:true,zone:true}); }
 catch(e){ console.log("START CRASH:\n",e.stack); process.exit(1); }
 
 // pump: N simulated minutes at 60fps, multiple runs for randomness
 const RUNS=parseInt(process.env.RUNS||"6");
 for(let run=0;run<RUNS;run++){
-  if(run>0){ try{ byId["btnStart"]._onclick(); }catch(e){ console.log(`RESTART CRASH run ${run}:\n`,e.stack); process.exit(1);} }
+  if(run>0){ try{ byId["btnStart"]._onclick(); sandbox.__forceRules&&sandbox.__forceRules({oob:true,zone:true}); }catch(e){ console.log(`RESTART CRASH run ${run}:\n`,e.stack); process.exit(1);} }
   const frames=60*90; // 90s covers a blitz + stoppage + some OT
   for(let f=0;f<frames;f++){
     simNow+=16.7;
@@ -80,7 +80,8 @@ for(let run=0;run<RUNS;run++){
   if(!global.GKAGG)global.GKAGG={holds:0,sweepSec:0,punts:0,puntSame:0,puntSeen:0,rolls:0,rollsFwd:0,scrumSamples:0,scrumOpp:0,goals:0,sec:0};
   const PR=(sandbox.__probe?sandbox.__probe():{GK:{},scored:[0,0,0],clockSec:0});
 const G=PR.GK||{};
-  for(const k in G)global.GKAGG[k]+=G[k];
+if(process.env.DBG)console.log('oobRule at end of run:',PR.oob);
+  for(const k in G)global.GKAGG[k]=(global.GKAGG[k]||0)+(G[k]||0);
   global.GKAGG.goals+=(PR.scored||[0,0,0]).reduce((a,b)=>a+b,0);
   global.GKAGG.sec+=PR.clockSec||0;
   console.log(`run ${run}: 90 simulated seconds clean`);
@@ -99,6 +100,16 @@ if(process.env.GKSTUDY==="1"){
     rollsPerMin:+(A.rolls/mins).toFixed(2),
     rollForwardPct:A.rolls?+(100*A.rollsFwd/A.rolls).toFixed(0):null,
     avgOppInScrumDuringHold:A.scrumSamples?+(A.scrumOpp/A.scrumSamples).toFixed(2):null,
-    goalsPerMin:+(A.goals/mins).toFixed(2)
+    goalsPerMin:+(A.goals/mins).toFixed(2),
+    cornersPerMin:A.cornerDel?+(A.cornerDel/mins).toFixed(2):0,
+    atkInBoxAtDelivery:A.cornerDel?+(A.cornerAtk/A.cornerDel).toFixed(2):null,
+    defInBoxAtDelivery:A.cornerDel?+(A.cornerDef/A.cornerDel).toFixed(2):null,
+    alliesInMixAtDelivery:A.cornerDel?+((A.cornerAllyIn||0)/A.cornerDel).toFixed(2):null,
+    farPostSharePct:A.cornerDel?+(100*(A.farPost||0)/A.cornerDel).toFixed(0):null,
+    throwsPerMin:+((A.throwStage||0)/mins).toFixed(2),
+    cornersStagedPerMin:+((A.cornerStage||0)/mins).toFixed(2),
+    cornersPerMin:+((A.cornerDel||0)/mins).toFixed(2),
+    atkInBoxAtDelivery:(A.cornerDel?+((A.cornerAtk||0)/A.cornerDel).toFixed(2):null),
+    defInBoxAtDelivery:(A.cornerDel?+((A.cornerDef||0)/A.cornerDel).toFixed(2):null)
   }));
 }
