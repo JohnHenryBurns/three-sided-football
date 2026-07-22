@@ -19,6 +19,7 @@ const eng={
 };
 const ctx=`
   const voiceOn=true, speechOK=true, narrator=null;
+  const showCaption=()=>{}, hideCaptionSoon=()=>{};
   let queuedUtter=0, speechBeat=0;
   ${stateLine}
   ${speakSrc}
