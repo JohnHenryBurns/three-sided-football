@@ -361,6 +361,11 @@ const TEAM_LIBRARY=[
    third:"#d22d3d", motif:{t:"stars",c:["#f0f0f0","#d22d3d"]},
    nudge:{direct:.65}, id:{atk:"Balanced",def:"Gegenpress",agg:"Firm"}, star:"Pulisic",
    blurb:"Grit, lungs, and a nation that just learned the rules."},
+  {name:"91 Bulldogs", short:"91B", color:"#1e5bc6", accent:"#f7c948",
+   roster:["Benson Schmidt","Bo Niboaur","Cole Storm","Easton George","Jupiter Burns"],
+   third:"#8a8d93", motif:{t:"bulldog",c:["#9aa0a8"]},
+   id:{atk:"Swashbuckle",def:"Gegenpress",agg:"Clean"}, star:"Jupiter Burns",
+   blurb:"Whiskey Hill Road's finest. Young legs, zero fear, show-and-tell on Monday."},
 ];
 let selTeams=[0,1,2];
 const TEAMS=[TEAM_LIBRARY[0],TEAM_LIBRARY[1],TEAM_LIBRARY[2]];
@@ -2252,6 +2257,15 @@ function drawMotif(g,L){
       el("rect",{x:-8,y:5.4,width:16,height:2,fill:c[0],opacity:.95},g);
       el("rect",{x:-8,y:7.6,width:16,height:1.6,fill:c[1],opacity:.95},g);
       el("path",{d:"M0,-6.5 L1.7,-2.2 L6,-2.2 L2.5,0.5 L3.5,4.6 L0,2 L-3.5,4.6 L-2.5,0.5 L-6,-2.2 L-1.7,-2.2 Z",fill:c[0]},g); break;
+    case "bulldog":
+      el("circle",{cx:-4.6,cy:-4.4,r:2.4,fill:c[0]},g);        // ears
+      el("circle",{cx:4.6,cy:-4.4,r:2.4,fill:c[0]},g);
+      el("circle",{r:6.6,fill:c[0]},g);                        // the noble head
+      el("circle",{cx:-2.3,cy:-1.4,r:1.1,fill:"#1b1e24"},g);   // eyes
+      el("circle",{cx:2.3,cy:-1.4,r:1.1,fill:"#1b1e24"},g);
+      el("rect",{x:-3.2,y:1,width:6.4,height:3.8,rx:1.9,fill:"#e8e8e8"},g);  // jowls
+      el("circle",{cy:1.8,r:1.2,fill:"#1b1e24"},g);            // nose
+      break;
   }
 }
 function buildActors(){
