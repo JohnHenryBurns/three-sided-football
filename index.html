@@ -951,7 +951,8 @@ function think(dt){
           `${o.name} arrives like a tax bill. ${victim.name} pays in full.`,
           `${o.name} sends ${victim.name} straight back to the lobby.`,
           `Dutton rules from ${o.name} — that's HIS grass ${victim.name} was standing on.`,
-          `${o.name} with a tackle Grampy Cliff would call proper equipment maintenance.`]));
+          `${o.name} with a tackle Grampy Cliff would call proper equipment maintenance.`,
+          `${o.name} arrives with full Atlas-zoomies energy. ${victim.name} never stood a chance.`]));
       }
     });
   }
@@ -1193,7 +1194,8 @@ function physics(dt){
               `Wide! The ${TEAMS[ball.lastKicker.team].name} fans behind the goal duck as one.`,
               `${ball.lastKicker.name} built in creative mode there — spectacular, and completely without survival value.`,
               `Wide! The instruments spiked, the ball swerved, and honestly... what IS in that mesa?`,
-              `Off it goes — Atlas is already in pursuit somewhere beyond the hoardings.`]));
+              `Off it goes — Atlas is already in pursuit somewhere beyond the hoardings.`,
+              `Solana's verdict from the royal box: pretty, but the judges require it on target.`]));
             ball.isShot=false;
           }
           outOfBounds(k,e); return;
@@ -1347,7 +1349,9 @@ function goalScored(concederTeam){
       `<span class="goal">⚽ GOOOAL!</span> ${name} writes his name on this match — ${scoreline}!`,
       `<span class="goal">⚽ GOOOAL!</span> ${name} with John Wick calm — one look, one finish. ${scoreline}!`,
       `<span class="goal">⚽ GOOOAL!</span> ${name}! Absolute Victory Royale form! ${scoreline}!`,
-      `<span class="goal">⚽ GOOOAL!</span> ${name}! Grandma Gloria's candle is WORKING — ${scoreline}!`]),true);
+      `<span class="goal">⚽ GOOOAL!</span> ${name}! Grandma Gloria's candle is WORKING — ${scoreline}!`,
+      `<span class="goal">⚽ GOOOAL!</span> ${name}! Solana scores it a TEN — performance AND presentation! ${scoreline}!`,
+      `<span class="goal">⚽ GOOOAL!</span> ${name} — Maximus calculated that finish three passes ago! ${scoreline}!`]),true);
     if(momentumOn && wasTrailing){
       boostUntil[scorerTeam]=clockSec+20;
       caughtFire=true;
@@ -1607,7 +1611,8 @@ function ambientChatter(){
     `A contest worthy of the Hat Creek outfit, this.`,
     `More twists than a cattle drive to Montana.`,
     `The barnyard is quiet. All eyes here.`);
-  if(clockSec<20) cand.push(`Early doors, as they say.`,`Feeling-out phase. Nobody wants to blink first.`);
+  if(clockSec<20) cand.push(`Early doors, as they say.`,`Feeling-out phase. Nobody wants to blink first.`,
+    `Pre-match checklist complete: bathroom, water, buckle.`);
   if(clockSec>matchLen*0.75&&phase==="regulation")
     cand.push(`Squeaky bum time approaching.`,`Late drama loading — you can feel it.`,
       `Fine margins from here to the whistle.`);
@@ -1658,6 +1663,22 @@ function ambientChatter(){
     for(let t2=0;t2<3;t2++)
       if(clockSec<boostUntil[t2]) cand.push(`${TEAMS[t2].name} still burning — you can see it in the strides.`);
   }
+  // ---- Rachel's canon: state-aware ----
+  {
+    const totG=scored.reduce((a,b)=>a+b,0);
+    const redsOut=players.filter(p2=>p2.sentOff).length;
+    if(clockSec>matchLen*0.65&&(totG>=4||redsOut>=2))
+      cand.push(`This match has reached the exact moment Rachel means when she says: STOP. BEFORE. WE. UNRAVEL.`,
+        `Controlled chaos is the family specialty. This match is testing the 'controlled' part.`);
+    if(goalsLog.some(g2=>g2.own)||redsOut>=1)
+      cand.push(`One mistake doesn't define a match. As the family says: just do the next right thing.`);
+    for(let t2=0;t2<3;t2++)
+      if(!out[t2]&&teamATK[t2]==="TikiTaka")
+        cand.push(`${tm(t2)} running those Spain-style moving triangles Jupiter studies at the dinner table.`);
+    if([0,1,2].some(t2=>clockSec<boostUntil[t2]))
+      cand.push(`A sudden emotional momentum swing — pure Orion energy sweeping the stadium.`);
+    if(clockSec>matchLen*0.8) cand.push(`We're deep into nap-schedule territory. Play faster, gentlemen.`);
+  }
   // ---- lore & tropes, batch 2 ----
   cand.push(
     `At the end of the day, it's twelve men, a hexagon, and consequences.`,
@@ -1675,6 +1696,26 @@ function ambientChatter(){
     `Hydration check from Dampy the Dolphin — even the announcer takes a sip. Especially the announcer.`,
     `Dampy's official ruling: water breaks are mandatory, splashing is a privilege.`,
     `These players are gassed. Dampy has seen this before — dehydration, folks. The dolphin is never wrong.`,
+    `Rachel has the packing list, the snack bag, and the final say. The officials should be so organized.`,
+    `Somewhere Rachel is turning this match into a field trip with historical context.`,
+    `An ambitious dinner in the oven, four kids loose, a puppy at large — Rachel manages harder fixtures than this nightly.`,
+    `The tactical engineer built this universe hoping for order. The universe had other plans.`,
+    `Jupiter clocked that formation change before the announcer did. Scouting eye of a future professional.`,
+    `Jupiter finds hidden military history on every family trip. A back line holds no secrets from that kid.`,
+    `Maximus has quietly calculated the perfect pass from the stands. He's waiting for the players to catch up.`,
+    `Halftime trivia from Maximus: this pitch's geometry traces to a Danish artist in 1962. The kid simply knows things.`,
+    `Solana has formally requested a dramatic horse entrance for the next substitution. Petition under review.`,
+    `Sparkle check from Solana: this kit combination passes. Barely.`,
+    `Orion, Morale Officer of the Baby Chaos Division, is toddling toward a restricted area. Security is charmed and helpless.`,
+    `Three objects have vanished from the technical area. The Morale Officer knows nothing.`,
+    `Orion commands the entire household without complete sentences. Same energy as the best captains, honestly.`,
+    `Sheet-pan kielbasa night at the farm. The aroma reaches the cheap seats.`,
+    `A packed van, one forgotten water bottle, and a prayer — every great family adventure, and most away matches.`,
+    `Emergency snacks deployed in the family section. Crisis averted.`,
+    `Smoothies and oatmeal built these young athletes. Protein built their father.`,
+    `Champoeg one weekend, Fort Vancouver the next — this family treats history like a season ticket.`,
+    `The leopard gecko will watch the highlights later. Cold-blooded, but a supporter.`,
+    `A prayer before big adventures is family tradition. Tonight, the defenders clearly joined in.`,
     `Somewhere a Traeger just hit temp. Priorities being tested across the valley.`,
     `You'd ride the river with this lot. Most of them, anyway.`,
     `Fine margins. Fine hexagons. Fine evening all around.`,
