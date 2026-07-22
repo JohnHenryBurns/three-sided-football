@@ -60,6 +60,10 @@ simNow=1000;
 try{ byId["btnStart"]._onclick(); }
 catch(e){ console.log("START CRASH:\n",e.stack); process.exit(1); }
 
+// module mode: expose the booted sandbox + a frame stepper for drills
+module.exports={ sandbox, byId, step(ms){ simNow+=(ms||16.7); const cb=rafCb; rafCb=null; if(!cb)throw new Error("loop died"); cb(simNow); } };
+if(process.env.NOPUMP==="1") return;
+
 // pump: N simulated minutes at 60fps, multiple runs for randomness
 const RUNS=parseInt(process.env.RUNS||"6");
 for(let run=0;run<RUNS;run++){
@@ -73,9 +77,9 @@ for(let run=0;run<RUNS;run++){
     catch(e){ console.log(`RUNTIME CRASH run ${run} frame ${f} (t=${(f/60).toFixed(1)}s):\n`,e.stack); process.exit(1); }
   }
   {
-    const cs=sandbox.clockSec!==undefined?sandbox.clockSec:(sandbox.window&&sandbox.window.clockSec);
+    const cs=sandbox.__probe?sandbox.__probe().clockSec:undefined;
     if(typeof cs==="number"&&cs<40)
-      throw new Error("LIVENESS FAIL: clock only reached "+cs.toFixed(1)+"s of game time in 90 simulated seconds — play stalled");
+      throw new Error("LIVENESS FAIL: clock "+cs.toFixed(1)+"s/90 — "+JSON.stringify(sandbox.__probe?sandbox.__probe():{}));
   }
   console.log(`run ${run}: 90 simulated seconds clean`);
 }
