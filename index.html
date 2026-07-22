@@ -2672,7 +2672,7 @@ function buildActors(){
   fireG=el("g",{});                                             // the scorch layer — under the players
   players.forEach(p=>{
     const g=el("g",{});
-    el("circle",{r:20,fill:"none",stroke:TEAMS[p.team].color,"stroke-width":3.5,opacity:0,class:"boostring"},g);
+
 
     const ring=el("circle",{r:16,fill:"none","stroke-width":3.5,
       stroke:"#7ec97e","stroke-linecap":"round",transform:"rotate(-90)"},g);
@@ -2685,7 +2685,7 @@ function buildActors(){
       fill:TEAMS[p.team].accent,stroke:"rgba(0,0,0,.4)","stroke-width":1},g);
     const pip=el("rect",{x:7,y:-19,width:6.5,height:9.5,rx:1.5,
       fill:"#ffd166",stroke:"rgba(0,0,0,.5)","stroke-width":1,opacity:0},g);
-    actorEls.push({g,ring,nose,pip,boost:g.querySelector(".boostring")});
+    actorEls.push({g,ring,nose,pip});
   });
   // fading trail (under the ball)
   for(let i=0;i<7;i++) trailEls.push(el("circle",{r:7-i*0.7,fill:"#fff",opacity:0}));
@@ -2741,7 +2741,11 @@ function draw(){
     a.ring.setAttribute("stroke-dasharray",`${(frac*RING_C).toFixed(1)} ${RING_C.toFixed(1)}`);
     a.ring.setAttribute("stroke",frac>0.6?"#7ec97e":frac>0.35?"#ffb547":"#ff6b6b");
     const boosted=momentumOn&&clockSec<boostUntil[p.team];
-    a.boost.setAttribute("opacity",boosted?0.7:0);
+    if(boosted&&!p.sprint&&!p.out&&Math.random()<0.5){   // the whole team smolders — the original subtle trail
+      const em=el("circle",{cx:p.x-p.vx*3,cy:p.y-p.vy*3,r:3+Math.random()*1.6,
+        fill:Math.random()<0.5?"#ff8c00":"#ffd166",opacity:0.65},fireG);
+      fireFx.push({em,life:0.4,t:0,r0:3.4,o0:0.65});
+    }
     if(p.sprint){
       const BZ=p.sprint.blaze;                       // 12% of bursts get the FULL show
       const nEm=BZ?2:(Math.random()<0.85?1:0);
@@ -2754,7 +2758,7 @@ function draw(){
         fireFx.push({em,life:BZ?0.6:0.48,t:0,r0,o0:BZ?0.9:0.8});
       }
     }
-    if(boosted)a.boost.setAttribute("r",(20+2.2*Math.sin(clockSec*9+i)).toFixed(1));
+
   });
   // trail: only visible when the ball is moving fast (shots and long passes)
   trailPts.unshift({x:ball.x,y:ball.y,z:ball.z});
