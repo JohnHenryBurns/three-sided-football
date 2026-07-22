@@ -51,6 +51,10 @@ sandbox.speechSynthesis={
 };
 sandbox.SpeechSynthesisUtterance=function(t){ this.text=t; };
 
+if(process.env.BURN)sandbox.__BURST_BURN=+process.env.BURN;
+
+if(process.env.RECHG)sandbox.__BURST_RECHG=+process.env.RECHG;
+
 vm.createContext(sandbox);
 try{ vm.runInContext(script,sandbox,{filename:"game.js"}); }
 catch(e){ console.log("LOAD CRASH:\n",e.stack); process.exit(1); }
@@ -106,6 +110,10 @@ if(process.env.GKSTUDY==="1"){
     defInBoxAtDelivery:A.cornerDel?+(A.cornerDef/A.cornerDel).toFixed(2):null,
     alliesInMixAtDelivery:A.cornerDel?+((A.cornerAllyIn||0)/A.cornerDel).toFixed(2):null,
     farPostSharePct:A.cornerDel?+(100*(A.farPost||0)/A.cornerDel).toFixed(0):null,
+    burstsPerMin:+((A.bursts||0)/mins).toFixed(2),
+    denialPct:(A.bursts||A.denied)?+(100*(A.denied||0)/((A.denied||0)+(A.bursts||0))).toFixed(0):0,
+    byWhy:{race:A.b_race||0,emerg:A.b_emerg||0,brk:A.b_break||0,land:A.b_landing||0,sweep:A.b_sweep||0},
+    burstSecPerMin:+((A.burstSec||0)/mins).toFixed(2),
     throwsPerMin:+((A.throwStage||0)/mins).toFixed(2),
     cornersStagedPerMin:+((A.cornerStage||0)/mins).toFixed(2),
     cornersPerMin:+((A.cornerDel||0)/mins).toFixed(2),

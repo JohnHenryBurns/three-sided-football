@@ -292,3 +292,18 @@ pressing a friend's keeper. No opposing force boundaries → no flap. Measured:
 punt retention rose to 46% (positioned defenders contest landings), rolls still
 100% forward, goals 3.31 (variance band). Scrum metric reads 0.62 but now counts
 transit, not orbit.
+
+**Burst energy system (tank + throttle), calibrated by sweep:**
+Stamina is now the TANK (slow, caps the meter: 0.35+0.65*stamina); new per-player
+BURST is the THROTTLE (1.4x speed, hard physics cap 1.6 combined with fire).
+Constants chosen by 3x3 sweep on the real engine: BURN 2.2s to empty, RECHARGE
+11s to full — denial rate 20-27% (scarcity is felt; heroes usually answer), goals
+in envelope. Triggers (all hysteresis-committed, 0.5s min, 2.2s cooldown, 0.55
+meter to start): dead-heat races on settled balls (margin<22, one racer per team),
+last-man defensive emergencies, open-grass breakaways, true punt landings
+(z>34 + pace, one chaser per team), keeper sweeps. Sweep journey: naive triggers
+produced 1671 bursts/min of state-thrash (ownership flicker re-triggering);
+fixed via commitment windows, cooldowns, per-team racer election, and killing a
+stakes gate that hex geometry made always-true (every point is near SOME goal).
+Numbers are Mayhem-stress; family-default churn is far lower. Visual tell:
+dashed white afterburner ring while bursting. Set-piece staging speeds untouched.
