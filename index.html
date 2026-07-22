@@ -3149,16 +3149,7 @@ function renderTeamSlots(){
     b.style.boxShadow=`inset 0 -3.5px 0 ${L.accent}`;
     b.onclick=()=>openTeamPick(i);
     row.appendChild(b);
-    const d1=document.createElement("button");
-    d1.className="slotDice"; d1.textContent="🎲"; d1.title="Random team for this slot";
-    d1.onclick=()=>{
-      const pool=[...TEAM_LIBRARY.keys()].filter(k=>!selTeams.includes(k));
-      if(pool.length){
-        selTeams[i]=pool[Math.floor(Math.random()*pool.length)];
-        rebuildWorld(); renderTeamSlots();
-      }
-    };
-    row.appendChild(d1);
+
   }
   const dice=document.createElement("button");
   dice.className="diceBtn"; dice.textContent="🎲"; dice.title="Random matchup";
@@ -3174,7 +3165,12 @@ function openTeamPick(slot){
   const card=document.getElementById("tpCard");
   const sbar=(lbl,n,col)=>`<div class="tpStat"><b>${lbl}</b><div class="tpBarBg">
     <div class="tpBarF" style="width:${n*20}%;background:${col}"></div></div></div>`;
-  card.innerHTML=`<div class="big2">Slot ${slot+1}: choose a nation</div>`+
+  card.innerHTML=`<div class="big2">Slot ${slot+1}: choose a nation</div>
+    <div class="tpTeam" data-rand="1" style="border-color:#ffd166">
+      <div class="tpDot" style="display:flex;align-items:center;justify-content:center;font-size:1.3rem">🎲</div>
+      <div class="tpBody"><span class="tpName" style="color:#ffd166">Surprise me</span>
+      <span class="tpId">A random nation for this slot</span></div>
+    </div>`+
     TEAM_LIBRARY.map((L,idx)=>{
       const st=statBars(L), taken=selTeams.includes(idx)&&selTeams[slot]!==idx;
       const barCol=lum(L.color)>0.72?L.accent:L.color;
@@ -3203,6 +3199,13 @@ function openTeamPick(slot){
     slotEl.appendChild(sv);
   });
   card.querySelectorAll(".tpTeam").forEach(elx=>elx.onclick=()=>{
+    if(elx.dataset.rand){
+      const pool=[...TEAM_LIBRARY.keys()].filter(k=>!selTeams.includes(k));
+      if(pool.length) selTeams[slot]=pool[Math.floor(Math.random()*pool.length)];
+      rebuildWorld(); renderTeamSlots();
+      document.getElementById("teamPick").classList.remove("show");
+      return;
+    }
     const idx=parseInt(elx.dataset.idx);
     const other=selTeams.indexOf(idx);
     if(other>=0&&other!==slot) selTeams[other]=selTeams[slot];   // swap to prevent duplicates
