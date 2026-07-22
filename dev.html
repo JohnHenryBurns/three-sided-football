@@ -574,12 +574,16 @@ const BURST_BURN =(typeof __BURST_BURN !=="undefined")?__BURST_BURN :1.4;  // on
 const BURST_RECHG=(typeof __BURST_RECHG!=="undefined")?__BURST_RECHG:15;   // seconds to refill — scarcity is the point
 const BURST_SPD=1.4;                                                       // the rockets
 let lastBlazeSay=-99;
+const FLAME3=["#ff3d00","#ff8c00","#ffd166"];
+const RAINBOW=["#ff5aa7","#ff9f1c","#ffe14d","#5ad66f","#5ab9ff","#b58ae0"];
+function firePal(t9){ return TEAMS[t9]&&TEAMS[t9].she?RAINBOW:FLAME3; }
 function flamePop(q2){
   if(!fireG)return;
   for(let fi2=0;fi2<7;fi2++){
     const a2=fi2/7*Math.PI*2;
+    const P9=firePal(q2.team);
     const em=el("circle",{cx:q2.x+Math.cos(a2)*10,cy:q2.y+Math.sin(a2)*10,r:4.5+Math.random()*2,
-      fill:["#ff3d00","#ff8c00","#ffd166"][fi2%3],opacity:0.9},fireG);
+      fill:P9[fi2%P9.length],opacity:0.9},fireG);
     fireFx.push({em,life:0.5,t:0,r0:5,o0:0.9});
   }
 }
@@ -1138,7 +1142,7 @@ function think(dt){
             const SSL=owner.burst>0.7&&Math.random()<0.5;
             if(SSL){ owner.burst-=0.6; GKSTAT.superShots=(GKSTAT.superShots||0)+1; }
             kick(tgt.x+e.ux*offL*(SSL?0.75:1), tgt.y+e.uy*offL*(SSL?0.75:1), SSL?13.2:11.2, true);
-            if(SSL){ ball.flameShot=true; superSay(owner); }
+            if(SSL){ ball.flameShot=true; ball.flameShe=!!(TEAMS[owner.team]&&TEAMS[owner.team].she); superSay(owner); }
             gkDiveCheck(targets[owner.team], SSL);
             return;
           }
@@ -1151,7 +1155,7 @@ function think(dt){
         const SS=owner.burst>0.7&&Math.random()<0.4;
         if(SS){ owner.burst-=0.6; GKSTAT.superShots=(GKSTAT.superShots||0)+1; }
         kick(tgt.x+e.ux*off*(SS?0.75:1), tgt.y+e.uy*off*(SS?0.75:1), (9.5+Math.random()*1.5)*(SS?1.3:1), true);
-        if(SS){ ball.flameShot=true; superSay(owner); }
+        if(SS){ ball.flameShot=true; ball.flameShe=!!(TEAMS[owner.team]&&TEAMS[owner.team].she); superSay(owner); }
         gkDiveCheck(targets[owner.team], SS);
         return;
       }
@@ -1239,7 +1243,15 @@ function think(dt){
             `🟥 <b>RED CARD!</b> WITNESS ${o.name.toUpperCase()}! ${PRN(o).He} ${off}, and now rides shiny and chrome to the Valhalla of the bench!`,
             `🟥 <b>RED CARD!</b> ${o.name} ${off}. "'Tis but a scratch," ${PRN(o).he} protests. The referee begs to differ — OFF!`,
             `🟥 <b>RED CARD!</b> ${o.name} ${off}. As the family says: just do the next right thing. The next right thing is the bench.`,
-            `🟥 <b>RED CARD!</b> ${o.name} ${off} — and gets taken to the train station, hex edition. ${tm(o.team)} a ${PRN(o).man} short!`]),true);
+            `🟥 <b>RED CARD!</b> ${o.name} ${off} — and gets taken to the train station, hex edition. ${tm(o.team)} a ${PRN(o).man} short!`,
+            `🟥 <b>RED CARD!</b> ${o.name} ${off}. NOBODY expected the disciplinary inquisition. OFF!`,
+            `🟥 <b>RED CARD!</b> ${o.name} ${off}. The hex don't tolerate rude behavior. ${PRN(o).He} rides for the bench.`,
+            `🟥 <b>RED CARD!</b> ${o.name} ${off} — ELIMINATED! Back to the lobby, and ${tm(o.team)} face the storm a ${PRN(o).man} short.`,
+            `🟥 <b>RED CARD!</b> ${o.name} ${off}. Respawn point: the bench. Inventory: regret.`,
+            `🟥 <b>RED CARD!</b> ${o.name} ${off}. Orion, Morale Officer of the Baby Chaos Division, has reviewed it: unacceptable chaos, even by division standards.`,
+            `🟥 <b>RED CARD!</b> ${o.name} ${off}. Dampy rules it a catastrophic splash violation. Straight red.`,
+            `🟥 <b>RED CARD!</b> ${o.name} ${off}. Momo watched from the rafters and did not blink. The referee agrees. OFF!`,
+            `🟥 <b>RED CARD!</b> ${o.name} ${off}. Grandma Bridget's review: "bold, but ultimately indefensible." RED.`]),true);
         } else if(card==="yellow"){
           addStoppage(3);
           showNotice(col,"🟨 YELLOW CARD",`${o.name} (${shortT})`,
@@ -1254,7 +1266,17 @@ function think(dt){
             `🟨 ${o.name} booked — ${off}. Best to let this one go before it becomes two.`,
             `🟨 ${o.name} running hot — ${off}. The referee attenuates the signal with a yellow.`,
             `🟨 ${o.name} booked — ${off}. Coaches Eric and Dan teach cleaner timing than THAT.`,
-            `🟨 ${o.name} booked — ${off}. No instruments required — the whole stadium saw it.`]),true);
+            `🟨 ${o.name} booked — ${off}. No instruments required — the whole stadium saw it.`,
+            `🟨 ${o.name} booked — ${off}. Ten thousand thundering typhoons of protest change nothing.`,
+            `🟨 ${o.name} booked — ${off}. To be precise: booked.`,
+            `🟨 ${o.name} booked — ${off}. Even Bandit would sit ${PRN(o).him} out for that one.`,
+            `🟨 ${o.name} booked — ${off}. The storm is closing on ${PRN(o).his} discipline.`,
+            `🟨 ${o.name} booked — ${off}. Half a heart of damage, minimum.`,
+            `🟨 ${o.name} booked — ${off}. One bonus item, deducted.`,
+            `🟨 ${o.name} booked — ${off}. Grandma Gloria lights a candle for ${PRN(o).his} discipline.`,
+            `🟨 ${o.name} booked — ${off}. Grampy Cliff logs it as improper equipment operation.`,
+            `🟨 ${o.name} booked — ${off}. Continental rules: none of THAT on hex grounds.`,
+            `🟨 ${o.name} booked — ${off}. The hens on the fencepost all turned to look at once.`]),true);
         } else if(inBox){
           showNotice(TEAMS[victim.team].color,"⚠️ PENALTY!",
             `${victim.name} is brought down in the box!`,
@@ -2784,19 +2806,21 @@ function draw(){
     a.ring.setAttribute("stroke",frac>0.6?"#7ec97e":frac>0.35?"#ffb547":"#ff6b6b");
     const boosted=momentumOn&&clockSec<boostUntil[p.team];
     if(boosted&&!p.sprint&&!p.out&&Math.random()<0.5){   // the whole team smolders — the original subtle trail
+      const P7=firePal(p.team);
       const em=el("circle",{cx:p.x-p.vx*3,cy:p.y-p.vy*3,r:3+Math.random()*1.6,
-        fill:Math.random()<0.5?"#ff8c00":"#ffd166",opacity:0.65},fireG);
+        fill:P7[Math.floor(Math.random()*P7.length)],opacity:0.65},fireG);
       fireFx.push({em,life:0.4,t:0,r0:3.4,o0:0.65});
     }
     if(p.sprint){
       const BZ=p.sprint.blaze;                       // 12% of bursts get the FULL show
       const nEm=BZ?2:(Math.random()<0.85?1:0);
+      const P8=firePal(p.team);
       for(let fj=0;fj<nEm;fj++){
         const r0=BZ?5.5+Math.random()*3:3.8+Math.random()*2;
         const em=el("circle",{cx:p.x-p.vx*(2+fj*3.5)+(Math.random()*(BZ?6:4)-(BZ?3:2)),
           cy:p.y-p.vy*(2+fj*3.5)+(Math.random()*(BZ?6:4)-(BZ?3:2)),
           r:r0,
-          fill:["#ff3d00","#ff8c00","#ffd166"][Math.floor(Math.random()*3)],opacity:BZ?0.9:0.8},fireG);
+          fill:P8[Math.floor(Math.random()*P8.length)],opacity:BZ?0.9:0.8},fireG);
         fireFx.push({em,life:BZ?0.6:0.48,t:0,r0,o0:BZ?0.9:0.8});
       }
     }
@@ -2820,8 +2844,9 @@ function draw(){
   const lift=ball.z*0.9;
   if(ball.isShot&&ball.flameShot&&fireG){            // the burning ball
     for(let fb=0;fb<2;fb++){
+      const PB=ball.flameShe?RAINBOW:FLAME3;
       const em=el("circle",{cx:ball.x+(Math.random()*8-4),cy:ball.y+(Math.random()*8-4),
-        r:5+Math.random()*2.5,fill:["#ff3d00","#ff8c00","#ffd166"][Math.floor(Math.random()*3)],opacity:0.9},fireG);
+        r:5+Math.random()*2.5,fill:PB[Math.floor(Math.random()*PB.length)],opacity:0.9},fireG);
       fireFx.push({em,life:0.5,t:0,r0:5.5,o0:0.9});
     }
   }
