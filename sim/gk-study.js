@@ -54,6 +54,7 @@ sandbox.SpeechSynthesisUtterance=function(t){ this.text=t; };
 if(process.env.BURN)sandbox.__BURST_BURN=+process.env.BURN;
 
 if(process.env.RECHG)sandbox.__BURST_RECHG=+process.env.RECHG;
+if(process.env.NOCLEAR)sandbox.__NOCLEAR=1;
 
 vm.createContext(sandbox);
 try{ vm.runInContext(script,sandbox,{filename:"game.js"}); }
@@ -114,6 +115,10 @@ if(process.env.GKSTUDY==="1"){
     denialPct:(A.bursts||A.denied)?+(100*(A.denied||0)/((A.denied||0)+(A.bursts||0))).toFixed(0):0,
     byWhy:{race:A.b_race||0,emerg:A.b_emerg||0,brk:A.b_break||0,land:A.b_landing||0,sweep:A.b_sweep||0},
     burstSecPerMin:+((A.burstSec||0)/mins).toFixed(2),
+    claimsPerMin:+((A.claims||0)/mins).toFixed(1),
+    clearsPerMin:+((A.clears||0)/mins).toFixed(1),
+    rapidReclaimPct:(A.claims)?+(100*(A.rapid||0)/A.claims).toFixed(0):null,
+    avgDistPerBurst:(A.bursts)?+((A.sprintDist||0)/A.bursts).toFixed(0):null,
     throwsPerMin:+((A.throwStage||0)/mins).toFixed(2),
     cornersStagedPerMin:+((A.cornerStage||0)/mins).toFixed(2),
     cornersPerMin:+((A.cornerDel||0)/mins).toFixed(2),
