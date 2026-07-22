@@ -272,3 +272,13 @@ pitch. Delivery softened (6.8 pw, 2.8 zv) after the buffed flood pushed goals to
 stayed stable throughout (rolls ~100% forward, scrum ≤0.29). Harness fixes en
 route: __forceRules() headless port (stub checkboxes read falsy → oobRule was
 off, zero restarts), and a NaN aggregation bug that hid all new counters.
+
+**Liveness false-alarm postmortem (John called it):** No game stall existed. The
+clock runs 0.75x wall by design, so 90 sim-sec holds max 67.5 clock-sec; eventful
+matches (4 goals + red card + countdown + walks) spend ~46s on ceremony and
+legitimately land ~30-35 clock-sec — under the harness's stale 40s threshold,
+calibrated before this session's ceremony additions. Verified quantitatively from
+probe dumps (predicted ~33, observed 30.3/30.8/31.5/35.2) and by 40 consecutive
+clean matches at threshold 15 (real stalls freeze in the opening seconds).
+Lesson banked: `cmd | tail -1` masks exit codes — the pipeline reports tail's
+status, which is how the alarm initially slipped past a gate.
