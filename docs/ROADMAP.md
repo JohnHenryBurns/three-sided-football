@@ -341,3 +341,16 @@ throwRepeat 77%→0%, throws/min 75→15 (normal). Bonus landed en route: throws
 LOFT (zv 2.4, flight-tuned power) sailing over lane blockers per John's design —
 lane-blocking penalty replaced with landing-openness target scoring; clears
 edge-clamped; detector cross-match hygiene.
+
+**The fire duo (supershots + dive bursts, one shared tank):**
+Shooters with >0.7 burst may spend 0.6 on a FLAME SHOT (40-50% uptake): 1.3x power,
+tightened accuracy (0.75 spread), the ball burns in flight, "extinguished!" note
+when caught. Keepers answer: dive burst (0.6 tank) extends claim reach 17->23 for
+1.2s — ALWAYS against flame shots (fire meets fire: the duel), 12% against
+ordinary danger, penalties included. Balance journey: first cut had keepers
+diving 9-16/min and NET-NERFED scoring (1.6); rarity-gated to land goals ~2.0 vs
+1.9 baseline — the ordered slight buff, partially offset by dives, exactly as
+specced. Shared-tank competition is real: denial rose to ~55% because shots,
+dives, and sprints all drain the same meter — a striker who empties the clip has
+no legs for the recovery run. Booth: John Wick pool (Baba Yaga, empties the clip,
+sudden terrible intent), duel calls, keeper explosion lines.

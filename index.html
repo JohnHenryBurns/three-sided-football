@@ -573,6 +573,44 @@ const BURST_BURN =(typeof __BURST_BURN !=="undefined")?__BURST_BURN :1.4;  // on
 const BURST_RECHG=(typeof __BURST_RECHG!=="undefined")?__BURST_RECHG:15;   // seconds to refill — scarcity is the point
 const BURST_SPD=1.4;                                                       // the rockets
 let lastBlazeSay=-99;
+function flamePop(q2){
+  if(!fireG)return;
+  for(let fi2=0;fi2<7;fi2++){
+    const a2=fi2/7*Math.PI*2;
+    const em=el("circle",{cx:q2.x+Math.cos(a2)*10,cy:q2.y+Math.sin(a2)*10,r:4.5+Math.random()*2,
+      fill:["#ff3d00","#ff8c00","#ffd166"][fi2%3],opacity:0.9},fireG);
+    fireFx.push({em,life:0.5,t:0,r0:5,o0:0.9});
+  }
+}
+function superSay(p2){
+  if(Math.random()>0.6)return;
+  say(pick([
+    `${p2.name} loads one with John Wick focus — absolute commitment!`,
+    `FLAME SHOT! ${p2.name} puts the whole tank behind it!`,
+    `${p2.name} with sudden, terrible intent — that ball is SMOKING!`,
+    `One breath. One strike. ${p2.name} goes full Baba Yaga!`,
+    `${p2.name} empties the clip!`]),true,"lowvoice");
+}
+function gkDiveCheck(defT,flame){
+  const gk=players.find(q2=>q2.team===defT&&q2.role==="K"&&!q2.out&&!q2.sentOff);
+  if(!gk)return;
+  if(gk.burst>0.6&&(flame||Math.random()<0.12)){
+    gk.burst-=0.6; gk.diveUntil=clockSec+1.2;
+    GKSTAT.diveBurns=(GKSTAT.diveBurns||0)+1;
+    flamePop(gk);
+    if(flame){
+      GKSTAT.duels=(GKSTAT.duels||0)+1;
+      say(pick([
+        `FIRE MEETS FIRE — both tanks emptied in one heartbeat!`,
+        `${gk.name} answers the flame with a flame of ${PRN(gk).his} own!`,
+        `A duel! Burning shot, burning dive — somebody's fire dies here!`]),true,"lowvoice");
+    } else if(Math.random()<0.4){
+      say(pick([
+        `${gk.name} EXPLODES across the goal!`,
+        `A flame dive — ${gk.name} pays for it from the tank!`]),true,"lowvoice");
+    }
+  }
+}
 function blazeCall(p2){
   if(clockSec-lastBlazeSay<6) return;                // one eruption at a time
   lastBlazeSay=clockSec;
@@ -995,6 +1033,7 @@ function think(dt){
       const off2=(Math.random()*2-1)*e.len*GOAL_HALF*1.0;
       stats.shots[owner.team]++;
       kick(g.x+e.ux*off2, g.y+e.uy*off2, 10.8, true);
+      gkDiveCheck(penaltyGoalTeam,false);
       return;
     }
     if(owner.role==="K"){
@@ -1095,7 +1134,11 @@ function think(dt){
               `${owner.name} has a go from distance — dip and swerve!`,
               `No hesitation — ${owner.name} rips one from ${Math.round(dGoal/8)} yards!`,
               `${owner.name} says why not, and unloads!`]),true);
-            kick(tgt.x+e.ux*offL, tgt.y+e.uy*offL, 11.2, true);
+            const SSL=owner.burst>0.7&&Math.random()<0.5;
+            if(SSL){ owner.burst-=0.6; GKSTAT.superShots=(GKSTAT.superShots||0)+1; }
+            kick(tgt.x+e.ux*offL*(SSL?0.75:1), tgt.y+e.uy*offL*(SSL?0.75:1), SSL?13.2:11.2, true);
+            if(SSL){ ball.flameShot=true; superSay(owner); }
+            gkDiveCheck(targets[owner.team], SSL);
             return;
           }
         }
@@ -1104,7 +1147,11 @@ function think(dt){
         let sc=0.6+0.8*RK;                                   // patience = precision
         if(T(targets[owner.team]).bunker>0.5) sc*=1.35;      // packed boxes deflect
         const off=(Math.random()*2-1)*e.len*GOAL_HALF*sc;
-        kick(tgt.x+e.ux*off, tgt.y+e.uy*off, 9.5+Math.random()*1.5, true);
+        const SS=owner.burst>0.7&&Math.random()<0.4;
+        if(SS){ owner.burst-=0.6; GKSTAT.superShots=(GKSTAT.superShots||0)+1; }
+        kick(tgt.x+e.ux*off*(SS?0.75:1), tgt.y+e.uy*off*(SS?0.75:1), (9.5+Math.random()*1.5)*(SS?1.3:1), true);
+        if(SS){ ball.flameShot=true; superSay(owner); }
+        gkDiveCheck(targets[owner.team], SS);
         return;
       }
     }
@@ -1377,7 +1424,7 @@ function physics(dt){
       let t=sl>0?((p.x-px0)*sx+(p.y-py0)*sy)/sl:0;
       t=Math.max(0,Math.min(1,t));
       const d=Math.hypot(p.x-(px0+sx*t), p.y-(py0+sy*t));
-      const reach=p.role==="K"?17:13;
+      const reach=p.role==="K"?(p.diveUntil&&clockSec<p.diveUntil?23:17):13;
       if(d<reach&&d<bd){bd=d;best=p;}});
     if(best){
       const wasShot=ball.isShot, spd=Math.hypot(ball.vx,ball.vy), kicker=ball.lastKicker;
@@ -1393,6 +1440,8 @@ function physics(dt){
       ball.allyPass=false;
       if(ball.puntBy!==undefined){ GKSTAT.puntSeen++; if(best.team===ball.puntBy)GKSTAT.puntSame++; ball.puntBy=undefined; }
       ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
+      if(ball.flameShot&&best.role==="K") spawnNote(best.x,best.y-24,"🔥 extinguished!","#ffd166");
+      ball.flameShot=false;
       GKSTAT.claims=(GKSTAT.claims||0)+1;
       if(clockSec-(GKSTAT.lastClaimAt||-9)<0.45
          && Math.hypot(ball.x-(GKSTAT.lastClaimX||-999),ball.y-(GKSTAT.lastClaimY||-999))<70)
@@ -2723,6 +2772,13 @@ function draw(){
     walkLabel.setAttribute("opacity",1);
   } else walkLabel.setAttribute("opacity",0);
   const lift=ball.z*0.9;
+  if(ball.isShot&&ball.flameShot&&fireG){            // the burning ball
+    for(let fb=0;fb<2;fb++){
+      const em=el("circle",{cx:ball.x+(Math.random()*8-4),cy:ball.y+(Math.random()*8-4),
+        r:5+Math.random()*2.5,fill:["#ff3d00","#ff8c00","#ffd166"][Math.floor(Math.random()*3)],opacity:0.9},fireG);
+      fireFx.push({em,life:0.5,t:0,r0:5.5,o0:0.9});
+    }
+  }
   for(let fi=fireFx.length-1;fi>=0;fi--){
     const F=fireFx[fi]; F.t+=1/60;
     if(F.t>=F.life){ F.em.remove(); fireFx.splice(fi,1); continue; }
@@ -2794,7 +2850,7 @@ function draw(){
 function outOfBounds(k,e){
   const toucher=ball.lastTouch;
   const ex=ball.x, ey=ball.y;
-  ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0; ball.owner=null; ball.noClaim=null; ball.isShot=false; ball.allyPass=false;
+  ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0; ball.owner=null; ball.noClaim=null; ball.isShot=false; ball.allyPass=false; ball.flameShot=false;
   addStoppage(0.8);
   if(e.goal){
     const ownerT=GOAL_EDGE.indexOf(k);
