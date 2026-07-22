@@ -820,7 +820,7 @@ function think(dt){
       }
       if(want&&!p.sprint&&clockSec>p.sprintCd){
         if(p.burst>0.65){
-          p.sprint={why:want}; p.sprintMin=clockSec+0.5;        // commit: no frame-level churn
+          p.sprint={why:want,blaze:Math.random()<0.12}; p.sprintMin=clockSec+0.5;   // commit — and 1-in-8 lights the FULL fire
           GKSTAT.bursts=(GKSTAT.bursts||0)+1; GKSTAT["b_"+want]=(GKSTAT["b_"+want]||0)+1;
           p.deniedLatch=false;
         } else if(!p.deniedLatch){                              // wanted the legs, tank said no
@@ -862,7 +862,7 @@ function think(dt){
           players.forEach(q=>{ if(q.team!==p.team&&!q.out&&!q.sentOff&&q.role!=="K")
             oppNear=Math.min(oppNear,dist(q,ball)); });
           if(dist(p,ball)<oppNear-18||oppNear>120){
-            if(!p.sprint&&p.burst>0.25){ p.sprint={why:"sweep"}; GKSTAT.b_sweep=(GKSTAT.b_sweep||0)+1; }
+            if(!p.sprint&&p.burst>0.25){ p.sprint={why:"sweep",blaze:Math.random()<0.12}; GKSTAT.b_sweep=(GKSTAT.b_sweep||0)+1; }
             GKSTAT.sweepSec+=dt; steer(p,ball.x,ball.y,1.5); return; }
         }
       }
@@ -1034,7 +1034,7 @@ function think(dt){
       let blockers=0;
       players.forEach(q=>{ if(q.team!==owner.team&&!q.out&&!q.sentOff&&q.role!=="K"&&dist(q,owner)<180
         &&((q.x-owner.x)*(tg7.x-owner.x)+(q.y-owner.y)*(tg7.y-owner.y))>0) blockers++; });
-      if(blockers===0&&dist(owner,tg7)<520){ owner.sprint={why:"break"}; GKSTAT.b_break=(GKSTAT.b_break||0)+1; }
+      if(blockers===0&&dist(owner,tg7)<520){ owner.sprint={why:"break",blaze:Math.random()<0.12}; GKSTAT.b_break=(GKSTAT.b_break||0)+1; }
     }
     if(owner.sprint&&owner.sprint.why==="break"&&ball.owner!==owner&&clockSec>owner.sprintMin){ owner.sprint=null; owner.sprintCd=clockSec+0.8; }
     const tgt=goalCenter(targets[owner.team]);
@@ -2665,13 +2665,16 @@ function draw(){
     a.ring.setAttribute("stroke",frac>0.6?"#7ec97e":frac>0.35?"#ffb547":"#ff6b6b");
     const boosted=momentumOn&&clockSec<boostUntil[p.team];
     a.boost.setAttribute("opacity",boosted?0.7:0);
-    if(p.sprint){                                    // the fire trail: a proper blaze
-      for(let fj=0;fj<2;fj++){
-        const em=el("circle",{cx:p.x-p.vx*(2+fj*3.5)+(Math.random()*6-3),
-          cy:p.y-p.vy*(2+fj*3.5)+(Math.random()*6-3),
-          r:5.5+Math.random()*3,
-          fill:["#ff3d00","#ff8c00","#ffd166"][Math.floor(Math.random()*3)],opacity:0.9},fireG);
-        fireFx.push({em,life:0.6,t:0});
+    if(p.sprint){
+      const BZ=p.sprint.blaze;                       // 12% of bursts get the FULL show
+      const nEm=BZ?2:(Math.random()<0.85?1:0);
+      for(let fj=0;fj<nEm;fj++){
+        const r0=BZ?5.5+Math.random()*3:3.8+Math.random()*2;
+        const em=el("circle",{cx:p.x-p.vx*(2+fj*3.5)+(Math.random()*(BZ?6:4)-(BZ?3:2)),
+          cy:p.y-p.vy*(2+fj*3.5)+(Math.random()*(BZ?6:4)-(BZ?3:2)),
+          r:r0,
+          fill:["#ff3d00","#ff8c00","#ffd166"][Math.floor(Math.random()*3)],opacity:BZ?0.9:0.8},fireG);
+        fireFx.push({em,life:BZ?0.6:0.48,t:0,r0,o0:BZ?0.9:0.8});
       }
     }
     if(boosted)a.boost.setAttribute("r",(20+2.2*Math.sin(clockSec*9+i)).toFixed(1));
@@ -2696,8 +2699,8 @@ function draw(){
     const F=fireFx[fi]; F.t+=1/60;
     if(F.t>=F.life){ F.em.remove(); fireFx.splice(fi,1); continue; }
     const k=1-F.t/F.life;
-    F.em.setAttribute("opacity",(0.9*k).toFixed(2));
-    F.em.setAttribute("r",(6*k+1).toFixed(2));
+    F.em.setAttribute("opacity",((F.o0||0.8)*k).toFixed(2));
+    F.em.setAttribute("r",((F.r0||4)*k+0.8).toFixed(2));
   }
   ballEl.setAttribute("transform",`translate(${ball.x},${ball.y-lift})${ball.z>2?` scale(${(1+ball.z*0.022).toFixed(3)})`:""}`);
   ballShadow.setAttribute("cx",ball.x); ballShadow.setAttribute("cy",ball.y+3);
