@@ -675,8 +675,8 @@ function think(dt){
       const og3=goalCenter(p.team);
       const ax=CX-og3.x, ay=CY-og3.y, al=Math.hypot(ax,ay)||1;
       const ux3=ax/al, uy3=ay/al, px3=-uy3, py3=ux3;
-      const depth=(p.role==="D"?0.34:p.role==="M"?0.6:0.85);
-      const lat=((p.k1*997)%1-0.5)*300;
+      const depth=(p.role==="D"?0.62:p.role==="M"?0.95:1.25);   // outlets sit AHEAD of shape, not behind it
+      const lat=((p.k1*997)%1-0.5)*340;
       steer(p, og3.x+ux3*al*depth+px3*lat, og3.y+uy3*al*depth+py3*lat, 1.25);
       return;
     }

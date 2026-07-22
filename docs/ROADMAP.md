@@ -323,3 +323,9 @@ Same-spot rapid-reclaim churn: 22% baseline → 13-18%; total claims -27%.
 (3) Booth wired to burst truth: "two empty tanks lumbering after the same ball"
 fires only when 2+ nearby contestants have burst<0.2; "finds ANOTHER gear" on
 live sprints; clearance lines at 18%.
+
+**Hold-outlet inversion fix:** outlet depths (0.34/0.6/0.85 of goal axis) were all
+DEEPER than normal formation — the whole team retreated toward their holding keeper
+(the earlier goal-damping had overcorrected into a huddle). Now 0.62/0.95/1.25:
+outlets sit ahead of shape, F past midfield as the punt target. Goals 3.45/1.9
+across two batches (mean 2.68, centered); rolls 100% forward; churn steady.
