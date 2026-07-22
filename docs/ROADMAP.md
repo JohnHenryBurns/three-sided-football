@@ -329,3 +329,15 @@ DEEPER than normal formation — the whole team retreated toward their holding k
 (the earlier goal-damping had overcorrected into a huddle). Now 0.62/0.95/1.25:
 outlets sit ahead of shape, F past midfield as the punt target. Goals 3.45/1.9
 across two batches (mean 2.68, centered); rolls 100% forward; churn steady.
+
+**Throw-in loop post-mortem (77% of throws were a self-loop):** The behind-the-
+chalk fix stood the thrower 9 units out of bounds — and the spring-dribble carry
+(ball chases a point ahead of its owner) dragged the OWNED ball over the line
+after him during the pre-throw hold; OOB fired on the carried ball → same-spot
+re-throw, forever. Found via loop tracer: every trace read wasThrowPass:true,
+z:0, dt≈0.86 (the staging cycle itself). Fix: ball velocity zeroed and carry
+suspended while throwPending — the ball waits ON the chalk, thrower behind it.
+throwRepeat 77%→0%, throws/min 75→15 (normal). Bonus landed en route: throws now
+LOFT (zv 2.4, flight-tuned power) sailing over lane blockers per John's design —
+lane-blocking penalty replaced with landing-openness target scoring; clears
+edge-clamped; detector cross-match hygiene.
