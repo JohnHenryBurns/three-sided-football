@@ -651,15 +651,31 @@ function think(dt){
       return;
     }
     if(gkHolding()&&p.team!==ball.owner.team&&p.role!=="K"){
-      const dd3=dist(p,ball.owner);
-      if(dd3<64){
-        let tx3=ball.owner.x+(p.x-ball.owner.x)/(dd3||1)*72, ty3=ball.owner.y+(p.y-ball.owner.y)/(dd3||1)*72;
-        for(const e3 of EDGES){
-          const de3=(tx3-e3.p1.x)*e3.nx+(ty3-e3.p1.y)*e3.ny;
-          if(de3<20){ tx3+=e3.nx*(20-de3); ty3+=e3.ny*(20-de3); }
-        }
-        steer(p,tx3,ty3,1.9); return;
+      // coached response to a keeper hold — jobs, not a repulsion ring
+      // (the old 64-in/72-out ring fought the chase logic at its boundary: judder)
+      const gk2=ball.owner, og5=goalCenter(p.team);
+      const ax5=CX-og5.x, ay5=CY-og5.y;
+      if(allied(p.team,gk2.team)){
+        // no pressing a friend's keeper — drop into your own shape
+        steer(p, og5.x+ax5*0.55, og5.y+ay5*0.55, 0.9); return;
       }
+      if(p.role==="D"){
+        // retreat: get depth to defend the long ball
+        const pl5=Math.hypot(ax5,ay5)||1, px5=-ay5/pl5, py5=ax5/pl5;
+        const lat6=((p.k1*997)%1-0.5)*240;
+        steer(p, og5.x+ax5*0.34+px5*lat6, og5.y+ay5*0.34+py5*lat6, 1.15); return;
+      }
+      // M/F: cover the roll lanes — stand between the keeper and his outlets
+      const outs=players.filter(m=>m.team===gk2.team&&m.role!=="K"&&!m.out&&!m.sentOff);
+      if(outs.length){
+        const o5=outs[Math.floor(((p.k1*769)%1)*outs.length)%outs.length];
+        let lx=gk2.x+(o5.x-gk2.x)*0.62, ly=gk2.y+(o5.y-gk2.y)*0.62;
+        const dgk=Math.hypot(lx-gk2.x,ly-gk2.y);
+        if(dgk<85){ lx=gk2.x+(lx-gk2.x)/(dgk||1)*85; ly=gk2.y+(ly-gk2.y)/(dgk||1)*85; }
+        GKSTAT.laneCover=(GKSTAT.laneCover||0)+1;
+        steer(p,lx,ly,1.2); return;
+      }
+      steer(p,CX,CY,0.9); return;
     }
     if(holdActive){
       const rx=pendingRestart?pendingRestart.x:ball.x, ry=pendingRestart?pendingRestart.y:ball.y;

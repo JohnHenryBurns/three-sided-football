@@ -282,3 +282,13 @@ probe dumps (predicted ~33, observed 30.3/30.8/31.5/35.2) and by 40 consecutive
 clean matches at threshold 15 (real stalls freeze in the opening seconds).
 Lesson banked: `cmd | tail -1` masks exit codes — the pipeline reports tail's
 status, which is how the alarm initially slipped past a gate.
+
+**Keeper-hold judder fix:** The scrum-clear repulsion ring (push out at 64, chase
+pulls back in) created boundary oscillation — defenders vibrating in place. Replaced
+with coached jobs during holds: hostile Ds retreat to depth (0.34 axis + lateral
+spread) to defend the punt landing; hostile M/Fs cover roll lanes (62% along
+keeper→outlet, min 85 from keeper); allies drop into their own shape rather than
+pressing a friend's keeper. No opposing force boundaries → no flap. Measured:
+punt retention rose to 46% (positioned defenders contest landings), rolls still
+100% forward, goals 3.31 (variance band). Scrum metric reads 0.62 but now counts
+transit, not orbit.
