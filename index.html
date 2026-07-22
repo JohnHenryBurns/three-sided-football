@@ -466,7 +466,7 @@ function resetMatch(){
   }
   menuTeam=null; document.getElementById("coachMenu")?.classList.remove("show");
   stats={shots:[0,0,0],saves:[0,0,0],tackles:[0,0,0],poss:[0,0,0]};
-  goalsLog=[]; goldenScorer=null; matchLog=[];
+  goalsLog=[]; goldenScorer=null; matchLog=[]; gkHolder=null; gkHoldUntil=-1;
   goalEls.forEach(g=>g&&g.setAttribute("opacity",1));
   drawBoards();   // fresh sponsors every match
   suppress=null; pendingPenalty=null; penaltyShooter=null; penaltyGoalTeam=null;
@@ -636,6 +636,17 @@ function think(dt){
         return;
       }
     }
+    if(gkHolding()&&p.team!==ball.owner.team&&p.role!=="K"){
+      const dd3=dist(p,ball.owner);
+      if(dd3<64){
+        let tx3=ball.owner.x+(p.x-ball.owner.x)/(dd3||1)*72, ty3=ball.owner.y+(p.y-ball.owner.y)/(dd3||1)*72;
+        for(const e3 of EDGES){
+          const de3=(tx3-e3.p1.x)*e3.nx+(ty3-e3.p1.y)*e3.ny;
+          if(de3<20){ tx3+=e3.nx*(20-de3); ty3+=e3.ny*(20-de3); }
+        }
+        steer(p,tx3,ty3,1.9); return;
+      }
+    }
     if(holdActive){
       const rx=pendingRestart?pendingRestart.x:ball.x, ry=pendingRestart?pendingRestart.y:ball.y;
       const rteam=pendingRestart?pendingRestart.team:(ball.owner?ball.owner.team:-1);
@@ -766,14 +777,40 @@ function think(dt){
     }
     if(owner.role==="K"){
       const og=goalCenter(owner.team);
-      let best=null,bd=1e9;
-      players.forEach(m=>{ if(m.team===owner.team&&!m.out&&!m.sentOff&&(m.role==="M"||m.role==="F")){
-        const d=dist(m,owner); if(d<bd){bd=d;best=m;}}});
-      if(best){
-        let tx=best.x+best.vx*10, ty=best.y+best.vy*10;
-        if(Math.hypot(tx-og.x,ty-og.y)<dist(owner,og)+30){ tx=CX; ty=CY; }
-        kick(tx,ty,Math.min(9,bd*0.05+4));
-      } else kick(CX,CY,8);
+      // THE GRAB: he's caught it — his ball, his moment, his name in lights
+      if(gkHolder!==owner){
+        gkHolder=owner; gkHoldUntil=clockSec+1.6;
+        spawnNote(owner.x,owner.y-26,"🧤 secured!",TEAMS[owner.team].color,TEAMS[owner.team].accent);
+      }
+      if(clockSec<gkHoldUntil){
+        // stride off the line, survey the field
+        const adv={x:og.x+(CX-og.x)*0.22, y:og.y+(CY-og.y)*0.22};
+        steer(owner,adv.x,adv.y,1.1);
+        return;
+      }
+      gkHolder=null;
+      // DISTRIBUTION: roll it short, or launch it across the county
+      let near=null,nd2=1e9, far=null,fd=-1;
+      players.forEach(m=>{ if(m.team!==owner.team||m===owner||m.out||m.sentOff||m.role==="K")return;
+        const d=dist(m,owner);
+        if(d<nd2){nd2=d;near=m;}
+        const adv2=dist(m,og);
+        if(adv2>fd){fd=adv2;far=m;}});
+      const wantPunt=far&&(fd>320)&&(Math.random()<0.6||nd2>150);
+      if(wantPunt){
+        kick(far.x+far.vx*14, far.y+far.vy*14, 13.5, false);
+        ball.zv=3.4;   // up into the lights — headers await on the far side
+        say(pick([
+          `${owner.name} LAUNCHES it — a drop kick clearing the county line!`,
+          `${owner.name} sends it to the MOON. Somebody on the far side has a decision to make.`,
+          `A monster punt from ${owner.name} — the ball has its own weather now.`,
+          `${owner.name} with the full field-flip. From his box to their problem.`]),true,"lowvoice");
+      } else if(near&&nd2<180){
+        kick(near.x+near.vx*8, near.y+near.vy*8, Math.min(6.5,nd2*0.04+3.5), false);
+        if(Math.random()<0.35) say(pick([
+          `${owner.name} rolls it out calmly. Playing from the back.`,
+          `${owner.name}, unhurried, feeds it short. Composure.`]),false);
+      } else kick(CX,CY,9);
       return;
     }
     const tgt=goalCenter(targets[owner.team]);
@@ -933,6 +970,7 @@ function think(dt){
       tc*=(0.55+0.45*o.stamina);             // fresh tacklers bite harder
       tc*=(1.35-0.5*owner.stamina);          // gassed carriers are easier to rob
       if(momentumOn&&clockSec<boostUntil[o.team]) tc*=1.3;
+      if(owner.role==="K"&&gkHolding())return;
       if(dist(o,owner)<26 && Math.random()<tc*dt*60){   // MUST stay > body radius 23
         const victim=owner;
         ball.owner=o; ball.lastTouch=o.team; ball.lastKicker=o; ball.isShot=false;
@@ -1231,6 +1269,8 @@ let celebrateUntil=0, pendingKickoff=null;
 let suppress=null, pendingPenalty=null, penaltyShooter=null, penaltyGoalTeam=null;
 let stoppageLen=0, stoppageAnnounced=false, zoneRule=true, foulMult=1;
 let oobRule=true, cornerTaker=null, cornerGoal=null, restartHold=0, pendingRestart=null, throwPending=null;
+let gkHoldUntil=-1, gkHolder=null;
+const gkHolding=()=>ball.owner&&ball.owner===gkHolder&&clockSec<gkHoldUntil;
 let camFocusP=null, camFocusUntil=0, walkOff=null, walkPending=null;
 function addStoppage(sec){ stoppageLen=Math.min(Math.min(65,matchLen*0.30), stoppageLen+sec); }
 const celeEl=document.getElementById("celebrate"), celeCard=document.getElementById("celeCard"),
