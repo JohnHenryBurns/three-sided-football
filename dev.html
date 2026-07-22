@@ -1285,7 +1285,9 @@ function think(dt){
           `${o.name} sends ${victim.name} straight back to the lobby.`,
           `Dutton rules from ${o.name} — that's HIS grass ${victim.name} was standing on.`,
           `${o.name} with a tackle Grampy Cliff would call proper equipment maintenance.`,
-          `${o.name} arrives with full Atlas-zoomies energy. ${victim.name} never stood a chance.`]));
+          `${o.name} arrives with full Atlas-zoomies energy. ${victim.name} never stood a chance.`,
+          `${o.name} chops ${victim.name} down. 'Tis but a scratch, surely.`,
+          `RUN AWAY! ${victim.name} heeds the classic advice one moment too late.`]));
       }
     });
   }
@@ -1565,7 +1567,8 @@ function physics(dt){
               `${ball.lastKicker.name} built in creative mode there — spectacular, and completely without survival value.`,
               `Wide! The instruments spiked, the ball swerved, and honestly... what IS in that mesa?`,
               `Off it goes — Atlas is already in pursuit somewhere beyond the hoardings.`,
-              `Solana's verdict from the royal box: pretty, but the judges require it on target.`]));
+              `Solana's verdict from the royal box: pretty, but the judges require it on target.`,
+              `Wide! The Knights who say NI are unimpressed. They wanted a shrubbery anyway.`]));
             ball.isShot=false;
           }
           outOfBounds(k,e); return;
@@ -1727,7 +1730,8 @@ function goalScored(concederTeam){
       `<span class="goal">⚽ GOOOAL!</span> ${name}! Absolute Victory Royale form! ${scoreline}!`,
       `<span class="goal">⚽ GOOOAL!</span> ${name}! Grandma Gloria's candle is WORKING — ${scoreline}!`,
       `<span class="goal">⚽ GOOOAL!</span> ${name}! Solana scores it a TEN — performance AND presentation! ${scoreline}!`,
-      `<span class="goal">⚽ GOOOAL!</span> ${name} — Maximus calculated that finish three passes ago! ${scoreline}!`]),true);
+      `<span class="goal">⚽ GOOOAL!</span> ${name} — Maximus calculated that finish three passes ago! ${scoreline}!`,
+      `<span class="goal">⚽ GOOOAL!</span> ${name} completes the quest — the grail was in the net all along! ${scoreline}!`]),true);
     if(momentumOn && wasTrailing){
       boostUntil[scorerTeam]=clockSec+20;
       caughtFire=true;
@@ -2191,7 +2195,18 @@ function ambientChatter(){
     `Strange readings over the stadium tonight. Skinwalker Ranch strange. The cows won't look at the pitch.`,
     `That ball just changed direction for no reason at all. I'll say it: what the hell is in that mesa?`,
     `Signal dropout, weird bounces, a keeper acting spooked... folks, what is IN that mesa?`,
-    `The instruments are spiking again. Somebody get Travis on the line.`);
+    `The instruments are spiking again. Somebody get Travis on the line.`,
+    `The defensive line demands a shrubbery before anyone may pass. A nice one. Not too expensive.`,
+    `Those two defenders have taken to shouting NI at attackers. Surprisingly effective.`,
+    `A courageous retreat from midfield — Sir Robin would be proud. He bravely ran away, you know.`,
+    `NOBODY expected that tactical shift. Nobody EVER expects the tactical shift.`,
+    `Two fans with coconut halves are providing the gallop sounds. The commitment is admirable.`,
+    `The stadium physio has examined the challenge and ruled it merely a flesh wound.`,
+    `That pressing pattern was certified by the Ministry of Silly Walks this morning.`,
+    `Regarding the airspeed velocity of that punt: African or European? The lab refuses to say.`,
+    `Nobody press in the far corner. It's Camelot over there. A silly place.`,
+    `Careful with the striker lurking in the box. That's no ordinary striker — look at the bones!`,
+    `And now for something completely different: several minutes of actual football.`);
   let fresh=cand.filter(l=>!recentChatter.includes(l));
   if(!fresh.length) fresh=cand;
   const line=pick(fresh);
