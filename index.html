@@ -571,6 +571,17 @@ let retargetTimer=0;
 const BURST_BURN =(typeof __BURST_BURN !=="undefined")?__BURST_BURN :1.4;  // one big burst, then vulnerable
 const BURST_RECHG=(typeof __BURST_RECHG!=="undefined")?__BURST_RECHG:15;   // seconds to refill — scarcity is the point
 const BURST_SPD=1.4;                                                       // the rockets
+let lastBlazeSay=-99;
+function blazeCall(p2){
+  if(clockSec-lastBlazeSay<6) return;                // one eruption at a time
+  lastBlazeSay=clockSec;
+  say(pick([
+    `${p2.name} is ON FIRE — an absolute blazing run!`,
+    `${p2.name} ERUPTS! There will be scorch marks on this hex!`,
+    `Somebody check the grass — ${p2.name} just went FULL afterburner!`,
+    `${p2.name} lights it up! Burst of the night, surely!`,
+    `Flames off the boots of ${p2.name}! The Sparkle Princesses want that as a home kit!`]),true,"lowvoice");
+}
 function speedMult(p){
   let m=0.55+0.45*p.stamina;                       // fatigue: the size of the tank
   if(momentumOn && clockSec<boostUntil[p.team]) m*=1.15;  // underdog fire
@@ -821,6 +832,7 @@ function think(dt){
       if(want&&!p.sprint&&clockSec>p.sprintCd){
         if(p.burst>0.65){
           p.sprint={why:want,blaze:Math.random()<0.12}; p.sprintMin=clockSec+0.5;   // commit — and 1-in-8 lights the FULL fire
+          if(p.sprint.blaze) blazeCall(p);
           GKSTAT.bursts=(GKSTAT.bursts||0)+1; GKSTAT["b_"+want]=(GKSTAT["b_"+want]||0)+1;
           p.deniedLatch=false;
         } else if(!p.deniedLatch){                              // wanted the legs, tank said no
@@ -862,7 +874,8 @@ function think(dt){
           players.forEach(q=>{ if(q.team!==p.team&&!q.out&&!q.sentOff&&q.role!=="K")
             oppNear=Math.min(oppNear,dist(q,ball)); });
           if(dist(p,ball)<oppNear-18||oppNear>120){
-            if(!p.sprint&&p.burst>0.25){ p.sprint={why:"sweep",blaze:Math.random()<0.12}; GKSTAT.b_sweep=(GKSTAT.b_sweep||0)+1; }
+            if(!p.sprint&&p.burst>0.25){ p.sprint={why:"sweep",blaze:Math.random()<0.12}; GKSTAT.b_sweep=(GKSTAT.b_sweep||0)+1;
+              if(p.sprint.blaze) blazeCall(p); }
             GKSTAT.sweepSec+=dt; steer(p,ball.x,ball.y,1.5); return; }
         }
       }
@@ -1034,7 +1047,8 @@ function think(dt){
       let blockers=0;
       players.forEach(q=>{ if(q.team!==owner.team&&!q.out&&!q.sentOff&&q.role!=="K"&&dist(q,owner)<180
         &&((q.x-owner.x)*(tg7.x-owner.x)+(q.y-owner.y)*(tg7.y-owner.y))>0) blockers++; });
-      if(blockers===0&&dist(owner,tg7)<520){ owner.sprint={why:"break",blaze:Math.random()<0.12}; GKSTAT.b_break=(GKSTAT.b_break||0)+1; }
+      if(blockers===0&&dist(owner,tg7)<520){ owner.sprint={why:"break",blaze:Math.random()<0.12}; GKSTAT.b_break=(GKSTAT.b_break||0)+1;
+        if(owner.sprint.blaze) blazeCall(owner); }
     }
     if(owner.sprint&&owner.sprint.why==="break"&&ball.owner!==owner&&clockSec>owner.sprintMin){ owner.sprint=null; owner.sprintCd=clockSec+0.8; }
     const tgt=goalCenter(targets[owner.team]);
