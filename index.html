@@ -2564,10 +2564,10 @@ function drawMotif(g,L){
       break;
     case "banana":
       el("circle",{r:6.8,fill:c[0]},g);                        // midnight disc
-      el("path",{d:"M-3.6,2.4 Q0,5.4 3.6,2.4 Q4.6,1.5 4.1,0.5 Q1.4,3.3 -3.2,1.2 Q-4.1,1.7 -3.6,2.4 Z",
-        fill:"#ffe14d"},g);                                    // the banana abides
-      el("circle",{cx:-3.5,cy:1.7,r:0.7,fill:"#6b4a12"},g);    // stem
-      el("circle",{cx:4.1,cy:1,r:0.6,fill:"#6b4a12"},g);       // tip
+      el("path",{d:"M-3.7,-1.2 Q0,4.8 3.7,-1.2",fill:"none",
+        stroke:"#ffe14d","stroke-width":2.8,"stroke-linecap":"round"},g);   // the smile IS the banana
+      el("path",{d:"M-3.7,-1.2 L-4.3,-2.4",fill:"none",
+        stroke:"#6b4a12","stroke-width":1.3,"stroke-linecap":"round"},g);   // one stem, one end
       break;
     case "bulldog":
       el("circle",{cx:-4.6,cy:-4.4,r:2.4,fill:c[0]},g);        // ears
