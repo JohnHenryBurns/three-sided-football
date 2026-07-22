@@ -85,6 +85,7 @@ for(let run=0;run<RUNS;run++){
   if(!global.GKAGG)global.GKAGG={holds:0,sweepSec:0,punts:0,puntSame:0,puntSeen:0,rolls:0,rollsFwd:0,scrumSamples:0,scrumOpp:0,goals:0,sec:0};
   const PR=(sandbox.__probe?sandbox.__probe():{GK:{},scored:[0,0,0],clockSec:0});
 const G=PR.GK||{};
+if(process.env.TRACE&&G.loopTrace)console.log('LOOP TRACES:',JSON.stringify(G.loopTrace));
 if(process.env.DBG)console.log('oobRule at end of run:',PR.oob);
   for(const k in G)global.GKAGG[k]=(global.GKAGG[k]||0)+(G[k]||0);
   global.GKAGG.goals+=(PR.scored||[0,0,0]).reduce((a,b)=>a+b,0);
@@ -118,6 +119,8 @@ if(process.env.GKSTUDY==="1"){
     claimsPerMin:+((A.claims||0)/mins).toFixed(1),
     clearsPerMin:+((A.clears||0)/mins).toFixed(1),
     rapidReclaimPct:(A.claims)?+(100*(A.rapid||0)/A.claims).toFixed(0):null,
+    throwRepeatPct:(A.throwStage)?+(100*(A.throwRepeat||0)/A.throwStage).toFixed(0):null,
+    throwRepeatPct:(A.throwStage)?+(100*(A.throwRepeat||0)/A.throwStage).toFixed(0):null,
     avgDistPerBurst:(A.bursts)?+((A.sprintDist||0)/A.bursts).toFixed(0):null,
     throwsPerMin:+((A.throwStage||0)/mins).toFixed(2),
     cornersStagedPerMin:+((A.cornerStage||0)/mins).toFixed(2),

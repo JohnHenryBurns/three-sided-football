@@ -485,6 +485,7 @@ function resetMatch(){
   menuTeam=null; document.getElementById("coachMenu")?.classList.remove("show");
   stats={shots:[0,0,0],saves:[0,0,0],tackles:[0,0,0],poss:[0,0,0]};
   goalsLog=[]; goldenScorer=null; matchLog=[]; gkHolder=null; gkHoldUntil=-1;
+  GKSTAT.lastThrowAt=-99; GKSTAT.lastClaimAt=-99;   // metrics never bleed across matches
   goalEls.forEach(g=>g&&g.setAttribute("opacity",1));
   drawBoards();   // fresh sponsors every match
   suppress=null; pendingPenalty=null; penaltyShooter=null; penaltyGoalTeam=null;
@@ -681,7 +682,7 @@ function think(dt){
           p.x=sx8; p.y=sy8; p.vx=0; p.vy=0;
           ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.touchT=0.4;
           restartHold=performance.now()+(cornerTaker===p?500:260);
-          if(cornerTaker!==p) throwPending=p;   // a throw must find a teammate
+          if(cornerTaker!==p){ throwPending=p; GKSTAT.lastThrower=p; }   // a throw must find a teammate
           pendingRestart=null;
         }
         return;
@@ -937,11 +938,10 @@ function think(dt){
       let pickM=null,bs=-1e9;
       mates.forEach(m=>{
         const d=dist(m,owner); if(d<40||d>240)return;
-        let laneOk=true;
-        players.forEach(o2=>{ if(o2.team===owner.team||o2.out||o2.sentOff)return;
-          for(let t2=0.2;t2<1;t2+=0.2){ const lx=owner.x+(m.x-owner.x)*t2, ly=owner.y+(m.y-owner.y)*t2;
-            if(Math.hypot(o2.x-lx,o2.y-ly)<24) laneOk=false;}});
-        const sc=(laneOk?0:-500)-d*0.3+Math.random()*20;
+        let open3=1e9;                              // the loft sails OVER the lane — score the landing, not the path
+        players.forEach(o2=>{ if(o2.team===owner.team||o2.out||o2.sentOff||o2.role==="K")return;
+          open3=Math.min(open3,dist(o2,m)); });
+        const sc=Math.min(open3,110)*0.9-d*0.25+Math.random()*20;
         if(sc>bs){bs=sc;pickM=m;}
       });
       if(!pickM&&mates.length) pickM=mates.sort((a,b)=>dist(a,owner)-dist(b,owner))[0];
@@ -952,7 +952,8 @@ function think(dt){
         if(allies.length){ pickM=allies[0]; }
       }
       if(pickM){
-        kick(pickM.x+pickM.vx*8, pickM.y+pickM.vy*8, Math.min(7,4+dist(pickM,owner)*0.02), false);
+        kick(pickM.x+pickM.vx*4, pickM.y+pickM.vy*4, Math.min(6.2,3.2+dist(pickM,owner)*0.015), false);
+        ball.zv=2.4;                                // the arc carries it — power dialed for flight, not friction
         if(allied(owner.team,pickM.team)) ball.allyPass=true;
         return;
       }
@@ -1280,6 +1281,7 @@ function physics(dt){
     players.forEach(p=>{ if(!p.sentOff&&!((pendingRestart&&pendingRestart.p===p)||cornerTaker===p||throwPending===p)) clampInside(p, p.role==="K"?12:14); });
   }
   if(ball.owner){
+    if(throwPending===ball.owner){ ball.vx=0; ball.vy=0; return; }   // the ball waits ON THE CHALK — the thrower stands behind it
     const o=ball.owner, v=Math.hypot(o.vx,o.vy);
     stats.poss[o.team]+=S;
     if(v>0.1){ o.hx=o.hx*0.85+(o.vx/v)*0.15; o.hy=o.hy*0.85+(o.vy/v)*0.15; }
@@ -1404,6 +1406,10 @@ function physics(dt){
           cy9=best.y+(cy9-best.y)*0.7+(CY-best.y)*0.3*0.4;
           const dl9=Math.hypot(cx9-best.x,cy9-best.y)||1;
           let kx9=best.x+(cx9-best.x)/dl9*260, ky9=best.y+(cy9-best.y)/dl9*260;
+          for(const e9 of EDGES){                   // never ask the clearance to leave the pitch
+            const de9=(kx9-e9.p1.x)*e9.nx+(ky9-e9.p1.y)*e9.ny;
+            if(de9<30){ kx9+=e9.nx*(30-de9); ky9+=e9.ny*(30-de9); }
+          }
           for(const e9 of EDGES){                     // a clear NEVER books its own throw-in
             const de9=(kx9-e9.p1.x)*e9.nx+(ky9-e9.p1.y)*e9.ny;
             if(de9<40){ kx9+=e9.nx*(40-de9); ky9+=e9.ny*(40-de9); }
@@ -2795,6 +2801,17 @@ function outOfBounds(k,e){
   } else stageThrowIn(toucher,e,ex,ey);
 }
 function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)+1;
+  if(clockSec-(GKSTAT.lastThrowAt||-99)<6&&Math.hypot(ex-(GKSTAT.lastThrowX||-999),ey-(GKSTAT.lastThrowY||-999))<70){
+    GKSTAT.throwRepeat=(GKSTAT.throwRepeat||0)+1;
+    GKSTAT.loopTrace=GKSTAT.loopTrace||[];
+    if(GKSTAT.loopTrace.length<10) GKSTAT.loopTrace.push({
+      dt:+(clockSec-GKSTAT.lastThrowAt).toFixed(2),
+      toucherTeam:toucher, toucherRole:ball.lastKicker?ball.lastKicker.role:null,
+      kickerName:ball.lastKicker?ball.lastKicker.name:null,
+      wasThrowPass:ball.lastKicker===GKSTAT.lastThrower||null, z:+ball.z.toFixed(1)});
+  }
+  GKSTAT.lastThrower=null;
+  GKSTAT.lastThrowAt=clockSec; GKSTAT.lastThrowX=ex; GKSTAT.lastThrowY=ey;
   restartHold=Math.max(restartHold,performance.now()+2400);   // staging owns its hold
   const sx=ex+e.nx*6, sy=ey+e.ny*6;   // he throws FROM the line, not from midfield
   const cands=players.filter(q=>q.team!==toucher&&q.role!=="K"&&!q.out&&!q.sentOff)
