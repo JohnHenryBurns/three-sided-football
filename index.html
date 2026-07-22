@@ -379,6 +379,11 @@ const TEAM_LIBRARY=[
    third:"#a67c00", motif:{t:"banana",c:["#141414"]},
    id:{atk:"TikiTaka",def:"Balanced",agg:"Clean"}, star:"Maximus Burns",
    blurb:"Two sets of twins and a wizard up front. The commentary box boggles; the banana abides."},
+  {name:"Sparkle Princesses", short:"SPK", color:"#f26bb5", accent:"#ffd166",
+   roster:["Margo Tillo","Fiona Friend","Reese Waite","Sloan Ellars","Solana Burns"],
+   third:"#b58ae0", motif:{t:"sparkle",c:["#6b2d8f"]},
+   id:{atk:"Swashbuckle",def:"Balanced",agg:"Clean"}, star:"Solana Burns",
+   blurb:"Dramatic entrances, perfect landings, a ten from every judge. Performance AND presentation."},
 ];
 let selTeams=[0,1,2];
 const TEAMS=[TEAM_LIBRARY[0],TEAM_LIBRARY[1],TEAM_LIBRARY[2]];
@@ -2550,6 +2555,13 @@ function drawMotif(g,L){
       el("rect",{x:-8,y:5.4,width:16,height:2,fill:c[0],opacity:.95},g);
       el("rect",{x:-8,y:7.6,width:16,height:1.6,fill:c[1],opacity:.95},g);
       el("path",{d:"M0,-6.5 L1.7,-2.2 L6,-2.2 L2.5,0.5 L3.5,4.6 L0,2 L-3.5,4.6 L-2.5,0.5 L-6,-2.2 L-1.7,-2.2 Z",fill:c[0]},g); break;
+    case "sparkle":
+      el("circle",{r:6.8,fill:c[0]},g);                        // royal violet disc
+      el("path",{d:"M0,-5.6 Q1.1,-1.1 5.6,0 Q1.1,1.1 0,5.6 Q-1.1,1.1 -5.6,0 Q-1.1,-1.1 0,-5.6 Z",
+        fill:"#fff"},g);                                       // the sparkle itself
+      el("circle",{cx:3.9,cy:-3.7,r:0.9,fill:"#ffd166"},g);    // and its little companions
+      el("circle",{cx:-3.6,cy:3.9,r:0.7,fill:"#ffd166"},g);
+      break;
     case "banana":
       el("circle",{r:6.8,fill:c[0]},g);                        // midnight disc
       el("path",{d:"M-3.6,2.4 Q0,5.4 3.6,2.4 Q4.6,1.5 4.1,0.5 Q1.4,3.3 -3.2,1.2 Q-4.1,1.7 -3.6,2.4 Z",
