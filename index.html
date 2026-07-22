@@ -2659,10 +2659,14 @@ function draw(){
     a.ring.setAttribute("stroke",frac>0.6?"#7ec97e":frac>0.35?"#ffb547":"#ff6b6b");
     const boosted=momentumOn&&clockSec<boostUntil[p.team];
     a.boost.setAttribute("opacity",boosted?0.7:0);
-    if(p.sprint&&Math.random()<0.6){                 // the fire trail: embers where the burst was spent
-      const em=el("circle",{cx:p.x-p.vx*3,cy:p.y-p.vy*3,r:3.2+Math.random()*1.8,
-        fill:Math.random()<0.5?"#ff5a00":"#ffd166",opacity:0.75},fireG);
-      fireFx.push({em,life:0.42,t:0});
+    if(p.sprint){                                    // the fire trail: a proper blaze
+      for(let fj=0;fj<2;fj++){
+        const em=el("circle",{cx:p.x-p.vx*(2+fj*3.5)+(Math.random()*6-3),
+          cy:p.y-p.vy*(2+fj*3.5)+(Math.random()*6-3),
+          r:5.5+Math.random()*3,
+          fill:["#ff3d00","#ff8c00","#ffd166"][Math.floor(Math.random()*3)],opacity:0.9},fireG);
+        fireFx.push({em,life:0.6,t:0});
+      }
     }
     if(boosted)a.boost.setAttribute("r",(20+2.2*Math.sin(clockSec*9+i)).toFixed(1));
   });
@@ -2686,8 +2690,8 @@ function draw(){
     const F=fireFx[fi]; F.t+=1/60;
     if(F.t>=F.life){ F.em.remove(); fireFx.splice(fi,1); continue; }
     const k=1-F.t/F.life;
-    F.em.setAttribute("opacity",(0.75*k).toFixed(2));
-    F.em.setAttribute("r",(3.2*k+0.6).toFixed(2));
+    F.em.setAttribute("opacity",(0.9*k).toFixed(2));
+    F.em.setAttribute("r",(6*k+1).toFixed(2));
   }
   ballEl.setAttribute("transform",`translate(${ball.x},${ball.y-lift})${ball.z>2?` scale(${(1+ball.z*0.022).toFixed(3)})`:""}`);
   ballShadow.setAttribute("cx",ball.x); ballShadow.setAttribute("cy",ball.y+3);
