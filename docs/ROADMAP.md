@@ -307,3 +307,19 @@ fixed via commitment windows, cooldowns, per-team racer election, and killing a
 stakes gate that hex geometry made always-true (every point is near SOME goal).
 Numbers are Mayhem-stress; family-default churn is far lower. Visual tell:
 dashed white afterburner ring while bursting. Set-piece staging speeds untouched.
+
+**Scramble churn + burn-time follow-up (Johns three questions):**
+(1) "How much field is 2.2s of burst?" — measured: ~148 u/s sprint speed → 2.2s
+continuous = ~325 units, over HALF the pitch width (too much; instinct correct).
+Empirically bursts self-resolve in ~0.7s / ~100 units (triggers end when races
+end), so burn time really sets BURSTS-PER-TANK, not dash length. Default cut to
+1.4s: one big burst then vulnerable (~200-unit max dash, denial ~30%).
+(2) Confident clears: claiming under 2+ wolves within 36 → first-time driven boot
+(260 units, power 7.6) aimed away-from-pack bent toward midfield ("safety, not
+glory" — a target-goal bend turned clears into artillery, goals hit 5.27), with a
+0.4s universal claim/header lockout (the escape guarantee — flat clears got
+intercepted in the pack, lofted ones got HEADED back into the same spot).
+Same-spot rapid-reclaim churn: 22% baseline → 13-18%; total claims -27%.
+(3) Booth wired to burst truth: "two empty tanks lumbering after the same ball"
+fires only when 2+ nearby contestants have burst<0.2; "finds ANOTHER gear" on
+live sprints; clearance lines at 18%.

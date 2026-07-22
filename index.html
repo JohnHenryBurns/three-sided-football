@@ -550,7 +550,7 @@ function computeTargets(){
 let retargetTimer=0;
 
 // ---------- Mechanics ----------
-const BURST_BURN =(typeof __BURST_BURN !=="undefined")?__BURST_BURN :2.2;  // seconds of sprint to empty
+const BURST_BURN =(typeof __BURST_BURN !=="undefined")?__BURST_BURN :1.4;  // one big burst, then vulnerable
 const BURST_RECHG=(typeof __BURST_RECHG!=="undefined")?__BURST_RECHG:11;   // seconds to refill
 const BURST_SPD=1.4;                                                       // the rockets
 function speedMult(p){
@@ -813,7 +813,8 @@ function think(dt){
         else if(w==="sweep"&&ball.owner) done=true;
         if(done){ p.sprint=null; p.sprintCd=clockSec+2.2; }     // cooldown: claims flicker, sprints shouldn't
       }
-      if(p.sprint) GKSTAT.burstSec=(GKSTAT.burstSec||0)+dt;
+      if(p.sprint){ GKSTAT.burstSec=(GKSTAT.burstSec||0)+dt;
+        GKSTAT.sprintDist=(GKSTAT.sprintDist||0)+Math.hypot(p.vx,p.vy)*dt*60; }
     }
     const own=goalCenter(p.team), tgt=goalCenter(targets[p.team]);
     if(p===owner){
@@ -1325,6 +1326,7 @@ function physics(dt){
     if(ball.strayF>0) ball.strayF-=S; else ball.strayer=null;
     let best=null,bd=1e9;
     if(performance.now()<restartHold&&!ball.owner) return;   // dead ball awaits its taker
+    if(ball.clearT&&clockSec<ball.clearT) return;            // a clearance in flight escapes the furnace
     players.forEach(p=>{ if(p.out||p.sentOff)return; if(p===ball.noClaim&&ball.noClaimF>0)return;
       if(suppress&&suppress.team===p.team&&clockSec<suppress.until)return;
       if(ball.z>(p.role==="K"?28:12))return;   // sailing over their heads
@@ -1348,6 +1350,29 @@ function physics(dt){
       ball.allyPass=false;
       if(ball.puntBy!==undefined){ GKSTAT.puntSeen++; if(best.team===ball.puntBy)GKSTAT.puntSame++; ball.puntBy=undefined; }
       ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
+      GKSTAT.claims=(GKSTAT.claims||0)+1;
+      if(clockSec-(GKSTAT.lastClaimAt||-9)<0.45
+         && Math.hypot(ball.x-(GKSTAT.lastClaimX||-999),ball.y-(GKSTAT.lastClaimY||-999))<70)
+        GKSTAT.rapid=(GKSTAT.rapid||0)+1;   // scramble signature: fast AND same spot
+      GKSTAT.lastClaimAt=clockSec; GKSTAT.lastClaimX=ball.x; GKSTAT.lastClaimY=ball.y;
+      if((typeof __NOCLEAR==="undefined")&&best.role!=="K"&&performance.now()>=restartHold){
+        // CONFIDENT CLEAR: two+ wolves at the door — boot it out of the scramble first-time
+        let wolves=0,wx=0,wy=0;
+        players.forEach(q=>{ if(q.team!==best.team&&!q.out&&!q.sentOff&&q.role!=="K"&&dist(q,best)<36){ wolves++; wx+=q.x; wy+=q.y; }});
+        if(wolves>=2){
+          GKSTAT.clears=(GKSTAT.clears||0)+1;
+          let cx9=best.x-(wx/wolves-best.x), cy9=best.y-(wy/wolves-best.y);      // away from the pack
+          cx9=best.x+(cx9-best.x)*0.7+(CX-best.x)*0.3*0.4;                       // bent toward safety, not glory
+          cy9=best.y+(cy9-best.y)*0.7+(CY-best.y)*0.3*0.4;
+          const dl9=Math.hypot(cx9-best.x,cy9-best.y)||1;
+          kick(best.x+(cx9-best.x)/dl9*260, best.y+(cy9-best.y)/dl9*260, 7.6, false);
+          ball.clearT=clockSec+0.4;                            // the escape guarantee: no claims, no headers, just OUT
+          if(Math.random()<0.18) say(pick([
+            `${best.name} wants none of that scramble — hoofed clear!`,
+            `No dwelling from ${best.name}. First time, out of the furnace.`,
+            `${best.name} clears his lines. Tidy is for open field.`]),false);
+        }
+      }
       ball.touchT=0.3; ball.strayer=null; ball.strayF=0;
       ball.lastKicker=best;   // person-level attribution follows possession
       if(strayer && best.team!==strayer.team){
@@ -1926,6 +1951,17 @@ function ambientChatter(){
         cand.push(`${tm(t2)} running those Spain-style moving triangles Jupiter studies at the dinner table.`);
     if([0,1,2].some(t2=>clockSec<boostUntil[t2]))
       cand.push(`A sudden emotional momentum swing — pure Orion energy sweeping the stadium.`);
+    if(!ball.owner){
+      let empt=0;
+      players.forEach(q=>{ if(!q.out&&!q.sentOff&&q.role!=="K"&&dist(q,ball)<170&&q.burst<0.2) empt++; });
+      if(empt>=2) cand.push(`Two empty tanks lumbering after the same ball. Nobody told their legs it's a race.`,
+        `A footrace in name only — both men are running on fumes and pride.`);
+    }
+    {
+      const spr=players.find(q=>q.sprint&&!q.out&&!q.sentOff);
+      if(spr) cand.push(`${spr.name} finds ANOTHER gear! That's the burst they save for moments like this.`,
+        `Look at ${spr.name} GO — afterburners lit.`);
+    }
     if(clockSec>matchLen*0.8) cand.push(`We're deep into nap-schedule territory. Play faster, gentlemen.`);
   }
   // ---- lore & tropes, batch 2 ----
