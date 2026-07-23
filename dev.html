@@ -293,6 +293,7 @@
   <div class="formrow chk"><label for="setOob" title="Touchlines in play: throw-ins, goal kicks, corners, keeper parries">Out of bounds</label><input id="setOob" type="checkbox" checked></div>
   <div class="formrow chk"><label for="setVoice" title="Spoken play-by-play (uses your phone's voice)">🎙️ Announcer</label><input id="setVoice" type="checkbox" checked></div>
   <div class="formrow chk"><label for="setCaps" title="Show the announcer's words as TV-style captions over the pitch">💬 Captions</label><input id="setCaps" type="checkbox"></div>
+  <div class="formrow chk"><label for="setCry" title="A synthesized GOOOAL cry with crowd roar on every goal">📣 Goal cry</label><input id="setCry" type="checkbox" checked></div>
   <div class="formrow"><label>Teams</label><div id="teamSlots" class="slotRow"></div></div>
   <div class="formrow"><label for="setRef">Referee</label><select id="setRef">
     <option value="0">Off — let them play</option>
@@ -1759,6 +1760,7 @@ function goalScored(concederTeam){
         `${tm(scorerTeam)} climb to ${st2>0?"+":""}${st2}`,
         `${tm(scorerTeam)} +1, and ${tm(concederTeam)} pay the bill`,
         `${tm(scorerTeam)} +1, ${tm(concederTeam)} −1`]);
+    goalCry();
     say(pick([
       `<span class="goal">⚽ GOOOAL!</span> ${name} beats ${keeper.name} — ${scoreline}!`,
       `<span class="goal">⚽ GOOOAL!</span> ${name} finds the net! ${scoreline}!`,
@@ -2369,6 +2371,102 @@ function pickVoice(){
   narrator=vs.find(v=>v.lang==="en-GB")||vs.find(v=>v.lang&&v.lang.startsWith("en"))||vs[0]||null;
 }
 if(speechOK){ pickVoice(); speechSynthesis.onvoiceschanged=pickVoice; }
+// ============ THE GOAL CRY ============
+// Formant synthesis: a glottal sawtooth climbing in pitch and vibrato, pushed through
+// three bandpass formants that morph "oh" -> "aah" -> dark "l", over a crowd swell.
+// The speech engine reads stretched spellings as "gull"; this doesn't go near it.
+let AC=null, cryOn=true;
+function audioCtx(){
+  try{
+    if(typeof window==="undefined")return null;
+    const K=window.AudioContext||window.webkitAudioContext;
+    if(!K)return null;
+    if(!AC)AC=new K();
+    if(AC.state==="suspended")AC.resume();
+    return AC;
+  }catch(e){ return null; }
+}
+function goalCry(){
+  if(!cryOn)return;
+  try{
+    const ac=audioCtx(); if(!ac)return;
+    const t0=ac.currentTime+0.02, D=2.4+Math.random()*0.7, T=f=>t0+f*D;
+    const out=ac.createGain(); out.gain.value=0.34; out.connect(ac.destination);
+
+    // ---- glottal source ----
+    const osc=ac.createOscillator(); osc.type="sawtooth";
+    const P=osc.frequency;
+    P.setValueAtTime(150,t0);
+    P.linearRampToValueAtTime(178,T(0.08));
+    P.linearRampToValueAtTime(206,T(0.55));
+    P.linearRampToValueAtTime(212,T(0.82));
+    P.linearRampToValueAtTime(164,T(1));
+    // vibrato deepens as the voice strains
+    const lfo=ac.createOscillator(); lfo.type="sine"; lfo.frequency.value=5.6;
+    const lg=ac.createGain();
+    lg.gain.setValueAtTime(0.6,t0);
+    lg.gain.linearRampToValueAtTime(4.5,T(0.4));
+    lg.gain.linearRampToValueAtTime(9.5,T(0.8));
+    lg.gain.linearRampToValueAtTime(7,T(1));
+    lfo.connect(lg); lg.connect(P);
+
+    // ---- grit: the strained-shout harmonics ----
+    const grit=ac.createWaveShaper();
+    const cv=new Float32Array(1024);
+    for(let i=0;i<1024;i++){ const v=i/512-1; cv[i]=Math.tanh(v*2.6)/Math.tanh(2.6); }
+    grit.curve=cv; grit.oversample="2x";
+    osc.connect(grit);
+
+    // ---- three formants, morphing through the vowel ----
+    const VOW={oh:[400,760,2500], ah:[720,1160,2550], l:[350,900,2600]};
+    const Qs=[8,10,12], GN=[1.0,0.62,0.26];
+    for(let i=0;i<3;i++){
+      const bp=ac.createBiquadFilter(); bp.type="bandpass"; bp.Q.value=Qs[i];
+      const F=bp.frequency;
+      F.setValueAtTime(VOW.oh[i],t0);
+      F.setValueAtTime(VOW.oh[i],T(0.60));          // hold "oh"
+      F.linearRampToValueAtTime(VOW.ah[i],T(0.87)); // open to "aah"
+      F.linearRampToValueAtTime(VOW.l[i],T(1));     // close to "l"
+      const g=ac.createGain(); g.gain.value=GN[i];
+      grit.connect(bp); bp.connect(g); g.connect(out);
+    }
+
+    // ---- amplitude: fast attack, long plateau, release ----
+    const A=out.gain;
+    A.setValueAtTime(0.0001,t0);
+    A.linearRampToValueAtTime(0.34,t0+0.035);
+    A.linearRampToValueAtTime(0.31,T(0.12));
+    A.linearRampToValueAtTime(0.34,T(0.70));
+    A.linearRampToValueAtTime(0.29,T(0.90));
+    A.linearRampToValueAtTime(0.001,T(1)+0.22);
+
+    // ---- crowd roar: band-limited noise swelling underneath ----
+    const len=Math.floor(ac.sampleRate*(D+0.4));
+    const buf=ac.createBuffer(1,len,ac.sampleRate), ch=buf.getChannelData(0);
+    for(let i=0;i<len;i++) ch[i]=Math.random()*2-1;
+    const nz=ac.createBufferSource(); nz.buffer=buf;
+    const cb=ac.createBiquadFilter(); cb.type="bandpass"; cb.frequency.value=850; cb.Q.value=0.7;
+    const cg=ac.createGain();
+    cg.gain.setValueAtTime(0.0001,t0);
+    cg.gain.linearRampToValueAtTime(0.10,T(0.15));
+    cg.gain.linearRampToValueAtTime(0.20,T(0.6));
+    cg.gain.linearRampToValueAtTime(0.24,T(1));
+    cg.gain.linearRampToValueAtTime(0.001,T(1)+0.35);
+    nz.connect(cb); cb.connect(cg); cg.connect(ac.destination);
+
+    // ---- the "G": a short low burst on the front ----
+    const gb=ac.createBufferSource(); gb.buffer=buf;
+    const gf=ac.createBiquadFilter(); gf.type="lowpass"; gf.frequency.value=500;
+    const gg=ac.createGain();
+    gg.gain.setValueAtTime(0.22,t0);
+    gg.gain.linearRampToValueAtTime(0.0001,t0+0.055);
+    gb.connect(gf); gf.connect(gg); gg.connect(ac.destination);
+
+    osc.start(t0); lfo.start(t0); nz.start(t0); gb.start(t0);
+    const stop=T(1)+0.4;
+    osc.stop(stop); lfo.stop(stop); nz.stop(stop); gb.stop(t0+0.1);
+  }catch(e){ /* the football never goes down for a sound effect */ }
+}
 function speak(html,prio){
   if(!voiceOn||!speechOK)return;
   const text=html
@@ -3271,6 +3369,8 @@ document.getElementById("btnStart").onclick=()=>{
   oobRule=document.getElementById("setOob").checked;
   voiceOn=speechOK&&document.getElementById("setVoice").checked;
   captionsOn=document.getElementById("setCaps").checked;
+  cryOn=document.getElementById("setCry").checked;
+  if(cryOn) audioCtx();   // the start click is our user gesture — unlock audio here
   matchLive=true;
   keepAwake();
   setVoiceUI();
