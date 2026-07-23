@@ -366,3 +366,13 @@ sudden terrible intent), duel calls, keeper explosion lines.
    bands (goals 0.9-4.6, throw loops <=10%, churn <=32%, rolls >=88% forward,
    denial 10-75%). Failures print their SEED and replay exactly. No shell pipes
    near exit codes (the tail -1 lesson).
+
+**Goal-cry audio experiment — shelved (see docs/AUDIO-EXPERIMENT.md):**
+Nine iterations of Web Audio formant synthesis for a synthesized "GOOOAAALLL."
+Never reached index.html — the dev.html canary channel held the line exactly as
+designed, so the family build was never touched. Work preserved on branch
+`audio-experiment` (renderers, ten rendered WAVs, and the cry-enabled build).
+Findings written up for Greg. Conclusion: source-filter synthesis from a sawtooth
+gets to "instrument," not "person"; built-in TTS at a low rate is the practical
+route for the game, since the old "gull" bug was a SPELLING artifact, not a
+stretching one.
