@@ -595,7 +595,9 @@ function superSay(p2){
     `FLAME SHOT! ${p2.name} puts the whole tank behind it!`,
     `${p2.name} with sudden, terrible intent — that ball is SMOKING!`,
     `One breath. One strike. ${p2.name} goes full Baba Yaga!`,
-    `${p2.name} empties the clip!`]),true,"lowvoice");
+    `${p2.name} empties the clip!`,
+    `${p2.name} lobbeth the Holy Hand Grenade! One... two... FIVE— three!`,
+    `The pin is out! ${p2.name} counts to three, no more, no less!`]),true,"lowvoice");
 }
 function gkDiveCheck(defT,flame){
   const gk=players.find(q2=>q2.team===defT&&q2.role==="K"&&!q2.out&&!q2.sentOff);
@@ -1770,7 +1772,8 @@ function goalScored(concederTeam){
       `<span class="goal">⚽ GOOOAL!</span> ${name}! Grandma Gloria's candle is WORKING — ${scoreline}!`,
       `<span class="goal">⚽ GOOOAL!</span> ${name}! Solana scores it a TEN — performance AND presentation! ${scoreline}!`,
       `<span class="goal">⚽ GOOOAL!</span> ${name} — Maximus calculated that finish three passes ago! ${scoreline}!`,
-      `<span class="goal">⚽ GOOOAL!</span> ${name} completes the quest — the grail was in the net all along! ${scoreline}!`]),true);
+      `<span class="goal">⚽ GOOOAL!</span> ${name} completes the quest — the grail was in the net all along! ${scoreline}!`,
+      `<span class="goal">⚽ GOOOAL!</span> HOLY HAND GRENADE from ${name} — the foe, being naughty, hath snuffed it! ${scoreline}!`]),true);
     if(momentumOn && wasTrailing){
       boostUntil[scorerTeam]=clockSec+20;
       caughtFire=true;
@@ -2245,6 +2248,8 @@ function ambientChatter(){
     `Regarding the airspeed velocity of that punt: African or European? The lab refuses to say.`,
     `Nobody press in the far corner. It's Camelot over there. A silly place.`,
     `Careful with the striker lurking in the box. That's no ordinary striker — look at the bones!`,
+    `The Holy Hand Grenade has been consulted on that free-kick routine. Count to three. Not four. Not two. Three.`,
+    `Instructions from the bench: lob it toward thy foe, who, being naughty in the referee's sight, shall snuff it.`,
     `And now for something completely different: several minutes of actual football.`,
     `${matchStadium} is absolutely rocking tonight.`,
     `Not a bad seat in ${matchStadium}. Several bad decisions, though.`,
