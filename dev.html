@@ -2416,7 +2416,7 @@ function goalCry(){
       return v0+(v1-v0)*(f-f0)/Math.max(1e-6,f1-f0); } } return 150; };
     // jitter steps: vocal folds are irregular — this is the human tell
     for(let f=0;f<1.26;f+=0.011){
-      const jit=1+(Math.random()*2-1)*(0.003+0.006*f);
+      const jit=1+(Math.random()*2-1)*(0.002+0.004*f);
       const hz=baseAt(f)*jit;
       osc.frequency.setValueAtTime(hz,T(f));
       buzz.frequency.setValueAtTime(hz,T(f));
@@ -2425,9 +2425,9 @@ function goalCry(){
     // vibrato as gentle FM on top
     const lfo=ac.createOscillator(); lfo.type="sine"; lfo.frequency.value=4.4;
     const lg=ac.createGain();
-    lg.gain.setValueAtTime(0.35,t0);
-    lg.gain.linearRampToValueAtTime(0.75,T(0.35));
-    lg.gain.linearRampToValueAtTime(1.35,T(0.75));   // a waver, not a bleat
+    lg.gain.setValueAtTime(0.15,t0);
+    lg.gain.linearRampToValueAtTime(0.30,T(0.35));
+    lg.gain.linearRampToValueAtTime(0.55,T(0.75));   // essentially steady
     lfo.connect(lg); lg.connect(osc.frequency); lg.connect(buzz.frequency);
 
     // ---- strain: soft clip ----
@@ -2459,10 +2459,14 @@ function goalCry(){
       const pk=ac.createBiquadFilter(); pk.type="peaking";
       pk.Q.value=Qs[i]; pk.gain.value=dB[i];
       const F=pk.frequency;
-      F.setValueAtTime(VOW.oh[i],t0);
-      F.setValueAtTime(VOW.oh[i],T(0.48));
-      F.linearRampToValueAtTime(VOW.ah[i],T(0.74));
-      F.linearRampToValueAtTime(VOW.l[i],T(0.84));   // then hold — the L must be heard
+      const PINCH=[260,1950,2250];                   // velar locus: F2 and F3 together
+      F.setValueAtTime(PINCH[i],t0);
+      F.linearRampToValueAtTime(VOW.oh[i],T(0.055));  // the /g/ release transition
+      F.setValueAtTime(VOW.oh[i],T(0.44));            // STEADY oh
+      F.linearRampToValueAtTime(VOW.ah[i],T(0.52));   // fast move
+      F.setValueAtTime(VOW.ah[i],T(0.78));            // STEADY aah
+      F.linearRampToValueAtTime(VOW.l[i],T(0.85));    // fast move
+      // then hold the L — steady states are what enunciation IS
       chain.connect(pk); chain=pk;
     }
     const hp=ac.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=95;
@@ -2475,11 +2479,11 @@ function goalCry(){
     // ---- amplitude: HARD attack, sustain, short release (+ shimmer) ----
     const A=out.gain;
     A.setValueAtTime(0.0001,t0);
-    A.linearRampToValueAtTime(0.10,t0+0.012);     // the G lands first
-    A.linearRampToValueAtTime(0.88,t0+0.030);
-    for(let f=0.05;f<0.82;f+=0.035){
+    A.linearRampToValueAtTime(0.06,t0+0.008);     // closure, then the burst, then voice
+    A.linearRampToValueAtTime(0.88,t0+0.020);
+    for(let f=0.06;f<0.82;f+=0.08){
       const hold=f<0.50?1.0:1.06;                    // lift through the vowel morph
-      A.linearRampToValueAtTime(0.86*hold*(0.96+Math.random()*0.08),T(f));
+      A.linearRampToValueAtTime(0.86*hold*(0.99+Math.random()*0.02),T(f));  // steady — wobble is a bleat
     }
     A.linearRampToValueAtTime(0.80,T(0.86));         // the L, held and audible
     A.linearRampToValueAtTime(0.76,T(0.97));
@@ -2501,9 +2505,9 @@ function goalCry(){
     const gb=ac.createBufferSource(); gb.buffer=nbuf;
     const gf=ac.createBiquadFilter(); gf.type="bandpass"; gf.frequency.value=1800; gf.Q.value=1.1;
     const gg=ac.createGain();
-    gg.gain.setValueAtTime(1.15,t0);              // a plosive is a transient — it bypasses the compressor
-    gg.gain.linearRampToValueAtTime(0.28,t0+0.010);
-    gg.gain.linearRampToValueAtTime(0.0001,t0+0.026);
+    gg.gain.setValueAtTime(1.30,t0);              // a plosive is a transient — it bypasses the compressor
+    gg.gain.linearRampToValueAtTime(0.20,t0+0.006);
+    gg.gain.linearRampToValueAtTime(0.0001,t0+0.014);
     gb.connect(gf); gf.connect(gg); gg.connect(ac.destination);
 
     osc.start(t0); buzz.start(t0); sub.start(t0); lfo.start(t0);
