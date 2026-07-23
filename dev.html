@@ -486,6 +486,7 @@ function resetMatch(){
   menuTeam=null; document.getElementById("coachMenu")?.classList.remove("show");
   stats={shots:[0,0,0],saves:[0,0,0],tackles:[0,0,0],poss:[0,0,0]};
   goalsLog=[]; goldenScorer=null; matchLog=[]; gkHolder=null; gkHoldUntil=-1;
+  matchStadium=pick(STADIUMS);
   GKSTAT.lastThrowAt=-99; GKSTAT.lastClaimAt=-99;   // metrics never bleed across matches
   goalEls.forEach(g=>g&&g.setAttribute("opacity",1));
   drawBoards();   // fresh sponsors every match
@@ -504,7 +505,7 @@ function resetMatch(){
   computeTargets();
   const first=Math.floor(Math.random()*3);
   kickoff(first);
-  say(`We're underway on the hex! ${tm(0)}, ${tm(1)} and ${tm(2)} — one ball, two enemies each. ${tm(first)} get us started.`,true);
+  say(`We're underway at ${matchStadium}! ${tm(0)}, ${tm(1)} and ${tm(2)} — one ball, two enemies each. ${tm(first)} get us started.`,true);
   renderScore();
 }
 
@@ -2245,6 +2246,11 @@ function ambientChatter(){
     `Nobody press in the far corner. It's Camelot over there. A silly place.`,
     `Careful with the striker lurking in the box. That's no ordinary striker — look at the bones!`,
     `And now for something completely different: several minutes of actual football.`,
+    `${matchStadium} is absolutely rocking tonight.`,
+    `Not a bad seat in ${matchStadium}. Several bad decisions, though.`,
+    `${matchStadium}: where legends and livestock share a fence line.`,
+    `They say the acoustics in ${matchStadium} carry all the way to the county road.`,
+    `Groundskeeping at ${matchStadium} remains impeccable, scorch marks notwithstanding.`,
     `That winger runs on pure guzzoline. WITNESS HIM.`,
     `Shiny and chrome, that counterattack. All it needs is a flame-throwing guitar.`,
     `The back line has three prime directives: protect the goal, protect the lead, and never discuss the third.`,
@@ -2452,6 +2458,13 @@ if(speechOK) setInterval(()=>{
 },2000);
 
 let lastSayAt=-99;
+const STADIUMS=[
+  "The Hex at Whiskey Hill","Hazelnut Park","Willamette Field","Pumpkin Patch Grounds",
+  "The Barnyard Bowl","Fencepost Stadium","Rafter Arena","The Grail Ground",
+  "Thunderdome Pasture","Cascadia Coliseum","The Sparkle Dome","Bulldog Field at Ninety-One",
+  "The Banana Bowl","Orchard Park","Blueberry Row Stadium","The Coop",
+  "Grampy Cliff's Tractor Yard","Camelot Grounds","The Mesa Bowl","Morale Field"];
+let matchStadium=STADIUMS[0];
 let NAME_COL=null, matchLog=[], champInfo=null, matchLive=false, matchBoards=[], lastChatterAt=-99;
 let captionsOn=false, capToken=0;
 function showCaption(t){
