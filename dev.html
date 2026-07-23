@@ -2397,16 +2397,16 @@ function goalCry(){
     const osc=ac.createOscillator(); osc.type="sawtooth";
     const buzz=ac.createOscillator(); buzz.type="square";
     const sub=ac.createOscillator();  sub.type="square";
-    const gSaw=ac.createGain();  gSaw.gain.value=0.72;
-    const gBuzz=ac.createGain(); gBuzz.gain.value=0.20;
+    const gSaw=ac.createGain();  gSaw.gain.value=0.82;
+    const gBuzz=ac.createGain(); gBuzz.gain.value=0.09;
     const gSub=ac.createGain();  gSub.gain.value=0.0001;
     gSub.gain.setValueAtTime(0.0001,t0);
-    gSub.gain.linearRampToValueAtTime(0.16,T(0.35));   // growl swells at the strain
-    gSub.gain.linearRampToValueAtTime(0.16,T(0.80));
+    gSub.gain.linearRampToValueAtTime(0.04,T(0.35));   // a hint of growl, not a sasquatch
+    gSub.gain.linearRampToValueAtTime(0.04,T(0.80));
     gSub.gain.linearRampToValueAtTime(0.0001,T(0.95));
 
     // pitch: quick onset rise then HOLD with jitter — a glide is a theremin
-    const basePts=[[0,168],[0.10,196],[0.22,203],[0.62,207],[0.80,205],[0.90,196],[1,150]];
+    const basePts=[[0,208],[0.10,242],[0.22,250],[0.62,254],[0.80,250],[0.90,238],[1,182]];
     const baseAt=f=>{ for(let i=1;i<basePts.length;i++){ if(f<=basePts[i][0]){
       const[f0,v0]=basePts[i-1],[f1,v1]=basePts[i];
       return v0+(v1-v0)*(f-f0)/Math.max(1e-6,f1-f0); } } return 150; };
@@ -2429,7 +2429,7 @@ function goalCry(){
     // ---- strain: soft clip ----
     const grit=ac.createWaveShaper();
     const cv=new Float32Array(1024);
-    for(let i=0;i<1024;i++){ const v=i/512-1; cv[i]=Math.tanh(v*3.0)/Math.tanh(3.0); }
+    for(let i=0;i<1024;i++){ const v=i/512-1; cv[i]=Math.tanh(v*2.1)/Math.tanh(2.1); }
     grit.curve=cv; grit.oversample="2x";
     osc.connect(gSaw); buzz.connect(gBuzz); sub.connect(gSub);
     gSaw.connect(grit); gBuzz.connect(grit); gSub.connect(grit);
@@ -2440,8 +2440,8 @@ function goalCry(){
     for(let i=0;i<len;i++) nch[i]=Math.random()*2-1;
     const br=ac.createBufferSource(); br.buffer=nbuf;
     const brg=ac.createGain();
-    brg.gain.setValueAtTime(0.05,t0);
-    brg.gain.linearRampToValueAtTime(0.14,T(0.85));
+    brg.gain.setValueAtTime(0.014,t0);
+    brg.gain.linearRampToValueAtTime(0.05,T(0.85));
     br.connect(brg); brg.connect(grit);
 
     // ---- SERIES peaking formants: emphasize the tract, keep the whole voice ----
@@ -2466,20 +2466,22 @@ function goalCry(){
     const A=out.gain;
     A.setValueAtTime(0.0001,t0);
     A.linearRampToValueAtTime(0.42,t0+0.012);
-    for(let f=0.05;f<0.90;f+=0.035)
-      A.linearRampToValueAtTime(0.40*(0.92+Math.random()*0.16),T(f));   // shimmer
-    A.linearRampToValueAtTime(0.36,T(0.92));
+    for(let f=0.05;f<0.94;f+=0.035){
+      const hold=f<0.55?1.0:(f<0.90?1.10:1.02);      // lift through the vowel morph
+      A.linearRampToValueAtTime(0.40*hold*(0.94+Math.random()*0.12),T(f));
+    }
+    A.linearRampToValueAtTime(0.38,T(0.95));
     A.linearRampToValueAtTime(0.001,T(1)+0.18);
 
     // ---- crowd: WIDE band bed, not a narrow whistle ----
     const nz=ac.createBufferSource(); nz.buffer=nbuf;
-    const cl=ac.createBiquadFilter(); cl.type="lowpass";  cl.frequency.value=2600; cl.Q.value=0.7;
+    const cl=ac.createBiquadFilter(); cl.type="lowpass";  cl.frequency.value=1500; cl.Q.value=0.7;
     const chp=ac.createBiquadFilter(); chp.type="highpass"; chp.frequency.value=250; chp.Q.value=0.7;
     const cg=ac.createGain();
     cg.gain.setValueAtTime(0.0001,t0);
-    cg.gain.linearRampToValueAtTime(0.13,T(0.12));
-    cg.gain.linearRampToValueAtTime(0.24,T(0.55));
-    cg.gain.linearRampToValueAtTime(0.29,T(1));
+    cg.gain.linearRampToValueAtTime(0.08,T(0.12));
+    cg.gain.linearRampToValueAtTime(0.14,T(0.55));
+    cg.gain.linearRampToValueAtTime(0.17,T(1));
     cg.gain.linearRampToValueAtTime(0.001,T(1)+0.3);
     nz.connect(cl); cl.connect(chp); chp.connect(cg); cg.connect(ac.destination);
 
@@ -2487,8 +2489,8 @@ function goalCry(){
     const gb=ac.createBufferSource(); gb.buffer=nbuf;
     const gf=ac.createBiquadFilter(); gf.type="lowpass"; gf.frequency.value=520;
     const gg=ac.createGain();
-    gg.gain.setValueAtTime(0.26,t0);
-    gg.gain.linearRampToValueAtTime(0.0001,t0+0.045);
+    gg.gain.setValueAtTime(0.14,t0);
+    gg.gain.linearRampToValueAtTime(0.0001,t0+0.040);
     gb.connect(gf); gf.connect(gg); gg.connect(ac.destination);
 
     osc.start(t0); buzz.start(t0); sub.start(t0); lfo.start(t0);
