@@ -2449,10 +2449,10 @@ function goalCry(){
     br.connect(brg); brg.connect(grit);
 
     // ---- SERIES peaking formants: emphasize the tract, keep the whole voice ----
-    const VOW={oh:[430,800,2500], ah:[760,1220,2600], l:[380,940,2650]};
-    const Qs=[3.0,3.5,4.0], dB=[14,11,7];
+    const VOW={oh:[520,880,2600], ah:[790,1240,2700], l:[420,1000,2750]};
+    const Qs=[2.6,3.0,3.2], dB=[15,15,13];
     const tilt=ac.createBiquadFilter();      // glottal rolloff: the source is DARK
-    tilt.type="lowpass"; tilt.frequency.value=1500; tilt.Q.value=0.55;
+    tilt.type="lowpass"; tilt.frequency.value=2000; tilt.Q.value=0.6;
     grit.connect(tilt);
     let chain=tilt;
     for(let i=0;i<3;i++){
@@ -2466,18 +2466,19 @@ function goalCry(){
       chain.connect(pk); chain=pk;
     }
     const hp=ac.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=95;
-    const lp=ac.createBiquadFilter(); lp.type="lowpass";  lp.frequency.value=3300;
+    const lp=ac.createBiquadFilter(); lp.type="lowpass";  lp.frequency.value=4200;
     chain.connect(hp); hp.connect(lp); lp.connect(out);
 
     // ---- amplitude: HARD attack, sustain, short release (+ shimmer) ----
     const A=out.gain;
     A.setValueAtTime(0.0001,t0);
-    A.linearRampToValueAtTime(0.62,t0+0.012);
+    A.linearRampToValueAtTime(0.10,t0+0.012);     // the G lands first
+    A.linearRampToValueAtTime(0.88,t0+0.030);
     for(let f=0.05;f<0.94;f+=0.035){
       const hold=f<0.55?1.0:(f<0.90?1.10:1.02);      // lift through the vowel morph
-      A.linearRampToValueAtTime(0.60*hold*(0.96+Math.random()*0.08),T(f));
+      A.linearRampToValueAtTime(0.86*hold*(0.96+Math.random()*0.08),T(f));
     }
-    A.linearRampToValueAtTime(0.56,T(0.95));
+    A.linearRampToValueAtTime(0.80,T(0.95));
     A.linearRampToValueAtTime(0.001,T(1)+0.18);
 
     // ---- crowd: WIDE band bed, not a narrow whistle ----
@@ -2485,19 +2486,16 @@ function goalCry(){
     const cl=ac.createBiquadFilter(); cl.type="lowpass";  cl.frequency.value=1500; cl.Q.value=0.7;
     const chp=ac.createBiquadFilter(); chp.type="highpass"; chp.frequency.value=250; chp.Q.value=0.7;
     const cg=ac.createGain();
-    cg.gain.setValueAtTime(0.0001,t0);
-    cg.gain.linearRampToValueAtTime(0.08,T(0.12));
-    cg.gain.linearRampToValueAtTime(0.14,T(0.55));
-    cg.gain.linearRampToValueAtTime(0.17,T(1));
-    cg.gain.linearRampToValueAtTime(0.001,T(1)+0.3);
+    cg.gain.setValueAtTime(0.0001,t0);            // crowd off — the voice carries it alone
     nz.connect(cl); cl.connect(chp); chp.connect(cg); cg.connect(ac.destination);
 
     // ---- the "G" attack ----
     const gb=ac.createBufferSource(); gb.buffer=nbuf;
-    const gf=ac.createBiquadFilter(); gf.type="lowpass"; gf.frequency.value=520;
+    const gf=ac.createBiquadFilter(); gf.type="bandpass"; gf.frequency.value=1800; gf.Q.value=1.1;
     const gg=ac.createGain();
-    gg.gain.setValueAtTime(0.14,t0);
-    gg.gain.linearRampToValueAtTime(0.0001,t0+0.040);
+    gg.gain.setValueAtTime(1.15,t0);              // a plosive is a transient — it bypasses the compressor
+    gg.gain.linearRampToValueAtTime(0.28,t0+0.010);
+    gg.gain.linearRampToValueAtTime(0.0001,t0+0.026);
     gb.connect(gf); gf.connect(gg); gg.connect(ac.destination);
 
     osc.start(t0); buzz.start(t0); sub.start(t0); lfo.start(t0);
