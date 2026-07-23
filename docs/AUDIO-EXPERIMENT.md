@@ -20,7 +20,7 @@ every goal forever. Kids notice that by the third match.
 
 **Text-to-speech** had already failed us once. Feed a browser speech engine the string
 "GOOOAL" and it says *gull* — it treats the stretched spelling as a word to be parsed rather
-than a duration to be honored. We'd worked around that months' worth of commits ago by
+than a duration to be honored. We'd worked around it a few days and many commits earlier by
 normalizing the text and moving all the emphasis into `rate` and `pitch`.
 
 So: synthesize it. Build a voice out of oscillators and filters, and get infinite variation
