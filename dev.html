@@ -2380,16 +2380,21 @@ function speak(html,prio){
     .replace(/\+(\d+)s\b/g,"plus $1 seconds")
     .replace(/(\d+)s\b/g,"$1 seconds")
     .replace(/—/g,", ").trim();
+  // the CAPTION shows written text — strip only markup and emoji, keep the em-dashes and punctuation
+  const disp=html
+    .replace(/<[^>]*>/g,"")
+    .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu,"")
+    .replace(/\s+/g," ").trim();
   if(!text)return;
   // Armor: the Android speech engine is unstable under cancel/speak churn.
   // Whatever it does, it must NEVER take the football down with it.
   try{
     const isGoalCall=/G+O+A+L+|IT'S IN|NET BULGES/i.test(html);
-    const mk=(txt)=>{
+    const mk=(txt,cap)=>{
       const u=new SpeechSynthesisUtterance(txt);
       if(narrator)u.voice=narrator;
       u.rate=isGoalCall?0.98:1.12; u.pitch=isGoalCall?1.06:1;   // the goal call slows and rises
-      showCaption(txt);
+      showCaption(cap!==undefined?cap:txt);
       u.onend=u.onerror=()=>{
         queuedUtter=Math.max(0,queuedUtter-1); speakStartedAt=performance.now(); speakingPrio=null;
         hideCaptionSoon();
@@ -2400,7 +2405,7 @@ function speak(html,prio){
           highLockUntil=performance.now()+2000;
           setTimeout(()=>{ try{
             queuedUtter++; speakStartedAt=performance.now(); speakingPrio="high";
-            speechSynthesis.speak(mk(nxt));
+            speechSynthesis.speak(mk(nxt[0],nxt[1]));
           }catch(e6){ queuedUtter=0; speakingPrio=null; } },40);
         }
       };
@@ -2409,7 +2414,7 @@ function speak(html,prio){
     const fire=()=>{
       try{
         queuedUtter++; speakStartedAt=performance.now(); speakingPrio=prio;
-        speechSynthesis.speak(mk(text));
+        speechSynthesis.speak(mk(text,disp));
       }catch(e2){ queuedUtter=0; speakingPrio=null; }
     };
     if(prio==="high"){
@@ -2418,7 +2423,7 @@ function speak(html,prio){
       if(speakingPrio==="high"||pendingHighFire||highQ.length){
         // a big call is playing or waiting: QUEUE IN ORDER, never clobber
         // (the old "latest wins" slot let a goal be replaced by its own follow-ups)
-        if(highQ.length<4) highQ.push(text);
+        if(highQ.length<4) highQ.push([text,disp]);
         return;
       }
       if(speechSynthesis.speaking||speechSynthesis.pending){
