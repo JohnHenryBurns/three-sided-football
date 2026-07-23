@@ -376,3 +376,11 @@ Findings written up for Greg. Conclusion: source-filter synthesis from a sawtoot
 gets to "instrument," not "person"; built-in TTS at a low rate is the practical
 route for the game, since the old "gull" bug was a SPELLING artifact, not a
 stretching one.
+
+**Vocal Tract Lab spun out to its own repo:**
+The waveguide side-quest now lives at github.com/JohnHenryBurns/vocal-tract-lab
+(https://johnhenryburns.github.io/vocal-tract-lab/) — an interactive 3D Kelly-Lochbaum
+waveguide: 44 cylinders lit by real standing-wave energy, vowel geometries solved
+against Peterson & Barney formants, live spectrogram, and a SAY GOOOAAALLL
+articulation. Validated against quarter-wave theory (uniform tube resonates
+500/1505/2505 Hz vs a theoretical 501). Removed from this repo to avoid two copies.
