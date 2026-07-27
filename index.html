@@ -292,6 +292,15 @@
   <div class="formrow chk"><label for="setZone" title="Attackers can't enter the penalty area before the ball">Enforce offsides</label><input id="setZone" type="checkbox" checked></div>
   <div class="formrow chk"><label for="setOob" title="Touchlines in play: throw-ins, goal kicks, corners, keeper parries">Out of bounds</label><input id="setOob" type="checkbox" checked></div>
   <div class="formrow chk"><label for="setVoice" title="Spoken play-by-play (uses your phone's voice)">🎙️ Announcer</label><input id="setVoice" type="checkbox" checked></div>
+  <div class="formrow"><label for="setEngine" title="Whose throat says it">🗣️ Voice</label>
+    <select id="setEngine">
+      <option value="phone" selected>Phone voice</option>
+      <option value="hollerbox">Hollerbox — a modelled vocal tract</option>
+    </select></div>
+  <!-- A seed is a whole voice: tract length, pitch, timing, the lot. Made in the Hollerbox
+       wizard and pasted here, so the commentator can be anybody. Blank means the announcer. -->
+  <div class="formrow" id="seedRow" style="display:none"><label for="setSeed" title="Paste a voice seed from hollerbox — blank for the announcer">🎛️ Seed</label>
+    <input id="setSeed" type="text" placeholder="optional — paste a voice seed" spellcheck="false"></div>
   <div class="formrow chk"><label for="setCaps" title="Show the announcer's words as TV-style captions over the pitch">💬 Captions</label><input id="setCaps" type="checkbox"></div>
   <div class="formrow"><label>Teams</label><div id="teamSlots" class="slotRow"></div></div>
   <div class="formrow"><label for="setRef">Referee</label><select id="setRef">
@@ -1958,7 +1967,7 @@ function styleLines(){
 let recentChatter=[];
 function ambientChatter(){
   if(!matchLive||!voiceOn||!speechOK) return;
-  if(queuedUtter>0||speechSynthesis.speaking) return;
+  if(queuedUtter>0||(!usingHollerbox()&&speechSynthesis.speaking)) return;
   const rt=performance.now()/1000;
   if(rt-lastChatterAt<6) return;   // REAL seconds: slow-speed viewing gets a full broadcast
   const cand=[];
@@ -2363,7 +2372,90 @@ function flash(t){ const c=document.getElementById("card"+t); if(!c)return;
 
 // ---------- Narrator (Web Speech API — built into the phone, works offline) ----------
 let voiceOn=true, narrator=null, queuedUtter=0, welcomed=false;
+// ── TWO WAYS TO MAKE A NOISE ─────────────────────────────────────────────
+//
+// The phone's own voice, or Hollerbox — a physical model of a vocal tract, forty-four tubes and
+// the arithmetic of a wave hitting a change in cross-section. It exists because this simulator
+// needed to shout GOOOOAAALLL and neither a recording nor the browser would do it: a recording is
+// the same shout every time and everyone notices by the third one, and the browser reads "GOOOAL"
+// as "gull".
+//
+// Everything below this — the queue, the priorities, the captions, the Android armour — is
+// untouched. Only the step that actually makes sound is swapped, because that queue took a long
+// time to get right and none of its problems are about which engine is speaking.
 const speechOK=("speechSynthesis" in window);
+
+const HOLLERBOX_SRC = 'https://johnhenryburns.github.io/hollerbox/engine/';
+let voiceEngineName = 'phone';        // 'phone' | 'hollerbox'
+let holler = null;                    // the loaded engine, or null until it is
+
+/** Load Hollerbox and start its audio. Called at match start, NOT at the first goal: an
+ *  AudioWorklet is interpreted before it is compiled and is about twice as slow as real time
+ *  cold, so the first word out of it drops samples — which sounds exactly like a click. Three
+ *  hundred milliseconds of silence at kick-off buys a clean first shout. */
+async function hollerboxUp(seed){
+  if(holler) return holler;
+  const grab = async name => {
+    const r = await fetch(HOLLERBOX_SRC + name, { cache:'no-store' });
+    if(!r.ok) throw new Error(name + ' ' + r.status);
+    new Function(await r.text())();
+  };
+  await grab('phonemes.js'); await grab('spelling.js'); await grab('session.js');
+  const S = window.HOLLER_SESSION, P = window.HOLLER;
+  await S.loadEngine({ src: HOLLERBOX_SRC + 'phonemes.js' });
+  let voice = { ...P.defaultVoice(), ...(P.VOICES.announcer.v||{}) };
+  if(seed){ try { voice = P.decodeVoice(String(seed).trim()); } catch(e){} }
+  const a = await S.startAudio();
+  holler = { S, P, ctx:a.ctx, node:a.node, n:a.n, voice, wake:a.wake, done:null };
+  // The worklet reports whether it is still speaking, on change. That message is this engine's
+  // `onend` — without it the queue below never drains and the commentary stops after one line.
+  a.node.port.onmessage = e => {
+    if(e.data && e.data.state && !e.data.seq && holler && holler.done){
+      const f = holler.done; holler.done = null; f();
+    }
+  };
+  return holler;
+}
+
+/** Say something, and call back when it is finished. The same shape as an utterance's onend, so
+ *  the queue does not need to know which engine it is talking to. */
+function hollerSay(text, isGoalCall, onEnd, original){
+  if(holler) holler.stretch = original || text;
+  if(!holler){ onEnd&&onEnd(); return; }
+  const { S, P } = holler;
+  try{
+    if(holler.wake) holler.wake();
+    const v = { ...holler.voice };
+    // A GOAL CALL HOLDS THE VOWEL, and this is the whole reason to be here. The text handed in
+    // has already had "GOOOOAAALLL" flattened to "goal", because every engine reads the stretched
+    // spelling as something else — the phone says "gull" and this one says "goo-oh-l". But the
+    // stretch was never in the letters; it is in the DELIVERY, and a physical tract can hold a
+    // vowel for as long as there is air. `drawl` is that, and how far it goes is read back off
+    // the original spelling: more o's, longer shout.
+    if(isGoalCall){
+      v.per = (v.per||0.05)*1.35;
+      v.acc = Math.min(14,(v.acc||7)+3);
+      const os = (String(holler.stretch||'').match(/[OA]/gi)||[]).length;
+      v.drawl = Math.max(v.drawl||0, Math.min(1, 0.45 + 0.06*Math.max(0, os-2)));
+    }
+    const { ph, stress } = S.chainFor(text);
+    if(!ph.length){ onEnd&&onEnd(); return; }
+    const n = S.tractFor(holler.node, v, holler.n);
+    holler.node.port.postMessage({ type:'voice', v });
+    const seq = S.planSpeech(ph, v, { n, stress });
+    holler.done = onEnd || null;
+    holler.node.port.postMessage({ type:'goal', seq });
+    // a floor under the callback, so a lost message cannot wedge the queue for the whole match
+    const mine = holler.done;
+    setTimeout(()=>{ if(holler && holler.done===mine && mine){ holler.done=null; mine(); } },
+               (seq.end+1.2)*1000);
+  }catch(e){ onEnd&&onEnd(); }
+}
+
+function hollerStop(){
+  if(holler){ try{ holler.node.port.postMessage({type:'stopSeq'}); }catch(e){} holler.done=null; }
+}
+const usingHollerbox = () => voiceEngineName==='hollerbox' && !!holler;
 function pickVoice(){
   const vs=speechSynthesis.getVoices();
   narrator=vs.find(v=>v.lang==="en-GB")||vs.find(v=>v.lang&&v.lang.startsWith("en"))||vs[0]||null;
@@ -2405,7 +2497,9 @@ function speak(html,prio){
           highLockUntil=performance.now()+2000;
           setTimeout(()=>{ try{
             queuedUtter++; speakStartedAt=performance.now(); speakingPrio="high";
-            speechSynthesis.speak(mk(nxt[0],nxt[1]));
+            if(usingHollerbox()){ showCaption(nxt[1]!==undefined?nxt[1]:nxt[0]);
+              hollerSay(nxt[0], true, ()=>{ mk(nxt[0],nxt[1]).onend(); }); }
+            else speechSynthesis.speak(mk(nxt[0],nxt[1]));
           }catch(e6){ queuedUtter=0; speakingPrio=null; } },40);
         }
       };
@@ -2414,7 +2508,13 @@ function speak(html,prio){
     const fire=()=>{
       try{
         queuedUtter++; speakStartedAt=performance.now(); speakingPrio=prio;
-        speechSynthesis.speak(mk(text,disp));
+        if(usingHollerbox()){
+          // mk() builds the utterance for its side effects — the caption and the onend that
+          // drains the queue — and Hollerbox borrows both rather than reimplementing them.
+          const u = mk(text,disp);
+          hollerSay(text, isGoalCall, ()=>u.onend(), html);
+        }
+        else speechSynthesis.speak(mk(text,disp));
       }catch(e2){ queuedUtter=0; speakingPrio=null; }
     };
     if(prio==="high"){
@@ -2426,16 +2526,16 @@ function speak(html,prio){
         if(highQ.length<4) highQ.push([text,disp]);
         return;
       }
-      if(speechSynthesis.speaking||speechSynthesis.pending){
+      if(!usingHollerbox()&&(speechSynthesis.speaking||speechSynthesis.pending)){
         // interrupting LOW speech: rate-limited cancel, then the Android defer
-        if(now2-lastCancelAt>150){ speechSynthesis.cancel(); lastCancelAt=now2; }
+        if(now2-lastCancelAt>150){ if(usingHollerbox()) hollerStop(); else speechSynthesis.cancel(); lastCancelAt=now2; }
         queuedUtter=0;
         pendingHighFire=setTimeout(()=>{ pendingHighFire=null; fire(); },90);
       } else { fire(); }
     } else {
       // low speech never speaks in the shadow of big calls
       if(performance.now()<highLockUntil||highQ.length)return;
-      if(queuedUtter>0||speechSynthesis.speaking)return;
+      if(queuedUtter>0||(!usingHollerbox()&&speechSynthesis.speaking))return;
       fire();
     }
   }catch(e3){ queuedUtter=0; }
@@ -2443,12 +2543,12 @@ function speak(html,prio){
 let lastCancelAt=0, pendingHighFire=null, speakStartedAt=0, highLockUntil=0, speakingPrio=null, highQ=[];
 if(speechOK){
   // heartbeat: Chrome's engine self-pauses on long gaps — nudge it awake
-  setInterval(()=>{ try{ if(voiceOn) speechSynthesis.resume(); }catch(e7){} },4000);
+  setInterval(()=>{ try{ if(voiceOn&&!usingHollerbox()) speechSynthesis.resume(); }catch(e7){} },4000);
   // watchdog: engine claims busy but nothing is landing — reset it
   setInterval(()=>{
     try{
       if(queuedUtter>0&&performance.now()-speakStartedAt>6000){
-        speechSynthesis.cancel(); queuedUtter=0;
+        if(usingHollerbox()) hollerStop(); else speechSynthesis.cancel(); queuedUtter=0;
       }
     }catch(e7){ queuedUtter=0; }
   },3000);
@@ -2457,7 +2557,7 @@ if(speechOK){
 if(speechOK) setInterval(()=>{
   try{
     // Chrome pause bug: a periodic resume keeps long sessions alive
-    if(speechSynthesis.speaking) speechSynthesis.resume();
+    if(!usingHollerbox()&&speechSynthesis.speaking) speechSynthesis.resume();
     // desync: counter says busy but the engine is idle — resync
     if(queuedUtter>0&&!speechSynthesis.speaking&&!speechSynthesis.pending) queuedUtter=0;
     // hard wedge: one utterance "speaking" for 15+ real seconds — reset the engine
@@ -3269,7 +3369,18 @@ document.getElementById("btnStart").onclick=()=>{
   momentumOn=document.getElementById("setMom").checked;
   zoneRule=document.getElementById("setZone").checked;
   oobRule=document.getElementById("setOob").checked;
-  voiceOn=speechOK&&document.getElementById("setVoice").checked;
+  voiceEngineName=document.getElementById("setEngine").value;
+  // Hollerbox does not need speechSynthesis to exist, which is the point on a device whose own
+  // voice is missing or bad — so `voiceOn` no longer depends on the browser having one.
+  voiceOn=document.getElementById("setVoice").checked && (voiceEngineName==='hollerbox'||speechOK);
+  if(voiceOn&&voiceEngineName==='hollerbox'){
+    // started here rather than at the first goal: cold, the worklet is about twice as slow as
+    // real time and the first word drops samples, which sounds exactly like a click
+    hollerboxUp(document.getElementById("setSeed").value).catch(e=>{
+      console.warn('hollerbox unavailable, falling back to the phone voice', e);
+      voiceEngineName='phone'; voiceOn=speechOK;
+    });
+  }
   captionsOn=document.getElementById("setCaps").checked;
   matchLive=true;
   keepAwake();
@@ -3440,6 +3551,14 @@ renderTeamSlots();
 draw();
 showSetup();
 requestAnimationFrame(loop);
+
+// the seed only means anything to Hollerbox
+(function(){
+  const sel=document.getElementById("setEngine"), row=document.getElementById("seedRow");
+  if(!sel||!row) return;
+  const sync=()=>{ row.style.display = sel.value==='hollerbox' ? '' : 'none'; };
+  sel.addEventListener('change', sync); sync();
+})();
 </script>
 </body>
 </html>
