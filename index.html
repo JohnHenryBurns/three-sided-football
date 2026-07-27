@@ -300,7 +300,7 @@
   <!-- A seed is a whole voice: tract length, pitch, timing, the lot. Made in the Hollerbox
        wizard and pasted here, so the commentator can be anybody. Blank means the announcer. -->
   <div class="formrow" id="seedRow" style="display:none"><label for="setSeed" title="Paste a voice seed from hollerbox — blank for the announcer">🎛️ Seed</label>
-    <input id="setSeed" type="text" placeholder="optional — paste a voice seed" spellcheck="false"></div>
+    <input id="setSeed" type="text" placeholder="optional — blank is a man's voice" spellcheck="false"></div>
   <div class="formrow chk"><label for="setCaps" title="Show the announcer's words as TV-style captions over the pitch">💬 Captions</label><input id="setCaps" type="checkbox"></div>
   <div class="formrow"><label>Teams</label><div id="teamSlots" class="slotRow"></div></div>
   <div class="formrow"><label for="setRef">Referee</label><select id="setRef">
@@ -2403,7 +2403,14 @@ async function hollerboxUp(seed){
   await grab('phonemes.js'); await grab('spelling.js'); await grab('session.js');
   const S = window.HOLLER_SESSION, P = window.HOLLER;
   await S.loadEngine({ src: HOLLERBOX_SRC + 'phonemes.js' });
-  let voice = { ...P.defaultVoice(), ...(P.VOICES.announcer.v||{}) };
+  // `man`, not `announcer`. The announcer is a goal cry — drawn out, pitch falling the whole way
+  // — and it takes TWENTY-SEVEN SECONDS to read a line of commentary. Commentary has to move.
+  //
+  // And at the calibrated rate. `man`'s own per of 0.1241 is a translation of a tuning made by
+  // ear under an older duration law, not a measurement; the only rate ever fitted against a
+  // person reading aloud is 0.0496, and at that rate this voice does a line in 3.4 s against
+  // 7.9. A man's voice at a human tempo, which is what a commentator is.
+  let voice = { ...P.defaultVoice(), ...(P.VOICES.man.v||{}), per: 0.0496 };
   if(seed){ try { voice = P.decodeVoice(String(seed).trim()); } catch(e){} }
   const a = await S.startAudio();
   holler = { S, P, ctx:a.ctx, node:a.node, n:a.n, voice, wake:a.wake, done:null };
