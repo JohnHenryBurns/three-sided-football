@@ -192,6 +192,14 @@
   .formrow{display:flex;flex-direction:column;align-items:stretch;gap:.3rem;margin-top:.9rem;font-size:.95rem;text-align:left}
   .formrow label{font-size:.78rem;color:var(--ink-dim);letter-spacing:.08em}
   .formrow select{width:100%;font-size:.95rem;padding:.45rem .5rem}
+  /* A text input inherits the browser's own white box unless told otherwise, which on this
+     theme reads as a hole cut in the panel. The select beside it was already styled; this
+     matches it, down to the border and the radius. */
+  .formrow input[type=text]{width:100%;font-family:inherit;font-size:.95rem;
+    padding:.45rem .5rem;background:var(--panel);color:var(--ink);
+    border:1px solid var(--panel-edge);border-radius:6px;outline:none}
+  .formrow input[type=text]::placeholder{color:var(--ink-dim);opacity:.75}
+  .formrow input[type=text]:focus{border-color:var(--ink-dim)}
   .formrow.chk{flex-direction:row;justify-content:space-between;align-items:center}
   .cele button{margin-top:.8rem;font-size:.9rem;border-color:var(--cele,var(--arg))}
   .cele{max-height:88vh;overflow-y:auto}
@@ -294,7 +302,7 @@
   <div class="formrow chk"><label for="setVoice" title="Spoken play-by-play (uses your phone's voice)">🎙️ Announcer</label><input id="setVoice" type="checkbox" checked></div>
   <div class="formrow"><label for="setEngine" title="Whose throat says it">🗣️ Voice</label>
     <select id="setEngine">
-      <option value="phone" selected>Phone voice</option>
+      <option value="browser" selected>Browser voice</option>
       <option value="hollerbox">Hollerbox — a modelled vocal tract</option>
     </select></div>
   <!-- A seed is a whole voice: tract length, pitch, timing, the lot. Made in the Hollerbox
@@ -2386,7 +2394,7 @@ let voiceOn=true, narrator=null, queuedUtter=0, welcomed=false;
 const speechOK=("speechSynthesis" in window);
 
 const HOLLERBOX_SRC = 'https://johnhenryburns.github.io/hollerbox/engine/';
-let voiceEngineName = 'phone';        // 'phone' | 'hollerbox'
+let voiceEngineName = 'browser';      // 'browser' | 'hollerbox'
 let holler = null;                    // the loaded engine, or null until it is
 
 /** Load Hollerbox and start its audio. Called at match start, NOT at the first goal: an
@@ -2395,14 +2403,22 @@ let holler = null;                    // the loaded engine, or null until it is
  *  hundred milliseconds of silence at kick-off buys a clean first shout. */
 async function hollerboxUp(seed){
   if(holler) return holler;
-  const grab = async name => {
-    const r = await fetch(HOLLERBOX_SRC + name, { cache:'no-store' });
-    if(!r.ok) throw new Error(name + ' ' + r.status);
-    new Function(await r.text())();
-  };
-  await grab('phonemes.js'); await grab('spelling.js'); await grab('session.js');
-  const S = window.HOLLER_SESSION, P = window.HOLLER;
+  // Loaded exactly the way hollerbox's own page does it: fetch session.js, then let IT fetch the
+  // rest. The first version fetched all three by hand and then called loadEngine, which fetched
+  // two of them again — harmless in itself, but it meant three separate places could fail and
+  // only one error made it out.
+  //
+  // `src` is passed because there is no document.currentScript when a script is eval'd rather
+  // than linked, so session.js cannot work out where it came from and would look for its
+  // siblings beside THIS page instead of beside itself.
+  const r = await fetch(HOLLERBOX_SRC + 'session.js', { cache:'no-store' });
+  if(!r.ok) throw new Error('session.js ' + r.status);
+  new Function(await r.text())();
+  const S = window.HOLLER_SESSION;
+  if(!S) throw new Error('session.js loaded but defined nothing');
   await S.loadEngine({ src: HOLLERBOX_SRC + 'phonemes.js' });
+  const P = window.HOLLER;
+  if(!P) throw new Error('the engine did not load from ' + HOLLERBOX_SRC);
   // `man`, not `announcer`. The announcer is a goal cry — drawn out, pitch falling the whole way
   // — and it takes TWENTY-SEVEN SECONDS to read a line of commentary. Commentary has to move.
   //
@@ -3384,8 +3400,13 @@ document.getElementById("btnStart").onclick=()=>{
     // started here rather than at the first goal: cold, the worklet is about twice as slow as
     // real time and the first word drops samples, which sounds exactly like a click
     hollerboxUp(document.getElementById("setSeed").value).catch(e=>{
-      console.warn('hollerbox unavailable, falling back to the phone voice', e);
-      voiceEngineName='phone'; voiceOn=speechOK;
+      // SAID OUT LOUD, not logged. A silent fallback to the browser voice is indistinguishable
+      // from the feature not being wired up at all, which is exactly how this looked the first
+      // time it failed — and a phone has no console to check.
+      console.warn('hollerbox unavailable', e);
+      showCaption('Hollerbox did not load — ' + (e && e.message ? e.message : 'unknown') +
+                  ' — using the browser voice');
+      voiceEngineName='browser'; voiceOn=speechOK;
     });
   }
   captionsOn=document.getElementById("setCaps").checked;
