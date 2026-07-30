@@ -288,6 +288,16 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
 #hud .scores{display:flex;gap:.35rem;flex-wrap:wrap;justify-content:center}
 #hud #clock{font-family:var(--mono);font-size:.86rem;font-variant-numeric:tabular-nums;
   color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.9);letter-spacing:.04em}
+
+/* Above the setup menu, which is z-index 20. An error you cannot see is worse than no error
+   reporting at all, because the page looks like it merely did nothing. */
+#fatal{position:fixed;left:.6rem;right:.6rem;bottom:.6rem;z-index:40;
+  background:rgba(40,10,12,.97);border:1px solid #ff6b6b;border-radius:10px;
+  padding:.6rem .75rem;font-size:.86rem;line-height:1.35;color:#ffdede}
+#fatal b{color:#ff6b6b}
+#fatal .where{font-family:var(--mono);font-size:.66rem;opacity:.75;margin-top:.3rem;
+  word-break:break-all}
+#fatal .tap{font-family:var(--mono);font-size:.62rem;opacity:.5;margin-top:.35rem}
 </style>
 
 <header>
@@ -369,7 +379,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=33"></script>
+<script src="engine.js?v=34"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -492,7 +502,14 @@ function placeCam(){
 }
 function resize(){
   const r = cv.getBoundingClientRect();
-  if (!r.width || !r.height) return;
+  // A ZERO BOX IS NOT A REASON TO GIVE UP. This returned and never came back, so if the canvas
+  // measured zero at boot — which a layout can, for one frame, before it settles — the renderer
+  // kept its default size and the scene drew into nothing. Everything was built, positioned and
+  // lit, and none of it appeared.
+  //
+  // The ResizeObserver only helps if the box later CHANGES; a box that is zero and stays zero
+  // fires once and never again. Retrying on the next frame costs nothing and covers the case.
+  if (!r.width || !r.height) { requestAnimationFrame(resize); return; }
   ren.setSize(r.width, r.height, false);
   cam.aspect = r.width / r.height;
   cam.updateProjectionMatrix();
@@ -2034,12 +2051,25 @@ function boot(){
   running = false;
   requestAnimationFrame(loop);
 }
-try { boot(); }
-catch (e) {
-  say('<b style="color:#ff6b6b">Could not start:</b> ' + (e && e.message ? e.message : e));
-  say('<span style="opacity:.7">' + ((e && e.stack) ? String(e.stack).split('\n')[1] || '' : '') + '</span>');
+// ── FAILURES GO ON TOP OF EVERYTHING ────────────────────────────────────────
+// They used to go to the feed, which was fine until the setup menu became full-screen and opaque
+// at z-index 20 — since when a boot failure has been reported into a layer nobody can see, which
+// is worse than not reporting it, because it looks like it worked.
+//
+// Its own element, above the menu, dismissible.
+function fatal(label, e){
+  const box = document.createElement('div');
+  box.id = 'fatal';
+  box.innerHTML =
+    '<b>' + label + '</b> ' + ((e && e.message) ? e.message : String(e)) +
+    '<div class="where">' + (((e && e.stack) ? String(e.stack).split('\n')[1] : '') || '') + '</div>' +
+    '<div class="tap">tap to dismiss</div>';
+  box.addEventListener('click', () => box.remove());
+  document.body.appendChild(box);
   console.error(e);
 }
+try { boot(); }
+catch (e) { fatal('Could not start:', e); }
 // and a frame that throws must not take the loop with it — one bad frame is a glitch, a dead
 // loop is a black screen
 let frameFailed = false;
@@ -2047,7 +2077,7 @@ const rawDraw = drawGL;
 drawGL = function(){
   try { rawDraw(); }
   catch (e) {
-    if (!frameFailed) { frameFailed = true; say('<b style="color:#ff6b6b">Draw failed:</b> ' + e.message); console.error(e); }
+    if (!frameFailed) { frameFailed = true; fatal('Draw failed:', e); }
   }
 };
 </script>
