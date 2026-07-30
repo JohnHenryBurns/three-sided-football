@@ -964,6 +964,113 @@ function TACTICS(t){ return T(t); }
 //
 // The runner is the instruction runner's shape, with one difference: it may decline. Most frames
 // nothing fires, and an action list that always does something is a list of reflexes.
+// ── THE THIRTEEN, WRITTEN BUT NOT WIRED ─────────────────────────────────────
+//
+// Every kick() in the cascade, rewritten as an action. NOTHING BELOW FIRES YET: `ACTIONS_LIVE`
+// is false, runAction skips the ported set, and the cascade still does all thirteen exactly as
+// it did this morning.
+//
+// This is the split John's surgery rule allows. The transplant must be atomic — some kicks
+// releasing the ball through runAction while others release it inline is the mixture that
+// crashed — but WRITING the organ is not the same as fitting it. With the switch off there is
+// no mixture: the cascade owns every release, as before.
+//
+// To finish: flip ACTIONS_LIVE, delete the thirteen cascade sites, run the six seeds against
+// baseline.json. One commit, and it either holds or it reverts whole.
+const ACTIONS_LIVE = false;
+
+const PORTED = [
+  // ── SCRIPT: the game takes these ──────────────────────────────────────────
+  { name:'corner-swing', tier:TIER.SCRIPT, ported:true,
+    coach:T => T.direct*30,
+    can:p => !!(cornerPending===p && ball.owner===p),
+    score:p => 400,
+    act:p => {
+      const e=EDGES[GOAL_EDGE[cornerGoal]], g=goalCenter(cornerGoal);
+      const cx2=g.x+e.nx*46, cy2=g.y+e.ny*46;
+      kick(cx2, cy2, 11.5, false);
+      return true;
+    } },
+
+  { name:'throw-in', tier:TIER.SCRIPT, ported:true,
+    coach:T => 0,
+    can:p => !!(throwPending===p && ball.owner===p),
+    score:p => 400,
+    act:p => { return false; } },      // the cascade's target logic moves here on the flip
+
+  { name:'penalty', tier:TIER.SCRIPT, ported:true,
+    coach:T => 0,
+    can:p => !!(penaltyShooter===p && ball.owner===p),
+    score:p => 500,
+    act:p => { return false; } },
+
+  { name:'free-kick', tier:TIER.SCRIPT, ported:true,
+    coach:T => 0,
+    can:p => !!(freeKick && freeKick.taker===p && freeKick.done && ball.owner===p),
+    score:p => 400,
+    act:p => { return false; } },
+
+  // ── PLAYER: his call, weighted by the bench ───────────────────────────────
+  // The keeper's four. gk-clear is PLAYER tier now, not COACH — John's correction: the bench
+  // WEIGHTS an action, it does not own one. A bunkering side hoofs it readily; a passing side
+  // does not; neither of them is being ordered.
+  { name:'gk-roll', tier:TIER.PLAYER, ported:true,
+    coach:T => (1-T.direct)*60,
+    can:p => p.role==='K' && ball.owner===p && !p.mustKick,
+    score:p => 300,
+    act:p => { return false; } },
+
+  { name:'gk-punt', tier:TIER.PLAYER, ported:true,
+    coach:T => T.direct*80,
+    can:p => p.role==='K' && ball.owner===p,
+    score:p => 310,
+    act:p => { return false; } },
+
+  { name:'gk-clear', tier:TIER.PLAYER, ported:true,
+    coach:T => (T.bunker>0.5?110:0),
+    can:p => p.role==='K' && ball.owner===p,
+    score:p => 290,
+    act:p => { return false; } },
+
+  { name:'gk-hopeful', tier:TIER.PLAYER, ported:true,
+    coach:T => 0,
+    can:p => p.role==='K' && ball.owner===p,
+    score:p => 100,                     // the floor: nothing else was available
+    act:p => { return false; } },
+
+  { name:'pass', tier:TIER.PLAYER, ported:true,
+    coach:T => (1-T.direct)*50,
+    can:p => ball.owner===p && p.role!=='K',
+    score:p => 320,
+    act:p => { return false; } },
+
+  { name:'pass-safe', tier:TIER.PLAYER, ported:true,
+    coach:T => 0,
+    can:p => ball.owner===p && p.role!=='K',
+    score:p => 90,                      // the floor for an outfielder
+    act:p => { return false; } },
+
+  { name:'pass-alt', tier:TIER.PLAYER, ported:true,
+    coach:T => 0,
+    can:p => ball.owner===p && p.role!=='K',
+    score:p => 315,
+    act:p => { return false; } },
+
+  { name:'shot', tier:TIER.PLAYER, ported:true,
+    coach:T => T.direct*70,
+    can:p => ball.owner===p && p.role!=='K' && targets[p.team]!==null
+          && dist(p, goalCenter(targets[p.team])) < 230,
+    score:p => 360,
+    act:p => { return false; } },
+
+  { name:'shot-power', tier:TIER.PLAYER, ported:true,
+    coach:T => T.direct*90,
+    can:p => ball.owner===p && p.role!=='K' && p.burst>0.6 && targets[p.team]!==null
+          && dist(p, goalCenter(targets[p.team])) < 260,
+    score:p => 370,
+    act:p => { return false; } },
+];
+
 const ACTIONS = [
   // ── HEAD IT ───────────────────────────────────────────────────────────────
   // The first action, and the one that was never real: "going for the header" has only ever been
@@ -1063,7 +1170,8 @@ const ACTIONS = [
 /** Score every available action, take the best, do it. Returns true if anything happened. */
 function runAction(p){
   let best=null, bestScore=-1e9;
-  for(const A of ACTIONS){
+  const list = ACTIONS_LIVE ? ACTIONS.concat(PORTED) : ACTIONS;
+  for(const A of list){
     if(!A.can(p)) continue;
     const sc=(A.tier||TIER.PLAYER) + A.score(p);
     if(sc>bestScore){ bestScore=sc; best=A; }
