@@ -462,7 +462,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=130"></script>
+<script src="engine.js?v=131"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1949,13 +1949,21 @@ function buildBodies(){
     // What this player is being told to do, right now. The engine names each branch of think()
     // as it is taken; this draws the name. Off by default and rebuilt on demand, because it is
     // a development tool rather than a feature.
-    // THE BADGE, above his head and below the name. Sprite, so it faces every camera without
-    // anybody having to turn it — a badge you can only read from one side is decoration.
-    const badge = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: badgeTexture(p.team), transparent: true, depthWrite: false }));
-    badge.scale.set(15, 15, 1);
-    badge.position.set(0, H_P + 15, 0);
-    badge.renderOrder = 9;                  // under the labels, over the world
+    // THE BADGE, LYING FLAT ON THE CROWN OF HIS HEAD. A sprite was the obvious choice and the
+    // wrong one: it faces the camera, so from overhead you see a badge standing on edge rather
+    // than the disc the flat page draws.
+    //
+    // A horizontal plane instead, on the top of the head. From the overhead cameras it reads
+    // exactly like the 2D version — which is the point, because that view IS the flat page with
+    // depth — and from pitchside it foreshortens into a cap badge, which is what a thing lying on
+    // somebody's head should do.
+    const badge = new THREE.Mesh(
+      new THREE.PlaneGeometry(R_P * 1.75, R_P * 1.75),
+      new THREE.MeshBasicMaterial({ map: badgeTexture(p.team), transparent: true,
+                                    depthWrite: false, side: THREE.DoubleSide }));
+    badge.rotation.x = -Math.PI / 2;        // flat: its normal points at the sky
+    badge.position.set(0, H_P + 0.6, 0);    // just clear of the scalp, so it never z-fights
+    badge.renderOrder = 9;
     g.add(badge);
 
     const jobLabel = nameSprite('', '#7ee787', 22, 'rgba(6,10,8,.92)');
