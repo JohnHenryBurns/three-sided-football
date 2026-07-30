@@ -579,8 +579,15 @@ function think(dt){
         // throwers take their mark BEHIND the chalk; corner and goal-kick takers stand on their spot
         let sx8=R.x, sy8=R.y;
         if(cornerTaker!==p&&p.role!=="K"){
+          // FULLY BEHIND THE CHALK. This was 9, and the ball sits 6 INSIDE the line — so a
+          // thrower with an 11-unit body ended up straddling it, standing half on the pitch to
+          // take a throw-in. 20 puts his whole body outside, which is the rule and is also what
+          // makes the restart read as a restart rather than a pass.
+          //
+          // He steps back over once the ball leaves him, because this only applies while
+          // pendingRestart names him.
           const odx=R.x-CX, ody=R.y-CY, ol=Math.hypot(odx,ody)||1;
-          sx8=R.x+odx/ol*9; sy8=R.y+ody/ol*9;
+          sx8=R.x+odx/ol*20; sy8=R.y+ody/ol*20;
         }
         steer(p,sx8,sy8,2.6);
         if((dist(p,{x:sx8,y:sy8})<10&&performance.now()>(R.readyAt||0))||performance.now()>R.cap){
