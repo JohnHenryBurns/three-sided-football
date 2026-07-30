@@ -41,12 +41,19 @@
   --mono:ui-monospace,"SF Mono",Menlo,monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;overflow:hidden}
+/* CHROME PUTS THE CONTROLS BELOW THE FOLD WITH height:100%. On a phone that percentage resolves
+   against the LARGE viewport — the one you get with the URL bar hidden — so the bottom of the
+   page sits below what you can actually see, and #bar is exactly at the bottom. Firefox resolves
+   it against the visible box, which is why it looked fine there and not here.
+   `dvh` is the dynamic viewport height and means precisely "the part you can see right now". The
+   vh line before it is the fallback for anything too old to know the unit. */
+html{height:100%}
+body{height:100vh;height:100dvh;overflow:hidden}
 body{background:var(--bg);color:var(--ink);font-family:var(--sans);
   display:flex;flex-direction:column}
 
 header{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .75rem;
-  padding:.5rem .9rem;border-bottom:1px solid var(--panel-edge)}
+  padding:.5rem .9rem;border-bottom:1px solid var(--panel-edge);flex:0 0 auto}
 h1{font-size:1.1rem;font-weight:600;letter-spacing:-.01em;color:var(--hot)}
 .sub{font-family:var(--mono);font-size:.72rem;color:var(--ink-dim);letter-spacing:.04em}
 .spacer{flex:1}
@@ -80,8 +87,11 @@ h1{font-size:1.1rem;font-weight:600;letter-spacing:-.01em;color:var(--hot)}
 #feed .big{font-weight:600;font-size:.94rem}
 #feed p .goal{color:#ffd166;font-weight:700}
 
-#bar{display:flex;gap:.4rem;align-items:center;padding:.45rem .9rem;
-  border-top:1px solid var(--panel-edge)}
+/* The bar is now at the true bottom of the visible viewport, so on a phone with a home
+   indicator it would sit under it. env() is zero everywhere that has no such thing. */
+#bar{display:flex;gap:.4rem;align-items:center;
+  padding:.45rem .9rem calc(.45rem + env(safe-area-inset-bottom, 0px));
+  border-top:1px solid var(--panel-edge);flex:0 0 auto}
 button{font-family:inherit;font-size:.82rem;color:var(--ink);background:var(--panel);
   border:1px solid var(--panel-edge);border-radius:7px;padding:.34rem .66rem;cursor:pointer}
 button:hover{border-color:var(--ink)}
@@ -422,7 +432,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=46"></script>
+<script src="engine.js?v=47"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
