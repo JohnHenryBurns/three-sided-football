@@ -42,6 +42,99 @@ const ENGINE_HOOKS = {
 // deciding which is real, is a bug that happens to behave.
 // -----------------------------------------------------------------------------
 
+// ── SHIRT NUMBERS ───────────────────────────────────────────────────────────
+//
+// The first block is READ OFF THE OFFICIAL FIFA SQUAD LIST for the 2026 World Cup, published
+// 19 July 2026, where players appear in shirt-number order 1 to 26. Forty-five of the sixty are
+// from there and are exactly what the player wore.
+//
+// The second block is NOT. It is marked separately because the difference matters and would
+// otherwise be invisible: five of the real players did not make their country's 2026 squad at
+// all — Militão, ter Stegen, De Ligt, Araujo and Mitoma — so there is no 2026 number to give
+// them, and Italy's and the USA's lists were not consulted. Those, and the three invented teams,
+// carry plausible numbers by position rather than recorded ones.
+//
+// Anyone tempted to cite this as a source: use the first block, not the second.
+const SHIRT = {
+  "Unai Simón":          23,
+  "Laporte":             14,
+  "Cucurella":           24,
+  "Rodri":               16,
+  "Lamine Yamal":        19,
+  "Dibu Martínez":       23,
+  "Romero":              13,
+  "Tagliafico":          3,
+  "Enzo Fernández":      24,
+  "Messi":               10,
+  "Pickford":            1,
+  "Stones":              5,
+  "Guéhi":               6,
+  "Bellingham":          10,
+  "Kane":                9,
+  "Maignan":             16,
+  "Saliba":              17,
+  "Koundé":              5,
+  "Tchouaméni":          8,
+  "Mbappé":              10,
+  "Diogo Costa":         1,
+  "Rúben Dias":          3,
+  "Cancelo":             20,
+  "Vitinha":             23,
+  "Ronaldo":             7,
+  "Alisson":             1,
+  "Marquinhos":          4,
+  "Bruno Guimarães":     8,
+  "Vinícius Jr":         7,
+  "Rüdiger":             2,
+  "Tah":                 4,
+  "Musiala":             10,
+  "Havertz":             7,
+  "Verbruggen":          1,
+  "Van Dijk":            4,
+  "Frenkie de Jong":     21,
+  "Gakpo":               11,
+  "Ochoa":               13,
+  "Montes":              3,
+  "Edson Álvarez":       4,
+  "Santiago Giménez":    11,
+  "Zion Suzuki":         1,
+  "Tomiyasu":            22,
+  "Itakura":             4,
+  "Kamada":              15,
+  // ── invented or unverified, per the note above ──
+  "Militão":             3,
+  "ter Stegen":          1,
+  "De Ligt":             4,
+  "Araujo":              2,
+  "Mitoma":              9,
+  "Donnarumma":          1,
+  "Bastoni":             23,
+  "Di Lorenzo":          2,
+  "Barella":             18,
+  "Retegui":             9,
+  "Turner":              1,
+  "Richards":            3,
+  "Robinson":            5,
+  "McKennie":            8,
+  "Pulisic":             10,
+  "Bo Niboaur":          1,
+  "Lincoln Gingrich":    4,
+  "Cole Storm":          7,
+  "Easton George":       8,
+  "Jupiter Burns":       10,
+  "Amos Baldwin":        1,
+  "Smith Ellars":        5,
+  "Ezra Baldwin":        6,
+  "Owen Gingrich":       9,
+  "Maximus Burns":       11,
+  "Margo Tillo":         1,
+  "Marg Niboaur":        3,
+  "Reese Waite":         7,
+  "Sloan Ellars":        10,
+  "Solana Burns":        11,
+};
+const shirtOf = n => SHIRT[n] || 0;
+
 function resetMatch(){
   players=[]; score=[0,0,0]; conceded=[0,0,0]; scored=[0,0,0]; clockSec=0; feed.length=0;
   phase="regulation"; out=[false,false,false]; otGolden=false;
