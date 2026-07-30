@@ -721,7 +721,11 @@ function job(p, what, tier){
   p.job = what;
   // The tier travels with the job so a reader can colour it. A name alone does not say whether
   // he was told, forbidden, coached or deciding — and that is the thing worth seeing at a glance.
-  p.jobTier = tier || TIER.PLAYER;
+  // `tier` may legitimately be 0 — the cascade passes exactly that to mean "no tier at all" —
+  // and `||` treats 0 as absent, so the cascade was being promoted to PLAYER and drawn green.
+  // A cascade branch is not a player decision; it is a decision nobody has named yet, and the
+  // whole point of the grey is to show how much of that is left.
+  p.jobTier = (tier === undefined || tier === null) ? TIER.PLAYER : tier;
 }
 
 /** Called once per player per frame, after think() has settled on something. */
