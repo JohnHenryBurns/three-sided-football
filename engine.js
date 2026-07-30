@@ -691,6 +691,84 @@ function kick(tx,ty,power,isShot){
 // doing something daft becomes visible rather than inferred from where he is standing.
 function job(p, what){ p.job = what; p.jobAt = clockSec; }
 
+// ── THE INSTRUCTION LIST ────────────────────────────────────────────────────
+//
+// An instruction is a THING, not a position in a cascade. It says whether it applies to a
+// player, how much it wants him, and what he does — and because it is a value, two of them can
+// be compared, which is the whole reason for this.
+//
+//   applies(p)  -> false, and it is not considered
+//   score(p)    -> how strongly it wants him. Higher wins.
+//   act(p)      -> what he does. Returns true if he is done for this frame.
+//   explicit    -> he is being TOLD. No commitment bonus can outrank it, because a restart is
+//                  choreography and a player choosing his own part in it is what made throw-ins
+//                  look like somebody dribbling the ball in.
+//
+// COMMITMENT is the point. A cascade re-decides sixty times a second, so a player between two
+// branches oscillates — that is the popping. An instruction he is already on gets a bonus, so a
+// rival has to be BETTER rather than merely equal. Turn it up and a side plays with conviction
+// and gets caught out; turn it down and it is twitchy but quick.
+const COMMIT = 12;                    // the degree factor. Per-side eventually; one number now.
+
+const INSTRUCTIONS = [
+  // ── FETCH THE BALL ────────────────────────────────────────────────────────
+  // EXPLICIT. He has been given a restart and the ball is lying somewhere. Nothing outranks it,
+  // and the base score is the position it held in the cascade so the refactor does not quietly
+  // reshuffle the AI.
+  { name:'fetching the ball', explicit:true, base:900,
+    applies:p => !!(pendingRestart && pendingRestart.p===p && pendingRestart.fetch
+                    && ball.fetch && !pendingRestart.got),
+    score:p => 900,
+    act:p => {
+      if(dist(p,ball)>13){ steer(p, ball.x, ball.y, 2.6); return true; }
+      pendingRestart.got=true;
+      ENGINE_HOOKS.spawnNote(ball.x, ball.y-22, "\u{1F450} fetched", TEAMS[p.team].color);
+      return true;
+    } },
+
+  // ── RETREAT FROM A FREE KICK ──────────────────────────────────────────────
+  // EXPLICIT, and the only rule in football that exists purely to make a restart possible.
+  { name:'retreating from a free kick', explicit:true, base:880,
+    applies:p => !!(freeKick && !freeKick.done && p.team===freeKick.wall
+                    && Math.hypot(p.x-freeKick.x, p.y-freeKick.y)<64),
+    score:p => 880,
+    act:p => {
+      const dx=p.x-freeKick.x, dy=p.y-freeKick.y, dl=Math.hypot(dx,dy)||1;
+      steer(p, freeKick.x+dx/dl*70, freeKick.y+dy/dl*70, 2.4);
+      return true;
+    } },
+
+  // ── OFFERING AFTER A RESTART ──────────────────────────────────────────────
+  // NOT explicit: he has taken it and is choosing to make himself available rather than chase.
+  // Released by POSSESSION — the moment anybody else has the ball he is a player again — with
+  // the clock only as a floor so a throw that runs loose does not strand him.
+  { name:'just restarted \u2014 offering', explicit:false, base:700,
+    applies:p => !!(p.noChase && clockSec<p.noChase && !(ball.owner && ball.owner!==p)),
+    score:p => 700,
+    act:p => {
+      const bx=ball.x-p.x, by=ball.y-p.y, bl=Math.hypot(bx,by)||1;
+      const ix=CX-p.x, iy=CY-p.y, il=Math.hypot(ix,iy)||1;
+      steer(p, p.x+ix/il*40, p.y+iy/il*40, 1.6);
+      p.hx=bx/bl; p.hy=by/bl;
+      return true;
+    } },
+];
+
+/** Score every instruction that applies, favour the one he is on, run the winner. */
+function runInstruction(p){
+  let best=null, bestScore=-1e9;
+  for(const I of INSTRUCTIONS){
+    if(!I.applies(p)) continue;
+    let sc=I.score(p);
+    if(I.explicit) sc+=1000;                     // told beats chosen, always
+    if(p.job===I.name) sc+=COMMIT;               // and he sticks with what he is doing
+    if(sc>bestScore){ bestScore=sc; best=I; }
+  }
+  if(!best) return false;
+  job(p, best.name);
+  return best.act(p)!==false;
+}
+
 function think(dt){
   players.forEach(pb=>{
     if(pb.out) return;
@@ -994,6 +1072,12 @@ function think(dt){
       //
       // The 0.55 is how eager he is. Lower reads as chaotic, higher as psychic; this is the dial
       // between the two and wants watching rather than solving.
+      // ── THE INSTRUCTION LIST GETS FIRST REFUSAL ───────────────────────────
+      // Three of fifty-three so far. If any applies to him it decides; if none does he falls
+      // through to the cascade below, unchanged. Both systems run side by side until the list is
+      // long enough to delete the fallback, and ?jobs shows which one is driving each player.
+      if(runInstruction(p)) return;
+
       // ── A FREE KICK IS BEING SET UP ───────────────────────────────────────
       // The taker walks to the ball. His side offers itself. THE OFFENDING SIDE RETREATS — ten
       // yards, which is the only rule in football that exists purely to make a restart possible.
