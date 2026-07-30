@@ -256,8 +256,13 @@
    labels, pings, the scorch layer — and its player and ball elements are hidden instead of
    removed, so nothing that references them has to change. */
 #glpitch{position:absolute;inset:0;width:100%;height:100%;display:block}
-#pitch{position:relative;z-index:2}
+/* The SVG is absolutely positioned by the rule above; only its stacking changes here. Setting
+   position:relative broke that layout, which is the sort of thing a z-index fix does when it
+   brings a position along for the ride. */
+#pitch{z-index:2}
+#glpitch{z-index:1}
 body.gl #pitch .hide3d{display:none}
+
 </style>
 </head>
 <body>
@@ -282,7 +287,7 @@ body.gl #pitch .hide3d{display:none}
       <div class="hudclock" id="clock">00:00</div>
     </div>
     <canvas id="glpitch"></canvas>
-    <svg id="pitch" viewBox="-110 -110 1120 1030" role="img" aria-label="Hexagonal pitch, three teams"></svg>
+        <svg id="pitch" viewBox="-110 -110 1120 1030" role="img" aria-label="Hexagonal pitch, three teams"></svg>
   </div>
   <aside class="comm" aria-label="Commentary">
     <div class="feedTitle">Play-by-play</div>
@@ -309,15 +314,6 @@ body.gl #pitch .hide3d{display:none}
   <div class="formrow chk"><label for="setZone" title="Attackers can't enter the penalty area before the ball">Enforce offsides</label><input id="setZone" type="checkbox" checked></div>
   <div class="formrow chk"><label for="setOob" title="Touchlines in play: throw-ins, goal kicks, corners, keeper parries">Out of bounds</label><input id="setOob" type="checkbox" checked></div>
   <div class="formrow chk"><label for="setVoice" title="Spoken play-by-play (uses your phone's voice)">🎙️ Announcer</label><input id="setVoice" type="checkbox" checked></div>
-  <div class="formrow"><label for="setEngine" title="Whose throat says it">🗣️ Voice</label>
-    <select id="setEngine">
-      <option value="browser" selected>Browser voice</option>
-      <option value="hollerbox">Hollerbox — a modelled vocal tract</option>
-    </select></div>
-  <!-- A seed is a whole voice: tract length, pitch, timing, the lot. Made in the Hollerbox
-       wizard and pasted here, so the commentator can be anybody. Blank means the announcer. -->
-  <div class="formrow" id="seedRow" style="display:none"><label for="setSeed" title="Paste a voice seed from hollerbox — blank for the announcer">🎛️ Seed</label>
-    <input id="setSeed" type="text" placeholder="optional — blank is a man's voice" spellcheck="false"></div>
   <div class="formrow chk"><label for="setCaps" title="Show the announcer's words as TV-style captions over the pitch">💬 Captions</label><input id="setCaps" type="checkbox"></div>
   <div class="formrow"><label>Teams</label><div id="teamSlots" class="slotRow"></div></div>
   <div class="formrow"><label for="setRef">Referee</label><select id="setRef">
@@ -1984,7 +1980,7 @@ function styleLines(){
 let recentChatter=[];
 function ambientChatter(){
   if(!matchLive||!voiceOn||!speechOK) return;
-  if(queuedUtter>0||(!usingHollerbox()&&speechSynthesis.speaking)) return;
+  if(queuedUtter>0||speechSynthesis.speaking) return;
   const rt=performance.now()/1000;
   if(rt-lastChatterAt<6) return;   // REAL seconds: slow-speed viewing gets a full broadcast
   const cand=[];
@@ -2402,92 +2398,6 @@ let voiceOn=true, narrator=null, queuedUtter=0, welcomed=false;
 // time to get right and none of its problems are about which engine is speaking.
 const speechOK=("speechSynthesis" in window);
 
-const HOLLERBOX_SRC = 'https://johnhenryburns.github.io/hollerbox/engine/';
-let voiceEngineName = 'browser';      // 'browser' | 'hollerbox'
-let holler = null;                    // the loaded engine, or null until it is
-
-/** Load Hollerbox and start its audio. Called at match start, NOT at the first goal: an
- *  AudioWorklet is interpreted before it is compiled and is about twice as slow as real time
- *  cold, so the first word out of it drops samples — which sounds exactly like a click. Three
- *  hundred milliseconds of silence at kick-off buys a clean first shout. */
-async function hollerboxUp(seed){
-  if(holler) return holler;
-  // Loaded exactly the way hollerbox's own page does it: fetch session.js, then let IT fetch the
-  // rest. The first version fetched all three by hand and then called loadEngine, which fetched
-  // two of them again — harmless in itself, but it meant three separate places could fail and
-  // only one error made it out.
-  //
-  // `src` is passed because there is no document.currentScript when a script is eval'd rather
-  // than linked, so session.js cannot work out where it came from and would look for its
-  // siblings beside THIS page instead of beside itself.
-  const r = await fetch(HOLLERBOX_SRC + 'session.js', { cache:'no-store' });
-  if(!r.ok) throw new Error('session.js ' + r.status);
-  new Function(await r.text())();
-  const S = window.HOLLER_SESSION;
-  if(!S) throw new Error('session.js loaded but defined nothing');
-  await S.loadEngine({ src: HOLLERBOX_SRC + 'phonemes.js' });
-  const P = window.HOLLER;
-  if(!P) throw new Error('the engine did not load from ' + HOLLERBOX_SRC);
-  // `man`, not `announcer`. The announcer is a goal cry — drawn out, pitch falling the whole way
-  // — and it takes TWENTY-SEVEN SECONDS to read a line of commentary. Commentary has to move.
-  //
-  // And at the calibrated rate. `man`'s own per of 0.1241 is a translation of a tuning made by
-  // ear under an older duration law, not a measurement; the only rate ever fitted against a
-  // person reading aloud is 0.0496, and at that rate this voice does a line in 3.4 s against
-  // 7.9. A man's voice at a human tempo, which is what a commentator is.
-  let voice = { ...P.defaultVoice(), ...(P.VOICES.man.v||{}), per: 0.0496 };
-  if(seed){ try { voice = P.decodeVoice(String(seed).trim()); } catch(e){} }
-  const a = await S.startAudio();
-  holler = { S, P, ctx:a.ctx, node:a.node, n:a.n, voice, wake:a.wake, done:null };
-  // The worklet reports whether it is still speaking, on change. That message is this engine's
-  // `onend` — without it the queue below never drains and the commentary stops after one line.
-  a.node.port.onmessage = e => {
-    if(e.data && e.data.state && !e.data.seq && holler && holler.done){
-      const f = holler.done; holler.done = null; f();
-    }
-  };
-  return holler;
-}
-
-/** Say something, and call back when it is finished. The same shape as an utterance's onend, so
- *  the queue does not need to know which engine it is talking to. */
-function hollerSay(text, isGoalCall, onEnd, original){
-  if(holler) holler.stretch = original || text;
-  if(!holler){ onEnd&&onEnd(); return; }
-  const { S, P } = holler;
-  try{
-    if(holler.wake) holler.wake();
-    const v = { ...holler.voice };
-    // A GOAL CALL HOLDS THE VOWEL, and this is the whole reason to be here. The text handed in
-    // has already had "GOOOOAAALLL" flattened to "goal", because every engine reads the stretched
-    // spelling as something else — the phone says "gull" and this one says "goo-oh-l". But the
-    // stretch was never in the letters; it is in the DELIVERY, and a physical tract can hold a
-    // vowel for as long as there is air. `drawl` is that, and how far it goes is read back off
-    // the original spelling: more o's, longer shout.
-    if(isGoalCall){
-      v.per = (v.per||0.05)*1.35;
-      v.acc = Math.min(14,(v.acc||7)+3);
-      const os = (String(holler.stretch||'').match(/[OA]/gi)||[]).length;
-      v.drawl = Math.max(v.drawl||0, Math.min(1, 0.45 + 0.06*Math.max(0, os-2)));
-    }
-    const { ph, stress } = S.chainFor(text);
-    if(!ph.length){ onEnd&&onEnd(); return; }
-    const n = S.tractFor(holler.node, v, holler.n);
-    holler.node.port.postMessage({ type:'voice', v });
-    const seq = S.planSpeech(ph, v, { n, stress });
-    holler.done = onEnd || null;
-    holler.node.port.postMessage({ type:'goal', seq });
-    // a floor under the callback, so a lost message cannot wedge the queue for the whole match
-    const mine = holler.done;
-    setTimeout(()=>{ if(holler && holler.done===mine && mine){ holler.done=null; mine(); } },
-               (seq.end+1.2)*1000);
-  }catch(e){ onEnd&&onEnd(); }
-}
-
-function hollerStop(){
-  if(holler){ try{ holler.node.port.postMessage({type:'stopSeq'}); }catch(e){} holler.done=null; }
-}
-const usingHollerbox = () => voiceEngineName==='hollerbox' && !!holler;
 function pickVoice(){
   const vs=speechSynthesis.getVoices();
   narrator=vs.find(v=>v.lang==="en-GB")||vs.find(v=>v.lang&&v.lang.startsWith("en"))||vs[0]||null;
@@ -2529,9 +2439,7 @@ function speak(html,prio){
           highLockUntil=performance.now()+2000;
           setTimeout(()=>{ try{
             queuedUtter++; speakStartedAt=performance.now(); speakingPrio="high";
-            if(usingHollerbox()){ showCaption(nxt[1]!==undefined?nxt[1]:nxt[0]);
-              hollerSay(nxt[0], true, ()=>{ mk(nxt[0],nxt[1]).onend(); }); }
-            else speechSynthesis.speak(mk(nxt[0],nxt[1]));
+            speechSynthesis.speak(mk(nxt[0],nxt[1]));
           }catch(e6){ queuedUtter=0; speakingPrio=null; } },40);
         }
       };
@@ -2540,13 +2448,7 @@ function speak(html,prio){
     const fire=()=>{
       try{
         queuedUtter++; speakStartedAt=performance.now(); speakingPrio=prio;
-        if(usingHollerbox()){
-          // mk() builds the utterance for its side effects — the caption and the onend that
-          // drains the queue — and Hollerbox borrows both rather than reimplementing them.
-          const u = mk(text,disp);
-          hollerSay(text, isGoalCall, ()=>u.onend(), html);
-        }
-        else speechSynthesis.speak(mk(text,disp));
+        speechSynthesis.speak(mk(text,disp));
       }catch(e2){ queuedUtter=0; speakingPrio=null; }
     };
     if(prio==="high"){
@@ -2558,16 +2460,16 @@ function speak(html,prio){
         if(highQ.length<4) highQ.push([text,disp]);
         return;
       }
-      if(!usingHollerbox()&&(speechSynthesis.speaking||speechSynthesis.pending)){
+      if(speechSynthesis.speaking||speechSynthesis.pending){
         // interrupting LOW speech: rate-limited cancel, then the Android defer
-        if(now2-lastCancelAt>150){ if(usingHollerbox()) hollerStop(); else speechSynthesis.cancel(); lastCancelAt=now2; }
+        if(now2-lastCancelAt>150){ speechSynthesis.cancel(); lastCancelAt=now2; }
         queuedUtter=0;
         pendingHighFire=setTimeout(()=>{ pendingHighFire=null; fire(); },90);
       } else { fire(); }
     } else {
       // low speech never speaks in the shadow of big calls
       if(performance.now()<highLockUntil||highQ.length)return;
-      if(queuedUtter>0||(!usingHollerbox()&&speechSynthesis.speaking))return;
+      if(queuedUtter>0||speechSynthesis.speaking)return;
       fire();
     }
   }catch(e3){ queuedUtter=0; }
@@ -2575,12 +2477,12 @@ function speak(html,prio){
 let lastCancelAt=0, pendingHighFire=null, speakStartedAt=0, highLockUntil=0, speakingPrio=null, highQ=[];
 if(speechOK){
   // heartbeat: Chrome's engine self-pauses on long gaps — nudge it awake
-  setInterval(()=>{ try{ if(voiceOn&&!usingHollerbox()) speechSynthesis.resume(); }catch(e7){} },4000);
+  setInterval(()=>{ try{ if(voiceOn) speechSynthesis.resume(); }catch(e7){} },4000);
   // watchdog: engine claims busy but nothing is landing — reset it
   setInterval(()=>{
     try{
       if(queuedUtter>0&&performance.now()-speakStartedAt>6000){
-        if(usingHollerbox()) hollerStop(); else speechSynthesis.cancel(); queuedUtter=0;
+        speechSynthesis.cancel(); queuedUtter=0;
       }
     }catch(e7){ queuedUtter=0; }
   },3000);
@@ -2589,7 +2491,7 @@ if(speechOK){
 if(speechOK) setInterval(()=>{
   try{
     // Chrome pause bug: a periodic resume keeps long sessions alive
-    if(!usingHollerbox()&&speechSynthesis.speaking) speechSynthesis.resume();
+    if(speechSynthesis.speaking) speechSynthesis.resume();
     // desync: counter says busy but the engine is idle — resync
     if(queuedUtter>0&&!speechSynthesis.speaking&&!speechSynthesis.pending) queuedUtter=0;
     // hard wedge: one utterance "speaking" for 15+ real seconds — reset the engine
@@ -2660,8 +2562,16 @@ window.onerror=function(msg,src,line,col){
 };
 const svg=document.getElementById("pitch");
 const NS="http://www.w3.org/2000/svg";
+let SCENERY=false;      // true while buildPitch runs: everything it makes is scenery
 function el(tag,attrs,parent){const n=document.createElementNS(NS,tag);
-  for(const k in attrs)n.setAttribute(k,attrs[k]); (parent||svg).appendChild(n); return n;}
+  for(const k in attrs)n.setAttribute(k,attrs[k]);
+  // THE SVG WAS OPAQUE AND ON TOP, so the 3D canvas behind it was invisible and the page looked
+  // like the 2D one with its players missing. Everything buildPitch draws — the turf, the mowing
+  // bands, the boards, the goal frames — is scenery, and scenery is what the 3D scene is FOR.
+  // Tagging it here rather than at each call site because there are dozens and missing one
+  // leaves an opaque shape over the pitch with nothing to say which.
+  if(SCENERY) n.setAttribute('class', ((attrs&&attrs.class)?attrs.class+' ':'')+'hide3d');
+  (parent||svg).appendChild(n); return n;}
 
 const SPONSOR_LORE=[
   "CANBY HAZELNUTS","MAX FC","ATLAS K9 SECURITY","JORN & SONS","HEX•COLA","THE THIRD SIDE",
@@ -2697,6 +2607,7 @@ function drawBoards(){
   });
 }
 function buildPitch(){
+  SCENERY=true;   // see el(): everything below is scenery, hidden on the 3D page
   const defs=el("defs",{});
   const grad=el("radialGradient",{id:"turf",cx:"50%",cy:"46%",r:"75%"},defs);
   el("stop",{offset:"0%","stop-color":"#236b41"},grad);
@@ -2820,6 +2731,7 @@ function buildPitch(){
       "font-size":"30","text-anchor":"middle","letter-spacing":"3",
       "font-family":"inherit"},gg).textContent=TEAMS[t].short;
   }
+  SCENERY=false;
 }
 
 let actorEls=[], ballEl, ballHalo, ballShadow, ownerLabel, walkLabel, trailEls=[], trailPts=[], pings=[], goalEls=[], benchPos=[], boardsG=null;
@@ -3401,23 +3313,8 @@ document.getElementById("btnStart").onclick=()=>{
   momentumOn=document.getElementById("setMom").checked;
   zoneRule=document.getElementById("setZone").checked;
   oobRule=document.getElementById("setOob").checked;
-  voiceEngineName=document.getElementById("setEngine").value;
-  // Hollerbox does not need speechSynthesis to exist, which is the point on a device whose own
-  // voice is missing or bad — so `voiceOn` no longer depends on the browser having one.
-  voiceOn=document.getElementById("setVoice").checked && (voiceEngineName==='hollerbox'||speechOK);
-  if(voiceOn&&voiceEngineName==='hollerbox'){
-    // started here rather than at the first goal: cold, the worklet is about twice as slow as
-    // real time and the first word drops samples, which sounds exactly like a click
-    hollerboxUp(document.getElementById("setSeed").value).catch(e=>{
-      // SAID OUT LOUD, not logged. A silent fallback to the browser voice is indistinguishable
-      // from the feature not being wired up at all, which is exactly how this looked the first
-      // time it failed — and a phone has no console to check.
-      console.warn('hollerbox unavailable', e);
-      showCaption('Hollerbox did not load — ' + (e && e.message ? e.message : 'unknown') +
-                  ' — using the browser voice');
-      voiceEngineName='browser'; voiceOn=speechOK;
-    });
-  }
+  voiceOn=speechOK&&document.getElementById("setVoice").checked;
+
   captionsOn=document.getElementById("setCaps").checked;
   matchLive=true;
   keepAwake();
@@ -3589,13 +3486,6 @@ draw();
 showSetup();
 requestAnimationFrame(loop);
 
-// the seed only means anything to Hollerbox
-(function(){
-  const sel=document.getElementById("setEngine"), row=document.getElementById("seedRow");
-  if(!sel||!row) return;
-  const sync=()=>{ row.style.display = sel.value==='hollerbox' ? '' : 'none'; };
-  sel.addEventListener('change', sync); sync();
-})();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // THE PITCH IN THREE DIMENSIONS.
@@ -3625,7 +3515,11 @@ requestAnimationFrame(loop);
   // three goals alike, which a touchline camera cannot.
   const cam = new THREE.PerspectiveCamera(38, 1, 1, 4000);
   const LOOK = new THREE.Vector3(450, 0, 405);
-  let camAz = -Math.PI/2, camEl = 0.86, camR = 1180;
+  // 0.86 radians is 49 degrees, which is nearly plan view — from there a cylinder is a circle
+  // and the whole thing reads as the 2D page with worse contrast. 0.52 is 30 degrees: low enough
+  // that players have height and the ball's arc is visible against the grass rather than
+  // measured by its shadow alone.
+  let camAz = -Math.PI/2, camEl = 0.52, camR = 1320;
   function placeCam(){
     cam.position.set(
       LOOK.x + camR * Math.cos(camEl) * Math.cos(camAz),
@@ -3690,6 +3584,14 @@ requestAnimationFrame(loop);
     bar.rotation.z = Math.PI/2;
     bar.rotation.y = -Math.atan2(e.uy, e.ux);
     scene.add(bar);
+    // a suggestion of net, which is what tells you a goal is a goal from a low camera
+    const net = new THREE.Mesh(
+      new THREE.PlaneGeometry(half*2, HGT),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.10,
+                                    side: THREE.DoubleSide }));
+    net.position.set(e.mx - e.nx*9, HGT/2, e.my - e.ny*9);
+    net.rotation.y = -Math.atan2(e.uy, e.ux);
+    scene.add(net);
   });
 
   // ── THE ACTORS ─────────────────────────────────────────────────────────
