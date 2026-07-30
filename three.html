@@ -462,7 +462,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=101"></script>
+<script src="engine.js?v=102"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2095,7 +2095,11 @@ let drawGL = function drawGL(){
       b.jobLabel.visible = showJobs;
       if (showJobs && (p.job || '') !== b.jobText) {
         b.jobText = p.job || '';
-        g.remove(b.jobLabel);
+        // b.g, not g. `g` is the group local to buildBodies() where the body was assembled;
+        // in drawGL the only handle on it is b.g. It parsed because `g` is a legal identifier
+        // and there is no `g` in scope here — which a linter would have said and a parse check
+        // cannot, since the file is syntactically perfect and semantically wrong.
+        b.g.remove(b.jobLabel);
         const nl = nameSprite(b.jobText || '\u2014', '#7ee787', 22, 'rgba(6,10,8,.92)');
         nl.position.set(0, H_P + 40, 0);
         b.g.add(nl);
