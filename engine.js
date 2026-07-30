@@ -884,8 +884,11 @@ const INSTRUCTIONS = [
   // changes WHICH INSTRUCTION APPLIES rather than tweaking a number — which is what a tactic is,
   // and it was already true before this list existed. The list just makes it legible.
   { name:'the bus \u2014 dropping in', tier:TIER.COACH, base:520,
-    applies:p => p.role==='M' && !p.out && !p.sentOff && ball.owner
-              && TACTICS(p.team).bunker>0.5 && ball.owner.team!==p.team,
+    // WIDENED to match what the cascade actually did: bunker alone, not bunker-plus-an-opposing-
+    // owner. I had added a condition the original never had, so whenever the ball was loose or
+    // his own side's the cascade kept him — which is most of the 6% that was left.
+    applies:p => p.role==='M' && !p.out && !p.sentOff && targets[p.team]!==null
+              && p!==chaser[p.team] && TACTICS(p.team).bunker>0.5,
     score:p => 520,
     act:p => {
       const own=goalCenter(p.team);
@@ -897,12 +900,15 @@ const INSTRUCTIONS = [
   // The other half of the bus: while everyone else drops, one forward holds a position between
   // his own goal and the ball, so there is somebody to counter through.
   { name:'holding the counter', tier:TIER.COACH, base:510,
-    applies:p => p.role==='F' && !p.out && !p.sentOff && ball.owner
-              && TACTICS(p.team).bunker>0.5 && ball.owner.team!==p.team,
+    applies:p => p.role==='F' && !p.out && !p.sentOff && targets[p.team]!==null
+              && p!==chaser[p.team] && TACTICS(p.team).bunker>0.5,
     score:p => 510,
     act:p => {
-      const own=goalCenter(p.team);
-      steer(p, (own.x+ball.x)/2, (own.y+ball.y)/2, 2.0);
+      // the midpoint between his own goal and the one he attacks — a counter station, not a
+      // point relative to the ball. The instruction had this as (own+ball)/2, which is a
+      // different place entirely and drifts with play instead of holding a post.
+      const own=goalCenter(p.team), tgt=goalCenter(targets[p.team]);
+      steer(p, (own.x+tgt.x)/2, (own.y+tgt.y)/2, 2.0);
       return true;
     } },
 
@@ -1187,6 +1193,38 @@ const INSTRUCTIONS = [
       const ang=Math.atan2(tgt.y-ball.y,tgt.x-ball.x)+Math.PI/2;
       sx+=Math.cos(ang)*spread*side; sy+=Math.sin(ang)*spread*side;
       steer(p,sx,sy,2.0);
+      return true;
+    } },
+
+  // ── CARRYING IT ───────────────────────────────────────────────────────────
+  // The man on the ball, and the last big thing in the cascade. Three forces added together
+  // rather than three branches choosing between them, which is why it never looked like a
+  // decision:
+  //
+  //   toward the goal he is attacking      the direction he wants to go
+  //   away from his nearest opponent       only inside 60, weighted 0.9 — a shoulder-drop
+  //   away from the nearest wall           inside 95, weighted 1.6, UNLESS that wall is the
+  //                                        mouth he is shooting at
+  //
+  // THE MOUTH EXCEPTION IS THE GOOD PART. Every other boundary pushes him infield; the one he
+  // is attacking does not, or he would swerve away from goal at the moment of shooting. That is
+  // one condition doing the work of an entire "should I shoot" branch.
+  { name:'carrying it', tier:TIER.PLAYER, base:420,
+    applies:p => ball.owner===p && !p.out && !p.sentOff && targets[p.team]!==null,
+    score:p => 420,
+    act:p => {
+      const tgt=goalCenter(targets[p.team]);
+      let near=null,nd=1e9;
+      players.forEach(o=>{ if(o.team!==p.team&&!o.out&&!o.sentOff){ const d=dist(o,p); if(d<nd){nd=d;near=o;} } });
+      let dx=tgt.x-p.x, dy=tgt.y-p.y; const dl=Math.hypot(dx,dy)||1; dx/=dl; dy/=dl;
+      if(near&&nd<60){ dx+=(p.x-near.x)/nd*0.9; dy+=(p.y-near.y)/nd*0.9; }
+      let wd=1e9,we=null;
+      for(const e2 of EDGES){ const d2=(p.x-e2.p1.x)*e2.nx+(p.y-e2.p1.y)*e2.ny; if(d2<wd){wd=d2;we=e2;} }
+      const inMouth=we&&we.goal&&we===EDGES[GOAL_EDGE[targets[p.team]]]&&
+        Math.abs((p.x-we.mx)*we.ux+(p.y-we.my)*we.uy)<we.len*GOAL_HALF*1.3;
+      const wallR=oobRule?95:70, wallW=oobRule?1.6:1.1;
+      if(wd<wallR&&!inMouth){ const w=(wallR-wd)/wallR*wallW; dx+=we.nx*w; dy+=we.ny*w; }
+      steer(p,p.x+dx*80,p.y+dy*80,2.05);
       return true;
     } },
 
@@ -1557,18 +1595,9 @@ function think(dt){
     }
     const own=goalCenter(p.team), tgt=goalCenter(targets[p.team]);
     if(p===owner){
-      let near=null,nd=1e9;
-      oppOf(p.team).forEach(o=>{const d=dist(o,p); if(d<nd){nd=d;near=o;}});
-      let dx=tgt.x-p.x, dy=tgt.y-p.y; let dl=Math.hypot(dx,dy)||1; dx/=dl;dy/=dl;
-      if(near&&nd<60){ dx+=(p.x-near.x)/nd*0.9; dy+=(p.y-near.y)/nd*0.9; }
-      // wall awareness: cut infield instead of grinding the touchline
-      let wd=1e9,we=null;
-      for(const e2 of EDGES){const d2=(p.x-e2.p1.x)*e2.nx+(p.y-e2.p1.y)*e2.ny; if(d2<wd){wd=d2;we=e2;}}
-      const inMouth=we&&we.goal&&we===EDGES[GOAL_EDGE[targets[p.team]]]&&
-        Math.abs((p.x-we.mx)*we.ux+(p.y-we.my)*we.uy)<we.len*GOAL_HALF*1.3;
-      const wallR=oobRule?95:70, wallW=oobRule?1.6:1.1;
-      if(wd<wallR&&!inMouth){ const w=(wallR-wd)/wallR*wallW; dx+=we.nx*w; dy+=we.ny*w; }
-      steer(p,p.x+dx*80,p.y+dy*80,2.05);
+      // Moved to the instruction list as "carrying it". Left as an empty branch rather than
+      // restructured: the else-if chain below depends on this position, and rewiring a chain is
+      // a different change from extracting a decision.
     } else if(p.role==="K"&&(FL[p.team]>0||dist(ball,goalCenter(p.team))<210)){
       if(!ball.owner&&!holdActive){
         const og2=goalCenter(p.team), bd2=dist(ball,og2);
@@ -1603,14 +1632,9 @@ function think(dt){
       steer(p, bx+e.ux*(idx===0?34:-34), by+e.uy*(idx===0?34:-34), 2.0);
     } else {
       const TT=T(p.team);
-      if(TT.bunker>0.5&&p.role==="M"){    // bus: the mid drops in (partial — the refund)
-        steer(p, own.x+(ball.x-own.x)*0.62, own.y+(ball.y-own.y)*0.62, 2.0);
-        return;
-      }
-      if(TT.bunker>0.5&&p.role==="F"){    // lone outlet holds the counter station
-        steer(p,(own.x+tgt.x)/2,(own.y+tgt.y)/2,2.0);
-        return;
-      }
+      // The two bunker branches moved to the instruction list — the bus and the counter station.
+      // Brace-balanced deletion this time: I cut this block twice before by eye and broke the
+      // file both times, so it is counted rather than judged.
       const f=p.role==="M"?0.45:(0.72+(TT.direct-0.5)*0.26);
       let sx=ball.x+(tgt.x-ball.x)*f, sy=ball.y+(tgt.y-ball.y)*f;
       const side=(p.role==="M"?1:-1);
