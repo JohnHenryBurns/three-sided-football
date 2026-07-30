@@ -317,7 +317,19 @@ for(let k=0;k<6;k++){
   let nx=CX-mx, ny=CY-my; const nl=Math.hypot(nx,ny); nx/=nl; ny/=nl;
   EDGES.push({p1,p2,mx,my,len,ux,uy,nx,ny,goal:(k%2===0)});
 }
-const GOAL_EDGE=[0,2,4], GOAL_HALF=0.21;
+// ── THE GOAL IS A SHAPE, NOT A RULE ─────────────────────────────────────────
+// The WIDTH has always been geometric: `|along| < e.len*GOAL_HALF` is literally "between the
+// posts". The HEIGHT was `ball.z < 28`, a bare number chosen from nothing — because there was
+// nothing to choose it from. The crossbar height lived only in three.html as HGT = 54, so the
+// engine did not know how tall its own goals were.
+//
+// That is the whole bug. A goal should be the ball passing the plane, and it could not be, because
+// half the plane was in a file the rules cannot see.
+//
+// GOAL_H is here now, next to the width, and both renderers read it. The goal test becomes
+// exactly "past the line, between the posts, under the bar" — three geometric facts and no
+// magic number. Change the bar and the rule follows, which is the property that was missing.
+const GOAL_EDGE=[0,2,4], GOAL_HALF=0.21, GOAL_H=54;
 const goalCenter=t=>{const e=EDGES[GOAL_EDGE[t]];return {x:e.mx,y:e.my};};
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
@@ -1571,7 +1583,7 @@ function physics(dt){
       const inMouth=e.goal && !out[gTeam] && Math.abs(along)<e.len*GOAL_HALF;
       if(inMouth){
         if(d<-6){
-          if(ball.z<28){ goalScored(GOAL_EDGE.indexOf(k)); return; }
+          if(ball.z<GOAL_H){ goalScored(GOAL_EDGE.indexOf(k)); return; }
           else if(ball.isShot){ ENGINE_HOOKS.spawnNote(ball.x,ball.y-20,"over the bar!","#ffd166"); ball.isShot=false; }
           if(oobRule){ outOfBounds(k,e); return; }
         }
