@@ -259,3 +259,66 @@ problem, and the metric that made it look like one was mislabelled (PR #92).
 - If the engine resets it and the engine prints it, the engine writes it.
 - A hook is for drawing. If the rules depend on it, it isn't a hook.
 - Verify an edit landed by reading the file back, not by trusting the replace.
+
+---
+
+# The instruction system
+
+**John's design.** Players should sometimes decide for themselves and sometimes be told,
+and they should not flicker between the two.
+
+## Two kinds of instruction
+
+**Autonomous** — he reads his position and the state of play and picks. Chasing,
+supporting, dropping, pressing, holding the middle. This is most of a match and it is
+what the cascade already does.
+
+**Explicit** — during a transition he is *told*. Fetch that ball. Get in the box. Retreat
+ten yards. Stand over it. He does not get a vote, because a restart is choreography and
+a player choosing his own part in it is the thing that made throw-ins look wrong.
+
+The engine already has both; it just has no word for either, and no line between them.
+
+## Commitment, and the degree factor
+
+**The fault to avoid is popping.** A cascade re-decides from scratch sixty times a second,
+so a player half-way between two branches oscillates — and that is why some of them look
+indecisive rather than nimble.
+
+**The fix is a cost to switching, not a lock.** An instruction taken should carry a small
+commitment: a fraction of a second where a competing branch has to be *better*, not merely
+equal, to take over. That is the degree factor John describes — turn it up and the side
+plays with conviction and gets caught out; turn it down and they are twitchy but quick.
+
+**It belongs in the tactics.** ATK/DEF/AGG already change how a side plays; *how decisively*
+it plays is the axis that is missing, and it is a real one — a pressing side and a patient
+side differ in commitment as much as in shape.
+
+## What it needs first: names
+
+`job()` tags nine branches of fifty-three (PR #127). The rest have to be named before
+any of this can be built, because you cannot put a cost on switching between things you
+cannot tell apart.
+
+**Three sources, in order of reliability:**
+
+- **steer targets** — the best evidence, and readable. `steer(p, ball.x, ball.y, 2.6)` is
+  chasing; `steer(p, CX, CY, 0.9)` is holding the middle; `steer(p, og5.x+ax5*0.55, ...)`
+  is dropping toward his own goal. **34 steer calls, and what a branch DOES is what it is.**
+- **comments** — only 7 of 53 returns carry one that names the branch, and most of those
+  were written this week.
+- **git history** — one commit message in the last thirty names a behaviour. Not a source.
+
+So: name from the targets, and where a target is ambiguous leave it blank rather than
+guess. A confidently wrong label is worse than a missing one, especially in a system whose
+whole purpose is to tell instructions apart.
+
+## The order
+
+1. name the branches from their steer targets
+2. mark each one autonomous or explicit
+3. add the switching cost, with a per-side degree
+4. expose the degree in the coach menu next to ATK/DEF/AGG
+5. watch it with `?jobs` and adjust
+
+Nothing here needs new physics. It is the same cascade, named, with a memory.
