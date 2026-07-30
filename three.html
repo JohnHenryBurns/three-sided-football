@@ -410,7 +410,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=39"></script>
+<script src="engine.js?v=40"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -780,7 +780,8 @@ for (let i = 0; i < TRAIL_N; i++) {
   trail.push(m);
 }
 const trailPts = [];
-let headPop = 0;      // the decaying lift off a header, see drawGL
+let headPop = 0;
+let wasBurning = false;   // so the ball can leave one last mark when it is put out      // the decaying lift off a header, see drawGL
 
 // ── WHO EACH ONE IS ─────────────────────────────────────────────────────────
 // Names as sprites, which always face the camera. A mesh label would need turning every frame
@@ -857,17 +858,56 @@ ENGINE_HOOKS.spawnPing = (x, y, colour) => {
 // ── SCORCH ──────────────────────────────────────────────────────────────────
 // Where somebody erupted. The flat page burns a mark into the turf and leaves it for the rest of
 // the match, which is the joke: the pitch remembers.
+// ── SCORCH ──────────────────────────────────────────────────────────────────
+// Burned into the turf where something hot happened, and fading over a minute. Permanent marks
+// were fine while only a keeper's dive made them; a burning shot leaves one every time it lands,
+// and forty of those never fading turns a pitch into a hearth.
 const scorch = [];
-ENGINE_HOOKS.flamePop = q => {
-  if (!q || scorch.length > 40) return;
+function burnMark(x, y, r, life){
+  if (scorch.length > 60) { const old = scorch.shift(); scene.remove(old.m); }
   const m = new THREE.Mesh(
-    new THREE.CircleGeometry(15 + Math.random()*7, 12),
-    new THREE.MeshBasicMaterial({ color: 0x1a0f06, transparent: true, opacity: 0.55 }));
+    new THREE.CircleGeometry(r, 12),
+    new THREE.MeshBasicMaterial({ color: 0x120a04, transparent: true, opacity: 0.62,
+                                  depthWrite: false }));
   m.rotation.x = Math.PI/2;
-  m.position.set(q.x, 0.7, q.y);
   m.rotation.z = Math.random() * Math.PI;
+  m.position.set(x, 0.9, y);
   scene.add(m);
-  scorch.push(m);
+  scorch.push({ m, t: 0, life: life || 55, o0: 0.62 });
+}
+function stepScorch(dt){
+  for (let i = scorch.length - 1; i >= 0; i--) {
+    const s2 = scorch[i];
+    s2.t += dt;
+    if (s2.t >= s2.life) { scene.remove(s2.m); scorch.splice(i, 1); continue; }
+    // Holds for the first half, then fades — grass does not start recovering the instant it burns.
+    const k = s2.t / s2.life;
+    s2.m.material.opacity = s2.o0 * (k < 0.5 ? 1 : 1 - (k - 0.5) / 0.5);
+  }
+}
+
+// ── THE BURNING DIVE ────────────────────────────────────────────────────────
+// A keeper spends 0.6 of his burst to reach 23 instead of 17 for a second and a bit. The flat
+// page throws seven embers in a ring around him; this page drew only the scorch mark, which is
+// the thing that REMAINS rather than the thing that HAPPENS.
+ENGINE_HOOKS.flamePop = q => {
+  if (!q) return;
+  const pal = (typeof firePal === 'function') ? firePal(q.team) : ['#ff3d00'];
+  for (let i = 0; i < 26; i++) {
+    const e = embers[emberNext = (emberNext + 1) % EMBERS];
+    const a = (i / 26) * Math.PI * 2 + Math.random() * 0.2;
+    e.sp.position.set(q.x + Math.cos(a) * 9, H_P * (0.2 + Math.random() * 0.6),
+                      q.y + Math.sin(a) * 9);
+    // Outward and up, hard: a dive is an explosion of effort, not a plume.
+    e.vx = Math.cos(a) * (1.8 + Math.random() * 2.2);
+    e.vz = Math.sin(a) * (1.8 + Math.random() * 2.2);
+    e.vy = 1.1 + Math.random() * 1.6;
+    e.life = 0; e.max = 0.4 + Math.random() * 0.35;
+    e.size = 9 + Math.random() * 6;
+    e.pal = heatRamp(pal); e.t0 = Math.random() * 0.25;
+    e.sp.visible = true;
+  }
+  burnMark(q.x, q.y, 14 + Math.random() * 6, 40);
 };
 
 // Called every frame from drawGL, after the players have moved.
@@ -1242,9 +1282,27 @@ function emit(p, pal, hard){
 // dies. So the ramp is built hot-to-cold with the team's palette THROUGH THE MIDDLE of it —
 // which keeps the easter egg (a rainbow side still burns rainbow) while making everyone read as
 // heat rather than gas.
-const WHITE_HOT = '#fff4e2', DYING = '#6b0f00';
+// STOPS ARE EVENLY SPACED IN TIME, so the shape of the ramp IS the shape of the colour you see.
+// The old one was white, amber, orange, red, dark — five stops, which spent two fifths of every
+// ember's life in the amber band. That is why it still read yellow after being reversed: the
+// order was right and the WEIGHTING was not.
+//
+// Weighted toward the red end now. The white flash is a single short stop, amber gets one, and
+// the orange-through-red descent gets four — so an ember is briefly bright and then spends most
+// of what you actually watch glowing red, which is what a blast of heat looks like.
+const HEAT_IN  = ['#fff0d8', '#ffb347'];                          // the flash, brief
+const HEAT_OUT = ['#ff7a18', '#ff3d00', '#c81a00', '#7a0d00', '#360400'];   // the long red fall
 function heatRamp(pal){
-  return [WHITE_HOT].concat(pal.slice().reverse(), [DYING]);
+  // ONLY INSERT A TEAM PALETTE THAT SAYS SOMETHING. For an ordinary side firePal() returns
+  // FLAME3 — which is amber, amber, orange — so splicing it in duplicated the ambers and put
+  // half the ramp back in the band this change exists to leave. An ordinary side burns pure
+  // heat now.
+  //
+  // A rainbow side is different by definition, so hers goes in and she burns through all six
+  // colours between the flash and the fall. The easter egg is the only reason this branch
+  // exists, and it is louder for it: hers is the only fire on the pitch that is not simply red.
+  const special = pal.length > 3;
+  return special ? HEAT_IN.concat(pal.slice().reverse(), HEAT_OUT) : HEAT_IN.concat(HEAT_OUT);
 }
 
 /** Age every live ember, cooling it along its own heat ramp. */
@@ -1656,6 +1714,41 @@ let drawGL = function drawGL(){
     by += headPop;
   }
   ballGL.position.set(ball.x, by, ball.y);
+
+  // ── THE BURNING BALL ──────────────────────────────────────────────────────
+  // The engine sets ball.flameShot when somebody spends burst on a shot, and ball.flameShe so a
+  // Sparkle Princess strike burns rainbow. The flat page has drawn this since the beginning;
+  // this page had never once read the flag, so a power shot looked exactly like a tap-in.
+  //
+  // It also lays a scorch where it lands, which is the ask and is also the right way round: a
+  // shot that burns should leave the pitch marked, and the mark should go away.
+  if (ball.flameShot && ball.isShot) {
+    const pal = ball.flameShe ? (typeof RAINBOW !== 'undefined' ? RAINBOW : ['#ff5aa7'])
+                              : (typeof FLAME3 !== 'undefined' ? FLAME3 : ['#ff3d00']);
+    for (let i = 0; i < 3; i++) {
+      const e = embers[emberNext = (emberNext + 1) % EMBERS];
+      e.sp.position.set(ball.x + (Math.random()-0.5)*9, by + (Math.random()-0.5)*9,
+                        ball.y + (Math.random()-0.5)*9);
+      // Trailing the ball rather than leading it: away from where it is going, so it streaks.
+      const sp2 = Math.hypot(ball.vx, ball.vy) || 1;
+      e.vx = -(ball.vx/sp2) * (0.8 + Math.random()) + (Math.random()-0.5)*0.6;
+      e.vz = -(ball.vy/sp2) * (0.8 + Math.random()) + (Math.random()-0.5)*0.6;
+      e.vy = 0.5 + Math.random() * 0.8;
+      e.life = 0; e.max = 0.3 + Math.random() * 0.3;
+      e.size = 8 + Math.random() * 5;
+      e.pal = heatRamp(pal); e.t0 = Math.random() * 0.2;
+      e.sp.visible = true;
+    }
+    // A mark every few frames while it is low, not every frame — a burning shot should leave a
+    // trail of scorches down the pitch, not a solid black stripe.
+    if (z < 6 && Math.random() < 0.22) burnMark(ball.x, ball.y, 6 + Math.random()*4, 30);
+    wasBurning = true;
+  } else if (wasBurning) {
+    // It has just been claimed or gone dead. One last mark where it stopped burning, which is
+    // usually a keeper's gloves — the engine says "extinguished" at exactly this moment.
+    burnMark(ball.x, ball.y, 11 + Math.random()*5, 45);
+    wasBurning = false;
+  }
   shadowGL.position.set(ball.x, 0.5, ball.y);
   const k = 1 / (1 + z*0.012);
   shadowGL.scale.setScalar(k);
@@ -1668,6 +1761,7 @@ let drawGL = function drawGL(){
     placeCam();
   }
   stepEmbers(dt);
+  stepScorch(dt);
   // The light rides whoever is burning hardest and flickers on its own clock, so the grass under
   // a sprint pulses rather than glowing steadily — a constant light reads as a lamp, not a fire.
   if (fireLight) {
