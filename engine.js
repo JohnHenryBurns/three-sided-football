@@ -646,6 +646,10 @@ function kick(tx,ty,power,isShot){
   const dx=tx-ball.x, dy=ty-ball.y, d=Math.hypot(dx,dy)||1;
   ball.vx=dx/d*power; ball.vy=dy/d*power;
   ball.lastTouch=o.team; ball.lastKicker=o; ball.isShot=!!isShot;
+  // WHO SHOT IT, kept apart from who last touched it. A keeper who gets a hand to a shot and
+  // fails becomes `lastTouch`, and the goal was then credited against his own side as an OWN
+  // GOAL — a striker's finish turned into the keeper's mistake because a deflection is a touch.
+  if(isShot){ ball.shotBy=o.team; ball.shotByP=o; ball.shotAt=clockSec; }
   ball.noClaim=o; ball.noClaimF=14; ball.owner=null;
   ball.z=0; ball.zv=0;
   // A long ball travels THROUGH THE AIR, which at 3.0 meant an apex of 32 — over a head and
@@ -1809,9 +1813,24 @@ const RED_OFFENSES=[
   "declared the penalty area sovereign territory and defended the border"];
 
 function goalScored(concederTeam){
-  const scorerTeam=ball.lastTouch;
-  const scorer=(ball.owner&&ball.owner.team===scorerTeam)?ball.owner
-    :((ball.lastKicker&&ball.lastKicker.team===scorerTeam)?ball.lastKicker:null);
+  // A GOAL BELONGS TO WHOEVER SHOT IT, not to whoever touched it last.
+  //
+  // `lastTouch` was doing both jobs, so any defensive touch on the way in — a keeper's fingertips,
+  // a block that deflects rather than stops — handed the goal to the conceding side and the game
+  // called it an own goal. That is precisely backwards: a save that fails is still a goal for the
+  // striker, and getting a hand to it should not be worse than standing still.
+  //
+  // A shot from another side inside the last three seconds is the goal's author, whatever it
+  // clipped on the way. Beyond that window, or with no shot at all, `lastTouch` decides as before
+  // — which is what a genuine own goal looks like: no shot, just somebody putting it in.
+  const fresh=(ball.shotBy!==undefined && ball.shotBy!==null &&
+               ball.shotBy!==concederTeam && clockSec-(ball.shotAt||-99)<3);
+  const scorerTeam=fresh?ball.shotBy:ball.lastTouch;
+  const scorer=fresh
+    ? (ball.shotByP||null)
+    : ((ball.owner&&ball.owner.team===scorerTeam)?ball.owner
+      :((ball.lastKicker&&ball.lastKicker.team===scorerTeam)?ball.lastKicker:null));
+  if(fresh && ball.lastTouch===concederTeam) TEL.deflected++;
   const wasLeader=leaderIdx();
   // true underdog test: someone ranked STRICTLY above the scorer before this goal
   const wasTrailing=(scorerTeam!==null)&&[0,1,2].some(o=>!out[o]&&o!==scorerTeam&&rankCmp(o,scorerTeam)<0);
@@ -1916,7 +1935,7 @@ const TEL = {
   poss:[0,0,0], jumps:0, bigJumps:0, maxJump:0, lastX:null, lastY:null,
   claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
-  jumps:0, jumpsBoosted:0, jumpsMissed:0,
+  jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
 function telReset(){
@@ -1924,10 +1943,10 @@ function telReset(){
     goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0, poss:[0,0,0], jumps:0,
     claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
-    jumps:0, jumpsBoosted:0, jumpsMissed:0,
-  jumps:0, jumpsBoosted:0, jumpsMissed:0, woodwork:0, bars:0, posts:0, port:{},
+    jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, deflected:0,
+  jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, woodwork:0, bars:0, posts:0, port:{},
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
-  jumps:0, jumpsBoosted:0, jumpsMissed:0, behindGoal:0, behindOwn:0, behindOther:0,
+  jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
 }
@@ -2013,6 +2032,7 @@ function buildMatchReport(){
   md+=`| **jumps** | ${TEL.jumps} | ${p90(TEL.jumps)} | |\n`;
   md+=`| \u2014 boosted (burst spent for height) | ${TEL.jumpsBoosted} | | |\n`;
   md+=`| \u2014 came down with nothing | ${TEL.jumpsMissed} | | some, or it is too easy |\n`;
+  md+=`| goals credited past a defensive touch | ${TEL.deflected} | | these were own goals before |\n`;
   md+=`| **woodwork** | ${TEL.woodwork} | ${p90(TEL.woodwork)} | ~2 |\n`;
   md+=`| \u2014 crossbar | ${TEL.bars} | | |\n`;
   md+=`| \u2014 post | ${TEL.posts} | | |\n`;
