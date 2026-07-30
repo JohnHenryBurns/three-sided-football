@@ -96,7 +96,7 @@ button.on{border-color:#ff8a4c;color:#ff8a4c}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=3"></script>
+<script src="engine.js?v=4"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -203,6 +203,11 @@ function buildPitch(){
     }
     const bar = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, half*2, 8), postMat);
     bar.position.set(e.mx, HGT, e.my);
+    // ZYX: lay the cylinder down first, THEN swing it to follow the goal line. Under the default
+    // XYZ the y-rotation happens first — on a cylinder still standing upright, where it does
+    // nothing visible — and the bar ends up lying along world X on every edge regardless. It
+    // looks right on the one edge that happens to be axis-aligned, which is how it survived.
+    bar.rotation.order = 'ZYX';
     bar.rotation.z = Math.PI/2;
     bar.rotation.y = -Math.atan2(e.uy, e.ux);
     scene.add(bar);
@@ -420,6 +425,11 @@ function buildGround(){
       new THREE.PlaneGeometry(e.len * 0.92, 26),
       new THREE.MeshBasicMaterial({ map: boardTexture(text, bg, fg), side: THREE.DoubleSide }));
     board.position.set(e.mx - e.nx * 34, 13, e.my - e.ny * 34);
+    // ORDER MATTERS. three.js applies Euler angles XYZ by default, so setting .x then .y leans
+    // the board in WORLD space and only then swings it to face the pitch — which points the lean
+    // somewhere different on every edge, and is exactly what "askew" looks like. YXZ faces it
+    // first and leans it in its own frame, so all six lean back the same way.
+    board.rotation.order = 'YXZ';
     board.rotation.y = -Math.atan2(e.uy, e.ux);
     board.rotation.x = -0.22;
     scene.add(board);
@@ -444,6 +454,7 @@ function buildGround(){
         new THREE.PlaneGeometry(e.len * 1.12, 15),
         new THREE.MeshBasicMaterial({ map: crowdTexture(), side: THREE.DoubleSide }));
       crowd.position.set(e.mx - e.nx * (depth + 44), h - 4, e.my - e.ny * (depth + 44));
+      crowd.rotation.order = 'YXZ';        // see the boards above
       crowd.rotation.y = -Math.atan2(e.uy, e.ux);
       crowd.rotation.x = -0.34;
       scene.add(crowd);
