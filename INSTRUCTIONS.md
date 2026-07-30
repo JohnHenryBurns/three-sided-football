@@ -41,10 +41,13 @@ An instruction can only be extracted once **everything it reads is visible from 
 
 - **`holdActive`** — solved with `holdingPlay()`, because it is a cheap question to
   re-ask.
-- **`chaser[]`** — not solved. It is a computed assignment rather than a question, so
-  hoisting it is its own change. **Prowling stays in the cascade** until it is done.
+- **`chaser[]`** — **solved.** Hoisted to module scope and computed into the shared array
+  rather than a local. That unblocked *prowling* and *closing it down*, which are 12% of
+  instructed frames between them.
 
-This is the main structural obstacle to finishing the extraction, and it will hit again.
+**The pattern for the rest:** a fact `think()` computes each frame should live outside it.
+Anything an instruction needs to read is shared state, not a local — and the alternative
+is that the extraction stops at whatever the cascade happens to have hoisted already.
 
 ## To investigate
 
