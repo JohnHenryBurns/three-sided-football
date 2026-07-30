@@ -310,6 +310,24 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
 .sc.hot .fl{display:inline-block;animation:flick .6s infinite alternate}
 @keyframes flick{from{transform:scale(1) rotate(-4deg)}to{transform:scale(1.25) rotate(5deg)}}
 @media (prefers-reduced-motion:reduce){ .sc.hot .fl{animation:none} }
+
+/* The coach sheet. Same shape as the camera and team pickers — one pattern for "choose one of
+   these" — and reached by tapping a side's chip on the scoreboard, which is where your eye
+   already is when you decide a team needs help. */
+#co{position:fixed;inset:0;z-index:22;display:none;overflow:auto;
+  background:rgba(6,10,8,.94);padding:1rem}
+#co.on{display:block}
+#coCard{max-width:24rem;margin:0 auto;padding:.9rem 1rem 1rem;
+  background:var(--panel);border:1px solid var(--panel-edge);border-radius:14px}
+#coCard .big2{font-size:1.05rem;font-weight:600;margin-bottom:.5rem}
+#coCard .grp{font-size:.64rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-dim);
+  margin:.7rem 0 .3rem}
+.coOpt{display:flex;justify-content:space-between;align-items:center;padding:.42rem .6rem;
+  margin-top:.28rem;border:2px solid var(--panel-edge);border-radius:9px;cursor:pointer;
+  background:var(--bg);font-size:.92rem}
+.coOpt.on{border-color:var(--hot);color:var(--hot)}
+.coOpt:hover{border-color:var(--ink)}
+#hud .sc{pointer-events:auto;cursor:pointer}
 </style>
 
 <header>
@@ -369,6 +387,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
   </div>
   <div id="tp"><div id="tpCard"></div></div>
   <div id="cm"><div id="cmCard"></div></div>
+  <div id="co"><div id="coCard"></div></div>
   <div id="cele"><div id="celeCard"></div><div id="confetti"></div></div>
   <div id="countdown"></div>
   <div id="caption"></div>
@@ -391,7 +410,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=36"></script>
+<script src="engine.js?v=37"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1349,6 +1368,20 @@ function buildBodies(){
     const pip = new THREE.Mesh(new THREE.BoxGeometry(7, 10, 1.5),
       new THREE.MeshBasicMaterial({ color: 0xffd166 }));
     pip.position.set(0, H_P + 13, 0); pip.visible = false; g.add(pip);
+    // ── UNDERDOG FIRE, ON THE PLAYER ─────────────────────────────────────
+    // The chip on the scoreboard says a TEAM is boosted; this says WHICH PLAYERS, which is the
+    // half that matters while you are watching the pitch rather than the header. The whole side
+    // gets the 15 per cent, so the whole side shows it.
+    //
+    // A sprite, so it faces you from any camera, and additive so it reads as light rather than a
+    // sticker stuck above a head.
+    const mo = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: emberTexture(), transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending, color: new THREE.Color(pal[0]), opacity: 0 }));
+    mo.scale.set(15, 15, 1);
+    mo.position.set(0, H_P + 17, 0);
+    mo.visible = false;
+    g.add(mo);
     // The name, riding above the head. Surnames only: full names are too wide to read at this
     // scale and the commentary already says who somebody is — the label's job is to let you
     // follow ONE player across a crowded pitch, and a surname does that.
@@ -1398,7 +1431,7 @@ function buildBodies(){
     label.position.set(0, H_P + 26, 0);
     g.add(label);
     scene.add(g);
-    return { g, ring, flames, pip, label, pal };
+    return { g, ring, flames, pip, label, pal, mo };
   });
 }
 
@@ -1442,6 +1475,9 @@ scene.add(shadowGL);
 // Per-frame bookkeeping the fire needs: a real delta so embers age in seconds rather than
 // frames, and a note of who is burning hardest so the light knows where to sit.
 let hottest = { spent: 0, p: null };
+// NOT declared here: `walkOff` is an engine name, and re-declaring it is a SyntaxError that kills
+// the whole inline script. Caught by parsing the two files together before pushing, which is the
+// third time that check has earned its place. The engine owns it, so the engine's is used.
 let lastFrameAt = performance.now();
 let drawGL = function drawGL(){
   const nowMs = performance.now();
@@ -1493,6 +1529,17 @@ let drawGL = function drawGL(){
       const n = 1 + (Math.random() < spent * 1.6 ? 1 : 0) + (Math.random() < spent ? 1 : 0);
       for (let k = 0; k < n; k++) emit(p, b.pal, spent > 0.55);
       if (spent > hottest.spent) hottest = { spent, p };
+    }
+    // the momentum flame, from the same boostUntil the scoreboard chip reads
+    if (b.mo) {
+      const hot = typeof boostUntil !== 'undefined' && clockSec < boostUntil[p.team];
+      b.mo.visible = hot;
+      if (hot) {
+        const w = nowMs / 90 + p.x * 0.03;      // each player flickers on his own phase
+        b.mo.material.opacity = 0.5 + 0.32 * Math.sin(w);
+        const k = 13 + 4 * Math.sin(w * 1.7);
+        b.mo.scale.set(k, k, 1);
+      }
     }
     b.pip.visible = !!(p.redCard || p.yellows > 0);
     if (b.pip.visible) b.pip.material.color.set(p.redCard ? 0xe11d2e : 0xffd166);
@@ -1618,6 +1665,8 @@ function renderScore(){
     '<span class="sc' + (score[t] === best && best > 0 ? ' lead' : '') + (out[t] ? ' out' : '') + '">' +
     '<span class="sw" style="background:' + T.color + '"></span>' + T.short +
     ' <b>' + score[t] + '</b><span class="fl">\u{1F525}</span></span>').join('');
+  // tapping a side's chip takes charge of it
+  [...scoresEl.children].forEach((el2, t) => el2.addEventListener('click', () => openCoach(t)));
   markHot();
 }
 
@@ -1894,7 +1943,38 @@ function loop(now){
     hideCard(); celeUntil = 0; resumeAt = now + 500;
   }
   const held = celeUntil > 0;
-  if (running && !held && now >= resumeAt) {
+
+  // ── THE WALK OF SHAME ─────────────────────────────────────────────────────
+  // A sending-off leaves the player on the pitch with `sentOff` set, and the engine hands him
+  // over as `walkPending` once the card has been shown. Somebody has to walk him off; the flat
+  // page's loop does it and this one never did, so a red-carded player simply stood there until
+  // the next restart teleported him to the bench.
+  //
+  // It owns the stage: play holds, the camera escorts him, and he is only out when he sits down.
+  // That pause is the point — a sending-off should cost the match a moment.
+  if (!held && typeof walkPending !== 'undefined' && walkPending) { walkOff = walkPending; walkPending = null; }
+  if (walkOff) {
+    const q = walkOff, B = benchAt[q.team];
+    if (!B) { q.out = true; q.benched = true; walkOff = null; }
+    else {
+      const dx = B.x - q.x, dy = B.y - q.y, bd = Math.hypot(dx, dy) || 1;
+      q.x += dx/bd * 1.5 * dt * 60;
+      q.y += dy/bd * 1.5 * dt * 60;
+      q.vx = 0; q.vy = 0;
+      q.hx = dx/bd; q.hy = dy/bd;                 // he faces where he is trudging
+      if (ball.owner === q) ball.owner = null;
+      if (follow) { look.x += (q.x - look.x) * 0.06; look.z += (q.y - look.z) * 0.06; placeCam(); }
+      resumeAt = now + 120;                        // play stays held while he goes
+      if (bd < 12) {
+        q.out = true; q.sentOff = false; q.benched = true;
+        q.seat = players.filter(o => o.team === q.team && o.benched).length - 1;
+        walkOff = null;
+        say('<b>' + q.name + '</b> takes a seat on the bench, head in hands.');
+      }
+    }
+  }
+
+  if (running && !held && !walkOff && now >= resumeAt) {
     if (pendingKickoff !== null && typeof pendingKickoff !== 'undefined') {
       kickoff(pendingKickoff); pendingKickoff = null; resumeAt = now + 900;
     } else {
@@ -2026,6 +2106,49 @@ function openCams(){
   cmEl.classList.add('on');
 }
 camBtn.addEventListener('click', openCams);
+
+// ── THE COACH ───────────────────────────────────────────────────────────────
+// Reached by tapping a side's chip on the scoreboard, which is where your eye already is when
+// you decide a team needs help. The flat page has a button; there is no room for one here and
+// the chip is a better target anyway — it already identifies the team.
+//
+// The presets are the engine's own. Reading the lists from there rather than repeating them
+// means a tactic added to the rules appears here without anyone remembering to add it.
+const coEl = document.getElementById('co'), coCard = document.getElementById('coCard');
+
+function openCoach(t){
+  if (out[t]) return;
+  if (!coached[t]) {
+    coached[t] = true;
+    say('\u{1F3AF} A new manager takes the ' +
+        '<span class="tm" style="color:' + TEAMS[t].color + '">' + TEAMS[t].name + '</span> bench!', true);
+  }
+  const group = (title, presets, current, set) => {
+    let h = '<div class="grp">' + title + '</div>';
+    for (const k of Object.keys(presets))
+      h += '<div class="coOpt' + (k === current ? ' on' : '') + '" data-set="' + set +
+           '" data-v="' + k + '"><span>' + k + '</span></div>';
+    return h;
+  };
+  coCard.innerHTML =
+    '<div class="big2" style="color:' + TEAMS[t].color + '">' + TEAMS[t].name + ' \u2014 the bench</div>' +
+    group('Attack',  ATK_PRESETS, teamATK[t], 'atk') +
+    group('Defence', DEF_PRESETS, teamDEF[t], 'def') +
+    group('Temper',  AGG_PRESETS, teamAGG[t], 'agg');
+  coCard.querySelectorAll('.coOpt').forEach(el2 => el2.addEventListener('click', () => {
+    const v = el2.dataset.v;
+    if (el2.dataset.set === 'atk') teamATK[t] = v;
+    else if (el2.dataset.set === 'def') teamDEF[t] = v;
+    else teamAGG[t] = v;
+    applyPresets(t);
+    computeTargets();
+    renderScore();
+    openCoach(t);                       // redraw so the new choice shows as chosen
+  }));
+  coEl.classList.add('on');
+}
+coEl.addEventListener('click', e => { if (e.target === coEl) coEl.classList.remove('on'); });
+ENGINE_HOOKS.openCoachMenu = openCoach;
 cmEl.addEventListener('click', e => { if (e.target === cmEl) cmEl.classList.remove('on'); });
 
 // Dragging is always allowed, and it drops you into Free look — a camera you can move is one you
