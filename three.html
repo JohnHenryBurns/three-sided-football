@@ -453,7 +453,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=56"></script>
+<script src="engine.js?v=57"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1898,7 +1898,24 @@ let drawGL = function drawGL(){
   const held = heldByKeeper ? H_P * 0.62      // chest, hugged
              : heldForThrow ? H_P + 9         // above the head, two-handed
              : 0;
-  const z = Math.max(0, (ball.z || 0), held);
+  // THE FLIGHT INTO THE NET, if one is running. It overrides the engine's frozen position for
+  // the length of a celebration and is dropped the moment the ball is live again — so nothing it
+  // does can survive into play.
+  if (netFly && !celeUntil) netFly = null;
+  if (netFly && !netFly.dead) {
+    const f = netFly;
+    f.x += f.vx * f.speed;
+    f.y += f.vy * f.speed;
+    f.z = Math.max(0, f.z - 0.35);                 // dropping as it goes, like a ball does
+    // how far behind the line it has travelled, measured along the goal's own inward normal
+    const depth = -((f.x - f.mx) * f.nx + (f.y - f.my) * f.ny);
+    if (depth >= f.stop) {
+      f.dead = true;                               // it has hit the sheet
+      f.vx = f.vy = 0;
+    }
+  }
+
+  const z = netFly ? Math.max(0, netFly.z) : Math.max(0, (ball.z || 0), held);
   // ROLLING. A ball travelling along the ground turns about the axis perpendicular to its
   // heading, through an angle of distance/radius — that is what rolling IS, and getting it from
   // the actual velocity rather than a fixed spin means it slows and stops when the ball does.
@@ -1907,7 +1924,11 @@ let drawGL = function drawGL(){
   // accumulates rather than being reset each frame. Setting an Euler angle from speed would make
   // it snap back to zero the moment the ball stopped.
   {
-    const vx = ball.vx || 0, vy = ball.vy || 0;
+    // A ball in the back of the net has stopped, so it stops turning. Rolling is taken from
+    // velocity, and once netFly is dead there is none — which is the whole reason to model the
+    // flight rather than just teleporting the ball into the goal.
+    const vx = netFly ? netFly.vx : (ball.vx || 0);
+    const vy = netFly ? netFly.vy : (ball.vy || 0);
     const sp = Math.hypot(vx, vy);
     if (sp > 0.02 && !held) {          // a ball in two hands does not spin
 
@@ -1968,7 +1989,7 @@ let drawGL = function drawGL(){
     if (headPop < 0.4) headPop = 0;
     by += headPop;
   }
-  ballGL.position.set(ball.x, by, ball.y);
+  ballGL.position.set(netFly ? netFly.x : ball.x, by, netFly ? netFly.y : ball.y);
 
   // ── THE BURNING BALL ──────────────────────────────────────────────────────
   // The engine sets ball.flameShot when somebody spends burst on a shot, and ball.flameShe so a
@@ -2004,7 +2025,7 @@ let drawGL = function drawGL(){
     burnMark(ball.x, ball.y, 11 + Math.random()*5, 45);
     wasBurning = false;
   }
-  shadowGL.position.set(ball.x, 0.5, ball.y);
+  shadowGL.position.set(netFly ? netFly.x : ball.x, 0.5, netFly ? netFly.y : ball.y);
   const k = 1 / (1 + z*0.012);
   shadowGL.scale.setScalar(k);
   shadowGL.material.opacity = 0.34 * k;
@@ -2118,8 +2139,40 @@ function showCard(colour, big, who, sub, ms, confetti, fire){
 }
 function hideCard(){ celeEl.classList.remove('on'); confettiBox.innerHTML = ''; }
 
-ENGINE_HOOKS.showCelebration = (colour, big, who, sub, fire) =>
+// ── INTO THE NET ────────────────────────────────────────────────────────────
+// The engine's work is done the moment the ball crosses the line: it scores, calls the
+// celebration and waits for a restart. So the ball simply FROZE on the line while play was held,
+// which is the one moment everybody is looking at it.
+//
+// A goal ends with the ball in the back of the net. This carries it there — render-only, during
+// a hold when nothing else is moving, and it stops when it arrives rather than drifting.
+let netFly = null;
+ENGINE_HOOKS.showCelebration = (colour, big, who, sub, fire) => {
+  // Which goal? The nearest one to where the ball is, which at the moment of a goal is the one
+  // it just went into — no need for the engine to say, and nothing to keep in step if it changes.
+  let gi = -1, best = 1e9;
+  for (const g of GOAL_EDGE) {
+    const e = EDGES[g], d = Math.hypot(ball.x - e.mx, ball.y - e.my);
+    if (d < best) { best = d; gi = g; }
+  }
+  if (gi >= 0 && best < 220) {
+    const e = EDGES[gi];
+    const sp = Math.hypot(ball.vx, ball.vy) || 1;
+    netFly = {
+      x: ball.x, y: ball.y, z: Math.max(0, ball.z || 0),
+      // Along its own travel if it had any, otherwise straight through the mouth — a ball that
+      // trickles over the line still ends up in the net.
+      vx: sp > 0.6 ? ball.vx/sp : -e.nx,
+      vy: sp > 0.6 ? ball.vy/sp : -e.ny,
+      speed: Math.min(9, Math.max(3.5, sp)),
+      // The back of the net, measured from the line: it slopes, so the stop depth depends on how
+      // high the ball is. Low and hard goes deep; a lob dies against the top of the sheet.
+      stop: 34 * (1 - Math.min(1, Math.max(0, ball.z || 0) / 54) * 0.75),
+      nx: e.nx, ny: e.ny, mx: e.mx, my: e.my, dead: false
+    };
+  }
   showCard(colour || '#ffd166', big || 'GOAL', who || '', sub || '', 2600, true, fire);
+};
 
 // `dur` is already MILLISECONDS — the flat page does `performance.now() + dur` with it, and the
 // engine passes 4200 for a yellow card. Multiplying by a thousand, as this did, would have held
