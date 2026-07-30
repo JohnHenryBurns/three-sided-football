@@ -461,7 +461,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=67"></script>
+<script src="engine.js?v=68"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2220,8 +2220,17 @@ let drawGL = function drawGL(){
   // the camera drifts toward the ball rather than snapping to it: a camera that tracks exactly
   // makes the ball look still and the world look shaky, which is the opposite of what is happening
   if (follow) {
-    look.x += (ball.x - look.x) * 0.035;
-    look.z += (ball.y - look.z) * 0.035;
+    // THE BALL YOU CAN SEE, not the one the engine is holding. While a goal is being restarted
+    // the engine's ball sits frozen on the centre spot from the moment kickoff() runs — but what
+    // is DRAWN is the one being booted back up the pitch. A tracking camera watched the spot and
+    // ignored the ball, which is the one stretch where the ball is the only thing moving.
+    const tx = netFly ? netFly.x : ball.x;
+    const tz = netFly ? netFly.y : ball.y;
+    // and it chases a little harder during the return, because that ball is travelling further
+    // and faster than anything in open play and a lazy follow simply loses it
+    const k = netFly && netFly.returning ? 0.09 : 0.035;
+    look.x += (tx - look.x) * k;
+    look.z += (tz - look.z) * k;
     placeCam();
   }
   stepEmbers(dt);
