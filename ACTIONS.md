@@ -261,6 +261,44 @@ applies, which is how the cascade's `else` branches translate into a scored list
 cascade site's body into its action, delete the site, set `ACTIONS_LIVE = true`. One
 commit, six seeds, and it either holds or reverts whole.
 
+## The ripening no-op
+
+**John's idea, and it removes every hardcoded restart delay in the engine.**
+
+A mandated action does not fire the instant it is legal. **It ripens** — its weight grows
+each frame against a fixed no-op at SCRIPT tier, so the chance of it happening rises from
+nearly nothing to a certainty, and *which frame it lands on is sampled rather than set*.
+
+```
+0.5s   weight   100   p=0.10
+1.0s   weight   400   p=0.31
+1.5s   weight   900   p=0.50
+2.0s   weight  1600   p=0.64
+3.0s   weight  3600   p=0.80
+```
+
+Quadratic: **hesitant, then decisive**, which is how people are.
+
+**This is the variable pause, and "sometimes they can move quick" falls out of it** rather
+than being a special case. A quick throw is not a different rule — it is the tail of the
+same distribution.
+
+**And the growth rate is where tactics reach it:**
+
+```
+direct 0.2   rate 328   even odds at 1.7s
+direct 0.5   rate 430   1.4s
+direct 0.8   rate 532   1.3s
+```
+
+Same action, different urgency, no second code path. A penalty ripens at 130 with no
+coach term at all — **the pause is the drama there, and nothing about a side's tempo
+should hurry it.**
+
+**What it replaces:** `readyAt: nowMs()+1100`, `cap: nowMs()+2000`, `restartHold +2400`,
+and the 900ms kick-off pause. Four constants, each of which made every instance of its
+restart identical.
+
 ## Order
 
 1. find the common shape, or establish that there isn't one
