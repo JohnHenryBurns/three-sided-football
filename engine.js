@@ -710,6 +710,10 @@ function job(p, what){ p.job = what; p.jobAt = clockSec; }
 // and gets caught out; turn it down and it is twitchy but quick.
 const COMMIT = 12;                    // the degree factor. Per-side eventually; one number now.
 
+/** A side's current tactical numbers, so an instruction can read them without knowing where
+ *  they live. `T()` already does this; this is the same thing named for readers of the list. */
+function TACTICS(t){ return T(t); }
+
 const INSTRUCTIONS = [
   // ── FETCH THE BALL ────────────────────────────────────────────────────────
   // EXPLICIT. He has been given a restart and the ball is lying somewhere. Nothing outranks it,
@@ -797,6 +801,42 @@ const INSTRUCTIONS = [
       steer(p, (mk.x+R.x)/2, (mk.y+R.y)/2, 2.0);
       return true;
     } },
+
+  // ── THE BUS: A MIDFIELDER DROPS IN ────────────────────────────────────────
+  // Named from its condition, not its target: TT.bunker>0.5 && role M. A coach setting that
+  // changes WHICH INSTRUCTION APPLIES rather than tweaking a number — which is what a tactic is,
+  // and it was already true before this list existed. The list just makes it legible.
+  { name:'the bus \u2014 dropping in', explicit:false, base:520,
+    applies:p => p.role==='M' && !p.out && !p.sentOff && ball.owner
+              && TACTICS(p.team).bunker>0.5 && ball.owner.team!==p.team,
+    score:p => 520,
+    act:p => {
+      const own=goalCenter(p.team);
+      steer(p, own.x+(ball.x-own.x)*0.62, own.y+(ball.y-own.y)*0.62, 2.0);
+      return true;
+    } },
+
+  // ── THE LONE OUTLET ───────────────────────────────────────────────────────
+  // The other half of the bus: while everyone else drops, one forward holds a position between
+  // his own goal and the ball, so there is somebody to counter through.
+  { name:'holding the counter', explicit:false, base:510,
+    applies:p => p.role==='F' && !p.out && !p.sentOff && ball.owner
+              && TACTICS(p.team).bunker>0.5 && ball.owner.team!==p.team,
+    score:p => 510,
+    act:p => {
+      const own=goalCenter(p.team);
+      steer(p, (own.x+ball.x)/2, (own.y+ball.y)/2, 2.0);
+      return true;
+    } },
+
+  // ── INTERCEPTING ──────────────────────────────────────────────────────────
+  // Target: ball.x + ball.vx*6 — six frames AHEAD of the ball rather than at it. Leading a pass
+  // is a different instruction from chasing one, and the target is the only thing that says so.
+  { name:'intercepting', explicit:false, base:480,
+    applies:p => !p.out && !p.sentOff && p.role!=='K' && !ball.owner
+              && Math.hypot(ball.vx,ball.vy)>2.5 && dist(p,ball)<120,
+    score:p => 480 - dist(p,ball)*0.4,           // the nearest man wants it most
+    act:p => { steer(p, ball.x+ball.vx*6, ball.y+ball.vy*6, 2.3); return true; } },
 
   // ── OFFERING AFTER A RESTART ──────────────────────────────────────────────
   // NOT explicit: he has taken it and is choosing to make himself available rather than chase.
