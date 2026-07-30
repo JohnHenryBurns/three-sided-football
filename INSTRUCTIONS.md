@@ -104,21 +104,28 @@ it. Same split.
 **What is now engine-owned:** who fetches after a goal, who takes the kick-off, where
 everybody stands during both a goal restart and a sending-off.
 
-## The harness has no seed, and nothing here is measurable without one
+## The harness is seeded
 
-**This is the blocker.** `Math.random()` is unseeded, so no run is reproducible: the same
-config gives 23 goals once and 15 the next time. Which means:
+`RNG()` replaces all 56 `Math.random()` calls in the engine. **Seeding is opt-in**:
+unseeded it delegates to `Math.random`, so the browser is unchanged — a real match should
+be unpredictable. The harness seeds from its configuration.
 
-- a degenerate match **cannot be investigated**, because it cannot be run again
-- a fix **cannot be shown to work**, because before and after are different matches
-- the discard rate moves between 1-in-10 and 5-in-15 with nothing changed
+```
+same match, run first and run seventh
+  goals 20, throws 76, loose 57.831%   both times
+```
 
-I cleared five pieces of leaked per-match state and the discard rate went **up**. That
-is not evidence the fix was wrong; it is evidence that **fifteen matches of an unseeded
-sim cannot distinguish a real change from noise.**
+**Which makes the degenerate matches investigable at last.** Three of twelve, and each
+one now has a seed that replays it exactly:
 
-**Before any tournament: seed the RNG.** A seeded harness turns every one of the open
-questions below from an argument into a measurement.
+```
+seed 1001   loose 23%   ball held too long
+seed 1004   loose 77%   nobody chasing
+seed 1007   loose 30%   ball held too long
+```
+
+**Those three seeds are the next piece of work.** Two of the three are the ball being
+held, which is the signature the watchdog does not catch.
 
 ## The degenerate match
 
