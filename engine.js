@@ -979,9 +979,27 @@ function TACTICS(t){ return T(t); }
 // baseline.json. One commit, and it either holds or it reverts whole.
 const ACTIONS_LIVE = false;
 
+// THE NO-OP'S WEIGHT — the dial that sets how often anything happens at all. A PLAYER action
+// scoring 300 against this fires on about a tenth of the frames it is available. Every rate in
+// the old cascade is expressible as a ratio to this one number, which is why it is a constant
+// rather than a per-action hesitance.
+const PLAY_ON_WEIGHT = 2800;
+
 /** The keeper's outlet search, which three of his four actions need. Lifted from the cascade
  *  unchanged and computed once per call — the cascade did it once and branched; the list needs
  *  it available to each can(), which is the one real cost of the scored shape. */
+/** Is the shooting lane clear? The cascade samples the line to goal and looks for a body near
+ *  any point on it. Lifted unchanged, because a shot into a wall of legs is not a shot. */
+function shotLaneClear(p, tgt){
+  let clear=true;
+  for(let t=0.2;t<=0.8;t+=0.2){
+    const lx=p.x+(tgt.x-p.x)*t, ly=p.y+(tgt.y-p.y)*t;
+    players.forEach(o=>{ if(o.team===p.team||!onPitch(o)||o.role==='K') return;
+      if(Math.hypot(o.x-lx,o.y-ly)<26) clear=false; });
+  }
+  return clear;
+}
+
 function gkOutlets(gk){
   let near=null,nd=1e9, far=null,fd=-1,fs=-1e9, anyNear=null,anyD=1e9;
   const og=goalCenter(gk.team);
@@ -1125,17 +1143,59 @@ const PORTED = [
 
   { name:'shot', tier:TIER.PLAYER, ported:true,
     coach:T => T.direct*70,
-    can:p => ball.owner===p && p.role!=='K' && targets[p.team]!==null
-          && dist(p, goalCenter(targets[p.team])) < 230,
+    can:p => {
+      if(ball.owner!==p || p.role==='K' || targets[p.team]===null) return false;
+      const tgt=goalCenter(targets[p.team]);
+      const dGoal=dist(p,tgt);
+      if(dGoal>=230) return false;
+      const RK=p.rating||0.5;
+      return shotLaneClear(p,tgt) && RNG() < 0.016*(0.4+1.2*RK);
+    },
     score:p => 360,
-    act:p => { return false; } },
+    act:p => {
+      const tgt=goalCenter(targets[p.team]), e=EDGES[GOAL_EDGE[targets[p.team]]];
+      const hw2=e.len*GOAL_HALF, RK=p.rating||0.5, dGoal=dist(p,tgt);
+      const sc=(0.6+0.8*RK)*(0.75+dGoal*0.0035);
+      const off=(RNG()*2-1)*hw2*sc;
+      kick(tgt.x+e.ux*off, tgt.y+e.uy*off, 11.2, true);
+      return true;
+    } },
 
+  // ── THE SHOT IS A RATE, NOT A CONDITION ───────────────────────────────────
+  // Every other action asks "is this available". The cascade's shot asks something different:
+  //
+  //   if(laneClear && RNG() < 0.016 * (0.4+1.2*RK) * dt*60)
+  //
+  // A PER-FRAME PROBABILITY. It is not "can he shoot" but "does he, this frame" — a rate scaled
+  // by his rating and by the frame length, so a better player shoots more often rather than more
+  // accurately, and the whole thing is frame-rate independent.
+  //
+  // That does not translate to a score, and pretending it did would change the game. So the rate
+  // stays in can(): the action becomes AVAILABLE at a rate rather than under a condition, which
+  // is a third shape alongside prerequisite and preference. Worth naming — it is the first thing
+  // in this port that the can/score/act shape did not already fit.
   { name:'shot-power', tier:TIER.PLAYER, ported:true,
     coach:T => T.direct*90,
-    can:p => ball.owner===p && p.role!=='K' && p.burst>0.6 && targets[p.team]!==null
-          && dist(p, goalCenter(targets[p.team])) < 260,
+    can:p => {
+      if(ball.owner!==p || p.role==='K' || targets[p.team]===null) return false;
+      if(p.burst<=0.7) return false;                  // the super shot needs legs
+      const tgt=goalCenter(targets[p.team]);
+      const dGoal=dist(p,tgt);
+      if(dGoal>=260) return false;
+      const RK=p.rating||0.5;
+      return shotLaneClear(p,tgt) && RNG() < 0.016*(0.4+1.2*RK)*(1/60)*60*0.5;
+    },
     score:p => 370,
-    act:p => { return false; } },
+    act:p => {
+      const tgt=goalCenter(targets[p.team]), e=EDGES[GOAL_EDGE[targets[p.team]]];
+      const hw2=e.len*GOAL_HALF, RK=p.rating||0.5, dGoal=dist(p,tgt);
+      const scL=(0.6+0.8*RK)*(0.75+dGoal*0.0035);
+      const offL=(RNG()*2-1)*hw2*scL;
+      p.burst-=0.6; GKSTAT.superShots=(GKSTAT.superShots||0)+1;
+      kick(tgt.x+e.ux*offL*0.75, tgt.y+e.uy*offL*0.75, 13.2, true);
+      ball.flameShot=true;
+      return true;
+    } },
 ];
 
 const ACTIONS = [
@@ -1235,18 +1295,58 @@ const ACTIONS = [
 ];
 
 /** Score every available action, take the best, do it. Returns true if anything happened. */
+// ── TIERS DECIDE; WEIGHTS CHOOSE ────────────────────────────────────────────
+//
+// John's shape, and it is better than what I had. Highest-score-wins fires an action the instant
+// it is legal — so I was about to invent a "hesitance" term to stop shots happening at the
+// earliest possible frame. That is a fudge for a missing idea.
+//
+// THE MISSING IDEA IS A WEIGHTED NO-OP. Selection is proportional and "play on" is an action with
+// a large weight, so a shot scoring 360 fires on about a ninth of the frames it is available.
+// THE RATIO IS THE RATE — which means the cascade's `RNG() < 0.016*(0.4+1.2*RK)*dt*60` ports
+// directly instead of being reinterpreted: every situational factor becomes a score term, and the
+// part that meant "not every frame" becomes the no-op's weight.
+//
+// ACROSS TIERS IT STAYS ABSOLUTE. A penalty must be taken; in a lottery a taker would sometimes
+// simply not. So the highest available tier wins outright and the weighting happens WITHIN it.
+// The no-op exists at PLAYER tier only — "the game acts" stays certain, "he chooses" becomes
+// probabilistic, which is the distinction the tiers were for.
 function runAction(p){
-  let best=null, bestScore=-1e9;
   const list = ACTIONS_LIVE ? ACTIONS.concat(PORTED) : ACTIONS;
+  const T9 = TACTICS(p.team);
+
+  let topTier = -1;
+  const avail = [];
   for(const A of list){
     if(!A.can(p)) continue;
-    const sc=(A.tier||TIER.PLAYER) + A.score(p);
-    if(sc>bestScore){ bestScore=sc; best=A; }
+    const t = A.tier||TIER.PLAYER;
+    avail.push({A, t});
+    if(t>topTier) topTier = t;
   }
-  if(!best) return false;
-  p.lastAction = best.name;
-  TEL.actFrames[best.name] = (TEL.actFrames[best.name]||0) + 1;
-  return best.act(p)!==false;
+  if(!avail.length) return false;
+
+  const pool = avail.filter(x=>x.t===topTier);
+  let total = 0;
+  const weights = pool.map(x=>{
+    // the coach weights every action rather than owning a tier, which is John's correction
+    const w = Math.max(1, x.A.score(p) + (x.A.coach ? x.A.coach(T9) : 0));
+    total += w;
+    return w;
+  });
+  if(topTier===TIER.PLAYER) total += PLAY_ON_WEIGHT;
+
+  let r = RNG()*total;
+  for(let i=0;i<pool.length;i++){
+    r -= weights[i];
+    if(r<=0){
+      const A = pool[i].A;
+      p.lastAction = A.name;
+      TEL.actFrames[A.name] = (TEL.actFrames[A.name]||0) + 1;
+      return A.act(p)!==false;
+    }
+  }
+  TEL.actFrames['play on'] = (TEL.actFrames['play on']||0) + 1;
+  return false;                       // he carries on, which is most frames
 }
 
 const INSTRUCTIONS = [
