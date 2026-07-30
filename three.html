@@ -369,7 +369,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=30"></script>
+<script src="engine.js?v=31"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1029,6 +1029,117 @@ function crowdTexture(){
 }
 const benchAt = [];
 
+
+// ── FIRE ────────────────────────────────────────────────────────────────────
+//
+// The burst used to be three cones that got brighter. Cones do not read as fire from any angle
+// but side-on, because a cone is a solid shape and fire is not — fire is a lot of small hot
+// things going up and away and cooling as they go. So: particles.
+//
+// ONE POOL, SHARED BY EVERY PLAYER. A per-player emitter would be fifteen systems and fifteen
+// draw calls for something only two or three people do at once. This is a fixed ring of sprites,
+// claimed by whoever is burning and returned when they die — so the cost is constant whether
+// nobody is sprinting or everybody is, which is the property you want on a phone.
+// 440, sized from a measurement rather than a guess. Five minutes of football peaked at 370
+// embers in flight with four players burning at once — a pool of 220 would have started
+// recycling sprites that were still alive, which shows up as embers vanishing mid-flight
+// exactly when the effect is busiest and most worth looking at.
+//
+// 440 is that peak plus room, and it is 440 sprites whether anyone is sprinting or nobody is:
+// the cost is flat, which is the point of a pool.
+const EMBERS = 440;
+const embers = [];
+let emberNext = 0;
+
+/** A soft round blob, brightest in the middle. Additive blending turns overlapping blobs into a
+ *  hot core without any of them having to know about the others, which is why fire drawn this
+ *  way looks lit from inside rather than painted. */
+function emberTexture(){
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0.0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.28, 'rgba(255,255,255,.72)');
+  g.addColorStop(0.65, 'rgba(255,255,255,.20)');
+  g.addColorStop(1.0, 'rgba(255,255,255,0)');
+  x.fillStyle = g;
+  x.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.minFilter = THREE.LinearFilter;
+  return t;
+}
+
+function buildEmbers(){
+  const tex = emberTexture();
+  for (let i = 0; i < EMBERS; i++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex, transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending, opacity: 0 }));
+    sp.visible = false;
+    scene.add(sp);
+    embers.push({ sp, life: 0, max: 1, vx: 0, vy: 0, vz: 0, size: 1, pal: null });
+  }
+}
+
+/** Spawn one ember behind a burning player. */
+function emit(p, pal, hard){
+  const e = embers[emberNext = (emberNext + 1) % EMBERS];
+  const hl = Math.hypot(p.hx, p.hy) || 1;
+  const bx = -p.hx/hl, bz = -p.hy/hl;                 // straight out the back
+  const spread = 7;
+  e.sp.position.set(
+    p.x + bx * (R_P + 3) + (Math.random()-0.5) * spread,
+    H_P * (0.30 + Math.random() * 0.45),
+    p.y + bz * (R_P + 3) + (Math.random()-0.5) * spread);
+  // Thrown backwards off the runner and drifting up: the horizontal part is what makes it a
+  // TRAIL rather than a bonfire, and the upward part is what makes it fire rather than dust.
+  e.vx = bx * (0.9 + Math.random()*1.5) + (Math.random()-0.5)*0.5;
+  e.vz = bz * (0.9 + Math.random()*1.5) + (Math.random()-0.5)*0.5;
+  e.vy = 0.55 + Math.random() * 0.95;
+  e.life = 0;
+  e.max = 0.42 + Math.random() * 0.5;
+  e.size = (hard ? 13 : 9) + Math.random() * 7;
+  e.pal = pal;
+  e.sp.visible = true;
+}
+
+/** Age every live ember. Colour runs the palette from its hot end to its cool one over the
+ *  particle's life, so a rainbow team burns through all six and everybody else through three —
+ *  the easter egg gets MORE visible here, not less. */
+const _c1 = new THREE.Color(), _c2 = new THREE.Color();
+function stepEmbers(dt){
+  for (const e of embers) {
+    if (!e.sp.visible) continue;
+    e.life += dt;
+    const t = e.life / e.max;
+    if (t >= 1) { e.sp.visible = false; e.sp.material.opacity = 0; continue; }
+    e.sp.position.x += e.vx;
+    e.sp.position.z += e.vz;
+    e.sp.position.y += e.vy;
+    e.vy *= 0.965;                      // rises, slows, hangs
+    e.vx *= 0.93; e.vz *= 0.93;
+    // through the palette, hot to cool
+    const n = e.pal.length, f = t * (n - 1);
+    const i = Math.min(n - 2, Math.floor(f));
+    _c1.set(e.pal[i]); _c2.set(e.pal[i + 1]);
+    e.sp.material.color.copy(_c1).lerp(_c2, f - i);
+    // grows as it cools and fades from the tail, which is how smoke leaves a flame
+    const s = e.size * (0.55 + t * 1.5);
+    e.sp.scale.set(s, s, 1);
+    e.sp.material.opacity = t < 0.18 ? t / 0.18 : Math.pow(1 - (t - 0.18)/0.82, 1.6);
+  }
+}
+
+// A light that burns with them. Fire that does not light anything is a picture of fire — this is
+// what puts the colour of a sprint onto the grass around it. One light, moved to whoever is
+// burning hardest, because a phone will not thank us for fifteen.
+let fireLight = null;
+function buildFireLight(){
+  fireLight = new THREE.PointLight(0xff8c00, 0, 420, 2);
+  scene.add(fireLight);
+}
+
 // ── THE PLAYERS ─────────────────────────────────────────────────────────────
 const R_P = 11, H_P = 34;
 // How light a colour is, for deciding whether a number on it should be dark or pale. index.html
@@ -1128,7 +1239,8 @@ function buildBodies(){
         new THREE.ConeGeometry(5.4 - f * 1.1, len, 7),
         new THREE.MeshBasicMaterial({
           color: new THREE.Color(pal[f % pal.length]),
-          transparent: true, opacity: 0, depthWrite: false }));
+          transparent: true, opacity: 0, depthWrite: false,
+          blending: THREE.AdditiveBlending }));   // the hot core the embers stream out of
       tongue.rotation.order = 'YZX';
       tongue.rotation.z = Math.PI/2;                  // lay it along -X, pointing back
       // base ON the surface, tip trailing away: half the length beyond the shell
@@ -1188,7 +1300,7 @@ function buildBodies(){
     label.position.set(0, H_P + 26, 0);
     g.add(label);
     scene.add(g);
-    return { g, ring, flames, pip, label };
+    return { g, ring, flames, pip, label, pal };
   });
 }
 
@@ -1229,7 +1341,15 @@ const shadowGL = new THREE.Mesh(new THREE.CircleGeometry(9, 18),
 shadowGL.rotation.x = -Math.PI/2; shadowGL.position.y = 0.5;
 scene.add(shadowGL);
 
+// Per-frame bookkeeping the fire needs: a real delta so embers age in seconds rather than
+// frames, and a note of who is burning hardest so the light knows where to sit.
+let hottest = { spent: 0, p: null };
+let lastFrameAt = performance.now();
 let drawGL = function drawGL(){
+  const nowMs = performance.now();
+  const dt = Math.min(0.05, (nowMs - lastFrameAt) / 1000);
+  lastFrameAt = nowMs;
+  hottest = { spent: 0, p: null };
   if (bodies.length !== players.length) buildBodies();
   players.forEach((p, i) => {
     const b = bodies[i]; if (!b) return;
@@ -1269,6 +1389,13 @@ let drawGL = function drawGL(){
       t.material.opacity = (0.34 + 0.4 * spent) * (0.62 + 0.38 * Math.sin(w));
       t.scale.set(1, 0.72 + 0.5 * (0.5 + 0.5 * Math.sin(w * 1.4)), 1);
     });
+    // Embers stream off the back while the burst is being spent, and harder the more of it has
+    // gone — a player emptying themselves throws a longer tail than one just off the mark.
+    if (burning) {
+      const n = 1 + (Math.random() < spent * 1.6 ? 1 : 0) + (Math.random() < spent ? 1 : 0);
+      for (let k = 0; k < n; k++) emit(p, b.pal, spent > 0.55);
+      if (spent > hottest.spent) hottest = { spent, p };
+    }
     b.pip.visible = !!(p.redCard || p.yellows > 0);
     if (b.pip.visible) b.pip.material.color.set(p.redCard ? 0xe11d2e : 0xffd166);
   });
@@ -1367,7 +1494,19 @@ let drawGL = function drawGL(){
     look.z += (ball.y - look.z) * 0.035;
     placeCam();
   }
-  drawPolish(performance.now());
+  stepEmbers(dt);
+  // The light rides whoever is burning hardest and flickers on its own clock, so the grass under
+  // a sprint pulses rather than glowing steadily — a constant light reads as a lamp, not a fire.
+  if (fireLight) {
+    if (hottest.p) {
+      const pal = bodies[players.indexOf(hottest.p)];
+      fireLight.color.set((pal && pal.pal ? pal.pal[0] : '#ff8c00'));
+      fireLight.position.set(hottest.p.x, H_P * 0.7, hottest.p.y);
+      fireLight.intensity = (1.4 + 1.8 * hottest.spent) *
+                            (0.72 + 0.28 * Math.sin(nowMs / 42));
+    } else fireLight.intensity = 0;
+  }
+  drawPolish(nowMs);
   ren.render(scene, cam);
 };
 
@@ -1868,6 +2007,8 @@ function boot(){
   if (typeof ENGINE_HOOKS === 'undefined') throw new Error('engine.js did not load');
   buildPitch();
   buildGround();
+  buildEmbers();
+  buildFireLight();
   applyTeamSelection();
   resetMatch();
   kickoff(0);
