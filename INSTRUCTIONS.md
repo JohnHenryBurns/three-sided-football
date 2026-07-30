@@ -34,6 +34,18 @@ PLAYER       1000   what he chooses.
 | PLAYER | just restarted — offering | released by **possession**, not a timer |
 | PLAYER | intercepting | the only one with a distance-scaled score |
 
+## Blocked on think() locals
+
+An instruction can only be extracted once **everything it reads is visible from outside
+`think()`**. Two hit this already:
+
+- **`holdActive`** — solved with `holdingPlay()`, because it is a cheap question to
+  re-ask.
+- **`chaser[]`** — not solved. It is a computed assignment rather than a question, so
+  hoisting it is its own change. **Prowling stays in the cascade** until it is done.
+
+This is the main structural obstacle to finishing the extraction, and it will hit again.
+
 ## To investigate
 
 **The corner trio is duplicated.** The three waves are in the list *and* still in the
