@@ -2171,6 +2171,9 @@ function think(dt){
 // ---------- Physics ----------
 function physics(dt){
   const S=dt*60;
+  // WHERE IT WAS. Any test that asks "did it cross" needs the previous position, and nothing was
+  // keeping one — which is why the woodwork could only ever ask "is it inside a band".
+  ball.px=ball.x; ball.py=ball.y; ball.pz=ball.z;
   stepJumps(S);          // heads move before anybody reaches with one
   players.forEach(p=>{
     if(p.out)return;
@@ -2516,11 +2519,33 @@ function physics(dt){
       // No new geometry: the post is at |along| == the mouth's half width, the bar is at GOAL_H,
       // and both are the same numbers the goal test already uses. A hit is the ball arriving at
       // the plane within a post's radius of one of them.
-      if(e.goal && !out[gTeam] && d<1 && d>-7 && (ball.isShot||Math.hypot(ball.vx,ball.vy)>4) && !ball.woodT){
+      // ── TESTED ON THE CROSSING, NOT THE POSITION ──────────────────────────
+      // This asked whether the ball was INSIDE an 8-unit band across the goal plane. A shot
+      // travels 8.5 units a frame and a punt 13.5 — so the ball was at d=+4 on one frame and
+      // d=-5 on the next, and was never once measured inside the band.
+      //
+      // ELEVEN MATCHES, ZERO WOODWORK, and I called it rare twice before John pointed out that
+      // zero across eleven matches is not rarity. It is textbook tunnelling: a discrete test on
+      // a window narrower than one frame of travel.
+      //
+      // Now it asks whether the ball CROSSED the plane this frame — where it was against where
+      // it is — and interpolates the height and the lateral position at the moment of crossing.
+      // A window cannot be too narrow if you test the journey instead of the snapshot.
+      const dPrev = (ball.px!==undefined)
+        ? (ball.px-e.p1.x)*e.nx + (ball.py-e.p1.y)*e.ny
+        : d;
+      const crossed = dPrev>0 && d<=0;
+      const tCross = crossed ? dPrev/Math.max(0.0001, dPrev-d) : 0;
+      if(e.goal && !out[gTeam] && crossed && (ball.isShot||Math.hypot(ball.vx,ball.vy)>4) && !ball.woodT){
         const half=e.len*GOAL_HALF, R_POST=4.2;
-        const offPost=Math.abs(Math.abs(along)-half), offBar=Math.abs(ball.z-GOAL_H);
-        const hitPost=offPost<R_POST && ball.z<GOAL_H;
-        const hitBar =offBar<R_POST && Math.abs(along)<half+R_POST;
+        // where it was at the instant it met the plane, not where it ended up
+        const alongX = (ball.px!==undefined) ? ball.px+(ball.x-ball.px)*tCross : ball.x;
+        const alongY = (ball.py!==undefined) ? ball.py+(ball.y-ball.py)*tCross : ball.y;
+        const alongC = (alongX-e.mx)*e.ux + (alongY-e.my)*e.uy;
+        const zC = (ball.pz!==undefined) ? ball.pz+(ball.z-ball.pz)*tCross : ball.z;
+        const offPost=Math.abs(Math.abs(alongC)-half), offBar=Math.abs(zC-GOAL_H);
+        const hitPost=offPost<R_POST && zC<GOAL_H;
+        const hitBar =offBar<R_POST && Math.abs(alongC)<half+R_POST;
         if(hitPost||hitBar){
           ball.woodT=clockSec;                       // one hit per approach, not one per frame
           TEL.woodwork++;
