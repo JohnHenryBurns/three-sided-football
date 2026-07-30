@@ -126,6 +126,17 @@ button.on{border-color:var(--hot);color:var(--hot)}
 /* Full time. Tabular figures so the columns line up, and the champion's row lifted — you should
    be able to find who won without reading the headline again. */
 .ftwrap{margin-top:.7rem;padding-top:.6rem;border-top:1px solid var(--panel-edge)}
+/* The goal list and the player of the match, taken from the flat page. The list scrolls if a
+   match got out of hand — a 90-goal blitz should not push the buttons off the card. */
+#celeCard .hl{font-size:.78rem;line-height:1.5;color:var(--ink);margin-top:.6rem;
+  max-height:9rem;overflow-y:auto;text-align:left}
+#celeCard .potm{font-size:.82rem;margin-top:.55rem;color:var(--hot);font-weight:600}
+#celeCard .champBtns{display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-top:.8rem}
+#celeCard .champBtns .cmBtn{font-size:.84rem;padding:.5rem .4rem;pointer-events:auto}
+/* The card sits inside a layer that ignores pointers so the pitch stays draggable behind it;
+   these buttons have to opt back in or they cannot be pressed. */
+#cele{pointer-events:none}
+#celeCard{pointer-events:auto}
 table.ft{width:100%;border-collapse:collapse;font-size:.84rem;
   font-variant-numeric:tabular-nums}
 table.ft th{font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;
@@ -437,7 +448,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=48"></script>
+<script src="engine.js?v=49"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1991,25 +2002,77 @@ ENGINE_HOOKS.showNotice = (colour, big, who, sub, dur) =>
 // title rather than a second opinion about it.
 ENGINE_HOOKS.crownChampion = (t, how) => {
   const T = TEAMS[t];
+  const order = [0, 1, 2].sort(rankCmp);
   const tot = stats.poss.reduce((a, b) => a + b, 0) || 1;
+  const line = m => scoreMode === 'conceded'
+    ? TEAMS[m].short + ' ' + conceded[m]
+    : TEAMS[m].short + ' ' + (score[m] > 0 ? '+' : '') + score[m];
+
   const row = m =>
     '<tr' + (m === t ? ' class="won"' : '') + '>' +
     '<td><span class="sw" style="background:' + TEAMS[m].color + '"></span>' + TEAMS[m].short + '</td>' +
     '<td><b>' + (score[m] > 0 ? '+' : '') + score[m] + '</b></td>' +
-    '<td>' + scored[m] + '</td>' +
-    '<td>' + stats.saves[m] + '</td>' +
-    '<td>' + stats.tackles[m] + '</td>' +
+    '<td>' + scored[m] + '</td><td>' + stats.saves[m] + '</td><td>' + stats.tackles[m] + '</td>' +
     '<td>' + Math.round(100 * stats.poss[m] / tot) + '%</td></tr>';
   const table =
     '<table class="ft"><thead><tr><th>Team</th><th>Pts</th><th>G</th><th>Sv</th><th>Tk</th>' +
-    '<th>Poss</th></tr></thead><tbody>' +
-    [0, 1, 2].sort(rankCmp).map(row).join('') + '</tbody></table>';
-  showCard(T.color, '\u{1F3C6} CHAMPIONS', T.name, how || 'Champions of the hex', Infinity, true);
-  const d = document.createElement('div');
-  d.className = 'ftwrap';
-  d.innerHTML = table;
-  celeCard.appendChild(d);
-  say('\u{1F3C6} ' + T.name + ' are champions of the hex', true);
+    '<th>Poss</th></tr></thead><tbody>' + order.map(row).join('') + '</tbody></table>';
+
+  // EVERY GOAL, IN ORDER. The flat page lists them and it is the part people actually read — a
+  // table says who won, a list of goals says what the match WAS.
+  const mmss = x => String(Math.floor(x/60)).padStart(2,'0') + ':' + String(Math.floor(x%60)).padStart(2,'0');
+  const hl = goalsLog.length
+    ? '<div class="hl">' + goalsLog.map(g => g.own
+        ? '\u{1F631} ' + mmss(g.t) + ' own goal \u2014 ' + TEAMS[g.conceder].short + (g.ot ? ' (OT)' : '')
+        : '\u26bd ' + mmss(g.t) + ' ' + g.name + ' (' + TEAMS[g.scorer].short + ') v ' +
+          TEAMS[g.conceder].short + (g.ot ? ' (OT)' : '')).join('<br>') + '</div>'
+    : '';
+
+  // Player of the match, weighted the flat page's way: goals count six, saves two, tackles one
+  // and a half, and the champions get a multiplier — a hat-trick for a losing side is a fine
+  // afternoon but it is not the story of the match.
+  let potm = null, pv = 0;
+  players.forEach(pl => {
+    let v = (pl.goals || 0) * 6 + (pl.saves || 0) * 2 + (pl.tackles || 0) * 1.5;
+    if (pl.team === t) v *= 1.4;
+    if (v > pv) { pv = v; potm = pl; }
+  });
+  const bits = [];
+  if (potm) {
+    if (potm.goals)   bits.push(potm.goals + ' goal' + (potm.goals > 1 ? 's' : ''));
+    if (potm.saves)   bits.push(potm.saves + ' save' + (potm.saves > 1 ? 's' : ''));
+    if (potm.tackles) bits.push(potm.tackles + ' tackle' + (potm.tackles > 1 ? 's' : ''));
+  }
+  const potmLine = (pv > 0 && potm)
+    ? '<div class="potm">\u2b50 Player of the Match: ' + potm.name +
+      ' (' + TEAMS[potm.team].short + ') \u2014 ' + bits.join(', ') + '</div>'
+    : '';
+
+  showCard(T.color, '\u{1F3C6} CHAMPIONS!', T.name + ' take the title',
+           order.map(line).join(' \u00b7 ') + (how ? ' \u2014 ' + how : ''), Infinity, true);
+
+  const extra = document.createElement('div');
+  extra.className = 'ftwrap';
+  extra.innerHTML = table + hl + potmLine +
+    '<div class="champBtns">' +
+    '<button class="cmBtn go" id="btnRematch">Rematch</button>' +
+    '<button class="cmBtn" id="btnReport">\u{1F4C4} Match report</button></div>';
+  celeCard.appendChild(extra);
+
+  document.getElementById('btnRematch').onclick = () => { hideCard(); celeUntil = 0; openSetup(); };
+  // The report is markdown built by the ENGINE, so both pages download the same document — and a
+  // Blob rather than a data URL, because a long match report is longer than some browsers will
+  // accept in a URL.
+  document.getElementById('btnReport').onclick = () => {
+    const md = buildMatchReport();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
+    a.download = 'match-report-' + [0,1,2].map(m => TEAMS[m].short).join('-') + '.md';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+
+  say('<span class="goal">\u{1F3C6} ' + T.name + ' ARE CHAMPIONS OF THE HEX!</span>', true);
 };
 
 ENGINE_HOOKS.eliminateTeam = t => {
