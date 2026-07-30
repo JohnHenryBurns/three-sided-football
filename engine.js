@@ -706,6 +706,15 @@ function kick(tx,ty,power,isShot){
 // asked where anything can ask it.
 function holdingPlay(){ return nowMs() < restartHold; }
 
+// ── IS HE STILL PLAYING? ────────────────────────────────────────────────────
+// `out` and `sentOff` are not the same thing and the difference has a window in it: a man given a
+// red is sentOff IMMEDIATELY and only becomes out when he reaches the bench. For those few
+// seconds he is on the pitch, in the arrays, and eligible for anything that checks only one flag.
+//
+// Twelve selections in this file check one, the other, or neither. John has seen sent-off players
+// used as passing targets, which is exactly what that window produces.
+function onPitch(p){ return !!p && !p.out && !p.sentOff && !p.benched; }
+
 // ── IS IT ACTUALLY DEAD? ────────────────────────────────────────────────────
 // Eight cascade branches duplicate instructions that are now live. They SHOULD be unreachable —
 // the list scores first and returns — but "should be" is how you delete something that was still
@@ -1363,7 +1372,9 @@ const INSTRUCTIONS = [
     score:p => 380,
     act:p => {
       const own=goalCenter(p.team), TT=T(p.team);
-      const ds=players.filter(q=>q.team===p.team&&q.role==='D');
+      // onPitch: a sent-off defender still in the array shifted every remaining man's slot,
+      // so a back four became a back three standing in the wrong three places.
+      const ds=players.filter(q=>q.team===p.team&&q.role==='D'&&onPitch(q));
       const idx=ds.indexOf(p), lineShift=(TT.line-0.5)*0.22;
       let f=(idx===0?0.38:0.62)+lineShift;
       if(TT.bunker>0.5) f=(idx===0?0.28:0.48)+lineShift*0.5;
@@ -1930,7 +1941,7 @@ function think(dt){
       } else
       steer(p, ball.x+ball.vx*6, ball.y+ball.vy*6, 2.15+0.4*T(p.team).press);
     } else if(p.role==="D"){
-      const ds=players.filter(q=>q.team===p.team&&q.role==="D");
+      const ds=players.filter(q=>q.team===p.team&&q.role==="D"&&onPitch(q));
       const idx=ds.indexOf(p), TT=T(p.team), lineShift=(TT.line-0.5)*0.22;
       let f=(idx===0?0.38:0.62)+lineShift;
       if(TT.bunker>0.5) f=(idx===0?0.28:0.48)+lineShift*0.5;
@@ -2594,7 +2605,7 @@ function physics(dt){
       ball.z+=ball.zv*S; ball.zv-=0.14*S;
       if(ball.z<=0){
         ball.z=0; ball.zv=0;
-        const near=players.filter(p=>!p.out&&dist(p,ball)<62);
+        const near=players.filter(p=>onPitch(p)&&dist(p,ball)<62);
         const teams=new Set(near.map(p=>p.team));
         if(near.length>=2&&teams.size>=2){
           // header duel — highest man wins
@@ -3215,7 +3226,9 @@ function buildMatchReport(){
   // with different numbers of men on the pitch, and I quoted three of them at each other before
   // noticing. A human changes their mind twice a second at the very most; anything near a
   // per-frame rate is noise rather than indecision.
-  const alive=players.filter(q=>!q.out).length||1;
+  // onPitch, not !out — this is the denominator for switches-per-player-per-second, and counting
+  // a man who is walking off inflates the divisor and quietly flatters the number.
+  const alive=players.filter(q=>onPitch(q)).length||1;
   const perPS=TEL.jobSwitch/Math.max(1,secs)/alive;
   md+=`| switches | ${TEL.jobSwitch} |\n`;
   md+=`| **switches per player per second** | ${perPS.toFixed(1)} | **should be under ~2** |\n`;
