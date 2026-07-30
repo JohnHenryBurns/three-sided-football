@@ -127,6 +127,32 @@ seed 1007   loose 30%   ball held too long
 **Those three seeds are the next piece of work.** Two of the three are the ball being
 held, which is the signature the watchdog does not catch.
 
+## Air is not grass — worth doing, not yet safe
+
+**The ball gets ground friction while airborne.** `0.985` per frame is applied to every
+loose ball, so a punt fifty feet up is slowed by grass it is nowhere near. That is why
+long balls die, and why the punt power had to be cut so hard to stop them going out.
+
+Split into `0.997` in the air and `0.985` on the ground, a punt carries **252 through
+the air then 203 rolling** rather than 254 in total. That is the arc John wants: the
+flight does the distance and the grass does the stopping.
+
+**But on six identical seeds:**
+
+```
+back-pass rule alone   6/6
+air drag alone         5/6
+both together          3/6
+```
+
+**The two interact**, which is the interesting part — a keeper forced to kick and a ball
+that carries properly are individually fine and together produce three degenerate
+matches. Likely: forced distribution now reaches much further, so possession swings
+further and faster than anything else is tuned for.
+
+**Shipped the back-pass rule; held the drag split.** The drag is the more correct change
+of the two and it wants its own session with the punt power re-derived around it.
+
 ## The teleport standard, measured
 
 **Eight seeded matches, every remaining teleport by cause:**
