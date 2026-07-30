@@ -689,7 +689,22 @@ function kick(tx,ty,power,isShot){
 // job() names the branch as it is taken. One assignment, no logic, and it makes the AI
 // inspectable: a debug overlay can read p.job, the report can count them, and a player stuck
 // doing something daft becomes visible rather than inferred from where he is standing.
-function job(p, what){ p.job = what; p.jobAt = clockSec; }
+// job() is also where an instruction change is OBSERVABLE, so it is where the measuring goes. I
+// built a commitment system to stop players popping between instructions and had no way to count
+// popping, which is the same fault as tuning a flame you cannot see the colour of.
+function job(p, what){
+  if(p.job!==what){
+    if(p.job){                                   // he held the last one for a while
+      TEL.jobSwitch++;
+      TEL.jobHeld += Math.max(0, clockSec-(p.jobAt||clockSec));
+      TEL.jobHeldN++;
+      if(clockSec-(p.jobAt||clockSec) < 0.25) TEL.jobPop++;   // held under a quarter second
+    }
+    p.jobAt = clockSec;
+  }
+  TEL.jobFrames[what] = (TEL.jobFrames[what]||0) + 1;
+  p.job = what;
+}
 
 // ── THE INSTRUCTION LIST ────────────────────────────────────────────────────
 //
@@ -1138,6 +1153,13 @@ function think(dt){
       // through to the cascade below, unchanged. Both systems run side by side until the list is
       // long enough to delete the fallback, and ?jobs shows which one is driving each player.
       if(runInstruction(p)) return;
+      // NOTHING IN THE LIST APPLIED, so the cascade has him — and he should say so. Leaving the
+      // last instruction on him made the overlay lie (a man showing "intercepting" who finished
+      // doing that ten seconds ago) and made the dwell figure meaningless: it counted all the
+      // time he spent on the cascade as time spent on his last instruction. 10.9 seconds average
+      // was that bug, not stickiness.
+      TEL.jobFallback++;
+      job(p, 'cascade');
 
       // ── A FREE KICK IS BEING SET UP ───────────────────────────────────────
       // The taker walks to the ball. His side offers itself. THE OFFENDING SIDE RETREATS — ten
@@ -2353,6 +2375,7 @@ const TEL = {
   claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
+  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0,
   unattributed:0, unattMax:0, portFrame:-1,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
@@ -2361,13 +2384,17 @@ function telReset(){
     goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0, poss:[0,0,0], jumps:0,
     claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
-    jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0, freeKicks:0,
+    jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
+    jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0,
+  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, freeKicks:0,
     unattributed:0, unattMax:0, portFrame:-1,
   unattributed:0, unattMax:0, portFrame:-1, deflected:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
+  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0,
   unattributed:0, unattMax:0, portFrame:-1, woodwork:0, bars:0, posts:0, port:{},
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
+  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0,
   unattributed:0, unattMax:0, portFrame:-1, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
@@ -2460,6 +2487,20 @@ function buildMatchReport(){
   const p90=x=>Math.round(x*(5400/Math.max(1,secs)));
   md+=`| throw-ins | ${TEL.throwIns} | ${p90(TEL.throwIns)} | ~40 |\n`;
   md+=`| free kicks | ${TEL.freeKicks} | ${p90(TEL.freeKicks)} | ~22 |\n`;
+
+  // ── INSTRUCTIONS ──────────────────────────────────────────────────────────
+  // Whether the list is being used, and whether players stick with what they are told.
+  const jf=Object.entries(TEL.jobFrames).sort((a2,b2)=>b2[1]-a2[1]);
+  const jTot=jf.reduce((a2,b2)=>a2+b2[1],0)||1;
+  md+=`\n### Instructions\n\n`;
+  md+=`| instruction | share of instructed frames |\n|---|---|\n`;
+  for(const [k,v] of jf) md+=`| ${k} | ${Math.round(100*v/jTot)}% |\n`;
+  md+=`\n| | |\n|---|---|\n`;
+  md+=`| player-frames on an instruction | ${jTot} |\n`;
+  md+=`| player-frames on the old cascade | ${TEL.jobFallback} |\n`;
+  md+=`| switches | ${TEL.jobSwitch} |\n`;
+  md+=`| **held under 0.25s (popping)** | ${TEL.jobPop} | \n`;
+  md+=`| average time on an instruction | ${(TEL.jobHeld/Math.max(1,TEL.jobHeldN)).toFixed(2)}s |\n`;
   md+=`| ball behind a goal line | ${TEL.behindGoal} | ${p90(TEL.behindGoal)} | |\n`;
   md+=`| \u2014 last touched by the DEFENDING side (corner) | ${TEL.behindOwn} | ${p90(TEL.behindOwn)} | ~10 |\n`;
   md+=`| \u2014 last touched by an attacker (goal kick) | ${TEL.behindOther} | ${p90(TEL.behindOther)} | ~8 |\n`;
