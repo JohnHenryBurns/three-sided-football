@@ -453,7 +453,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=60"></script>
+<script src="engine.js?v=61"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1360,7 +1360,7 @@ function buildGround(){
     benchAt[t] = { x: bx, y: by, ux: e.ux, uy: e.uy, nx: e.nx, ny: e.ny };
     const dug = new THREE.Mesh(new THREE.BoxGeometry(78, 4, 26),
       new THREE.MeshLambertMaterial({ color: 0x1a2229 }));
-    dug.position.set(bx, 30, by);
+    dug.position.set(bx, 44, by);           // raised: see the note on the seat below
     dug.rotation.y = -Math.atan2(e.uy, e.ux);
     scene.add(dug);
     for (const s of [-1, 1]) {
@@ -1369,7 +1369,13 @@ function buildGround(){
       post.position.set(bx + e.ux * 37 * s, 15, by + e.uy * 37 * s);
       scene.add(post);
     }
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(74, 5, 12),
+    // ── ROOM TO SIT ──────────────────────────────────────────────────────
+    // 74 x 5 x 12 under a roof at 30 gave a seated player 2.5 units of headroom and a seat
+    // shallower than his own body, so he perched on the front edge with his head in the ceiling.
+    //
+    // Wider for five, deeper than a person, and the roof lifted to 44 — which is 16.5 of
+    // clearance over a seated player rather than 2.5, and reads as a dugout instead of a shelf.
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(96, 5, 20),
       new THREE.MeshLambertMaterial({ color: new THREE.Color(TEAMS[t].color) }));
     seat.position.set(bx, 8, by);
     seat.rotation.y = -Math.atan2(e.uy, e.ux);
@@ -1425,6 +1431,22 @@ let emberNext = 0;
 /** A five-pointed star, drawn once and shared. Additive, so overlapping stars glow rather than
  *  stack, and bright in the middle so it reads as light rather than as a sticker. */
 let starTex = null;
+/** A card: a rounded rectangle with a dark edge, tinted at use so one texture serves both. */
+let cardTex = null;
+function cardTexture(){
+  if (cardTex) return cardTex;
+  const c = document.createElement('canvas');
+  c.width = 48; c.height = 64;
+  const x = c.getContext('2d');
+  x.fillStyle = 'rgba(6,10,8,.85)';
+  x.fillRect(3, 3, 42, 58);
+  x.fillStyle = '#ffffff';
+  x.fillRect(6, 6, 36, 52);
+  cardTex = new THREE.CanvasTexture(c);
+  cardTex.minFilter = THREE.LinearFilter;
+  return cardTex;
+}
+
 function starTexture(){
   if (starTex) return starTex;
   const c = document.createElement('canvas');
@@ -1703,8 +1725,15 @@ function buildBodies(){
       g.add(tongue);
       flames.push(tongue);
     }
-    const pip = new THREE.Mesh(new THREE.BoxGeometry(7, 10, 1.5),
-      new THREE.MeshBasicMaterial({ color: 0xffd166 }));
+    // A SPRITE, NOT A BOX. A card is information, and a flat box shows you its edge from half
+    // the angles you might be watching from — which is exactly when a booking is worth knowing
+    // about. A sprite always faces the camera.
+    //
+    // World-scaled rather than screen-scaled, unlike the name: a card belongs to the player, not
+    // to the reader, and should shrink with him as you pull back.
+    const pip = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: cardTexture(), transparent: true, depthWrite: false, color: 0xffd166 }));
+    pip.scale.set(9, 12, 1);
     pip.position.set(0, H_P + 13, 0); pip.visible = false; g.add(pip);
     // ── UNDERDOG FIRE, ON THE PLAYER ─────────────────────────────────────
     // The chip on the scoreboard says a TEAM is boosted; this says WHICH PLAYERS, which is the
@@ -1891,10 +1920,13 @@ let drawGL = function drawGL(){
         // clearance so much as a coincidence. 0.50 gives 2.5 and still reads as a person rather
         // than a stool.
         const SIT = 0.50;
-        const slot = ((p.seat || 0) % 4) - 1.5;
+        const slot = ((p.seat || 0) % 5) - 2;   // five seats, not four
         // along the bench for the seat, and back from its front edge so he is on it not over it
-        const bx2 = B.x + B.ux * slot * 17 - B.nx * 3;
-        const bz2 = B.y + B.uy * slot * 17 - B.ny * 3;
+        // 2 back, not 5. The seat is 20 deep so it runs 10 either side of its centre, and a
+        // seated body is 7.9 in radius — at 5 back his spine hung 2.9 over the rear edge. At 2
+        // he sits inside it front and back, which is what sitting on a bench is.
+        const bx2 = B.x + B.ux * slot * 18 - B.nx * 2;
+        const bz2 = B.y + B.uy * slot * 18 - B.ny * 2;
         b.g.position.set(bx2, 10.5, bz2);                  // the seat's top surface
         b.g.rotation.y = -Math.atan2(B.ny, B.nx) + Math.PI;   // facing the pitch
         b.g.rotation.z = 0;
@@ -2628,7 +2660,23 @@ function loop(now){
       retargetTimer += step;
       if (retargetTimer > 6) { retargetTimer = 0; computeTargets(); }
       think(step); physics(step); colorCommentary();
-      if (clockSec >= matchLen + stoppageLen) resolveFullTime();
+
+      // ── STOPPAGE TIME AND FULL TIME ─────────────────────────────────────
+      // This page had the resolveFullTime() call and neither of the two things around it: the
+      // phase gate, and the fourth official's board. Without the gate it kept calling full time
+      // on a match that had already gone to overtime, and without the board a match simply ran
+      // past its own length with nothing said.
+      //
+      // The engine has always tracked `stoppageLen` — every foul and card adds to it — and only
+      // the flat page ever read it out.
+      if (phase === 'regulation') {
+        if (!stoppageAnnounced && clockSec >= matchLen) {
+          stoppageAnnounced = true;
+          say('\u{1F4CB} The fourth official\u2019s board goes up: <b>+' +
+              Math.ceil(stoppageLen) + 's</b> added on!', true);
+        }
+        if (clockSec >= matchLen + stoppageLen) resolveFullTime();
+      }
     }
   }
   document.getElementById('clock').textContent = fmtClock(clockSec);
