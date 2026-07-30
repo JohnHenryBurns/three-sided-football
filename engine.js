@@ -39,6 +39,25 @@
 const ENGINE_CLOCK = { now: () => performance.now() };
 function nowMs(){ return ENGINE_CLOCK.now(); }
 
+// Every line the engine says goes through here, so the log cannot miss one and cannot double it.
+function sayLogged(html, big, voice){
+  logLine(html);
+  ENGINE_HOOKS.say(html, big, voice);
+}
+
+// ── THE LOG ─────────────────────────────────────────────────────────────────
+// `matchLog` is reset by resetMatch() and printed by buildMatchReport(), both in here — and was
+// PUSHED only by index.html. So the 3D page produced a report with an empty play-by-play section,
+// which is the same split that broke champInfo: state the engine owns, fed by one front end.
+//
+// The engine logs its own commentary now, at the moment it decides to say something, and neither
+// page has to remember.
+function logLine(html){
+  const mm=String(Math.floor(Math.max(0,clockSec)/60)).padStart(2,"0");
+  const ss=String(Math.floor(Math.max(0,clockSec)%60)).padStart(2,"0");
+  matchLog.push(`**${mm}:${ss}** ${String(html).replace(/<[^>]*>/g,"")}`);
+}
+
 const ENGINE_HOOKS = {
   say: () => {},
   spawnNote: () => {},
@@ -188,7 +207,7 @@ function resetMatch(){
   computeTargets();
   const first=Math.floor(Math.random()*3);
   kickoff(first);
-  ENGINE_HOOKS.say(`We're underway at ${matchStadium}! ${tm(0)}, ${tm(1)} and ${tm(2)} — one ball, two enemies each. ${tm(first)} get us started.`,true);
+  sayLogged(`We're underway at ${matchStadium}! ${tm(0)}, ${tm(1)} and ${tm(2)} — one ball, two enemies each. ${tm(first)} get us started.`,true);
   ENGINE_HOOKS.renderScore();
 }
 
@@ -446,13 +465,13 @@ function computeTargets(){
     for(let a2=0;a2<3;a2++) for(let b2=a2+1;b2<3;b2++)
       if(changed(a2)&&changed(b2)&&targets[a2]===b2&&targets[b2]===a2){
         mutualDone[a2]=mutualDone[b2]=true;
-        ENGINE_HOOKS.say(pick([
+        sayLogged(pick([
           `${tm(a2)} and ${tm(b2)} turn on EACH OTHER — no more pretending!`,
           `It's personal now: ${tm(a2)} and ${tm(b2)} set their sights on each other.`,
           `The hex delivers a grudge match — ${tm(a2)} and ${tm(b2)}, eye to eye.`]),true,"lowvoice");
       }
     for(let t=0;t<3;t++) if(changed(t)&&!mutualDone[t])
-    ENGINE_HOOKS.say(pick([
+    sayLogged(pick([
       `Tactical switch — ${tm(t)} turn their guns on ${tm(targets[t])}!`,
       `The alliance shifts: ${tm(t)} now hunting ${tm(targets[t])}.`,
       `${tm(t)} smell blood — they're going after ${tm(targets[t])} now.`,
@@ -476,7 +495,7 @@ const RAINBOW=["#ff5aa7","#ff9f1c","#ffe14d","#5ad66f","#5ab9ff","#b58ae0"];
 function firePal(t9){ return TEAMS[t9]&&TEAMS[t9].she?RAINBOW:FLAME3; }
 function superSay(p2){
   if(Math.random()>0.6)return;
-  ENGINE_HOOKS.say(pick([
+  sayLogged(pick([
     `${p2.name} loads one with John Wick focus — absolute commitment!`,
     `FLAME SHOT! ${p2.name} puts the whole tank behind it!`,
     `${p2.name} with sudden, terrible intent — that ball is SMOKING!`,
@@ -494,12 +513,12 @@ function gkDiveCheck(defT,flame){
     ENGINE_HOOKS.flamePop(gk);
     if(flame){
       GKSTAT.duels=(GKSTAT.duels||0)+1;
-      ENGINE_HOOKS.say(pick([
+      sayLogged(pick([
         `FIRE MEETS FIRE — both tanks emptied in one heartbeat!`,
         `${gk.name} answers the flame with a flame of ${PRN(gk).his} own!`,
         `A duel! Burning shot, burning dive — somebody's fire dies here!`]),true,"lowvoice");
     } else if(Math.random()<0.4){
-      ENGINE_HOOKS.say(pick([
+      sayLogged(pick([
         `${gk.name} EXPLODES across the goal!`,
         `A flame dive — ${gk.name} pays for it from the tank!`]),true,"lowvoice");
     }
@@ -508,7 +527,7 @@ function gkDiveCheck(defT,flame){
 function blazeCall(p2){
   if(clockSec-lastBlazeSay<6) return;                // one eruption at a time
   lastBlazeSay=clockSec;
-  ENGINE_HOOKS.say(pick([
+  sayLogged(pick([
     `${p2.name} is ON FIRE — an absolute blazing run!`,
     `${p2.name} ERUPTS! There will be scorch marks on this hex!`,
     `Somebody check the grass — ${p2.name} just went FULL afterburner!`,
@@ -925,7 +944,7 @@ function think(dt){
       kick(txc,tyc,6.8,false);
       ball.zv=2.8;                       // it swings in high, whatever the distance
       if(farPost){ GKSTAT.farPost=(GKSTAT.farPost||0)+1;
-        if(Math.random()<0.6) ENGINE_HOOKS.say(pick([
+        if(Math.random()<0.6) sayLogged(pick([
           `Coach Eric's voice carries clear across the pitch: FAR POST! FAR POST!`,
           `You can hear Coach Eric from here — "FAR POST!" — and the ball obeys.`,
           `Far post, just like Coach Eric drills it at 91 Bulldogs practice.`]),true,"lowvoice");
@@ -977,7 +996,7 @@ function think(dt){
         kick(far.x+far.vx*7, far.y+far.vy*7, pw, false);
         ball.zv=3.4;   // up into the lights — headers await on the far side
         GKSTAT.punts++; ball.puntBy=owner.team;
-        ENGINE_HOOKS.say(pick([
+        sayLogged(pick([
           `${owner.name} LAUNCHES it — a drop kick clearing the county line!`,
           `${owner.name} sends it to the MOON. Somebody on the far side has a decision to make.`,
           `A monster punt from ${owner.name} — the ball has its own weather now.`,
@@ -985,7 +1004,7 @@ function think(dt){
       } else if(near&&nd2<180){
         GKSTAT.rolls++; if(fwdRoll)GKSTAT.rollsFwd++;
         kick(near.x+near.vx*8, near.y+near.vy*8, Math.min(6.5,nd2*0.04+3.5), false);
-        if(Math.random()<0.35) ENGINE_HOOKS.say(pick([
+        if(Math.random()<0.35) sayLogged(pick([
           `${owner.name} rolls it out calmly. Playing from the back.`,
           `${owner.name}, unhurried, feeds it short. Composure.`]),false);
       } else kick(CX,CY,9);
@@ -1035,7 +1054,7 @@ function think(dt){
             const scL=(0.6+0.8*RK)*(0.75+dGoal*0.0035);   // range punishes accuracy
             const offL=(Math.random()*2-1)*hw2*scL;
             ENGINE_HOOKS.spawnNote(owner.x,owner.y-24,"from distance!",TEAMS[owner.team].accent);
-            if(Math.random()<0.4) ENGINE_HOOKS.say(pick([
+            if(Math.random()<0.4) sayLogged(pick([
               `${owner.name} sees the lane and LETS FLY from range!`,
               `${owner.name} has a go from distance — dip and swerve!`,
               `No hesitation — ${owner.name} rips one from ${Math.round(dGoal/8)} yards!`,
@@ -1136,7 +1155,7 @@ function think(dt){
           ENGINE_HOOKS.showNotice(col, card==="second"?"🟨🟥 SECOND YELLOW":"🟥 RED CARD",
             `${o.name} (${shortT})`,
             `${PRN(o).His} crime: ${PRN(o).he} ${off}.${penTag}<br>OFF! The walk of shame begins — ${leftTxt}`, 5200);
-          ENGINE_HOOKS.say(pick([
+          sayLogged(pick([
             `🟥 <b>RED CARD!</b> ${o.name} is off — ${PRN(o).he} ${off}. ${tm(o.team)} play on a ${PRN(o).man} short!`,
             `🟥 <b>RED CARD!</b> ${o.name} is EXCOMMUNICADO — ${PRN(o).he} ${off}. No services, no help, and ${tm(o.team)} play a ${PRN(o).man} short!`,
             `🟥 <b>RED CARD!</b> Hasta la vista, ${o.name} — ${PRN(o).he} ${off}. ${PRN(o).He}'ll be back next match. ${tm(o.team)} a ${PRN(o).man} short!`,
@@ -1157,7 +1176,7 @@ function think(dt){
           addStoppage(3);
           ENGINE_HOOKS.showNotice(col,"🟨 YELLOW CARD",`${o.name} (${shortT})`,
             `${PRN(o).His} crime: ${PRN(o).he} ${off}. Into the book ${PRN(o).he} goes.${penTag}`, 4200);
-          ENGINE_HOOKS.say(pick([
+          sayLogged(pick([
             `🟨 ${o.name} is booked — ${off}.`,
             `🟨 ${o.name} booked — ${off}. The High Table has been notified.`,
             `🟨 A citation for ${o.name} — ${off}. One more directive violation and it's over.`,
@@ -1182,9 +1201,9 @@ function think(dt){
           ENGINE_HOOKS.showNotice(TEAMS[victim.team].color,"⚠️ PENALTY!",
             `${victim.name} is brought down in the box!`,
             `${o.name} ${off} — the referee points to the spot.`, 4600);
-          ENGINE_HOOKS.say(`<b style="color:${TEAMS[victim.team].color}">PENALTY to ${tm(victim.team)}!</b>`,true);
+          sayLogged(`<b style="color:${TEAMS[victim.team].color}">PENALTY to ${tm(victim.team)}!</b>`,true);
         } else if(Math.random()<0.5){
-          ENGINE_HOOKS.say(pick([
+          sayLogged(pick([
             `Free kick — ${o.name} ${off}.`,
             `The whistle goes. ${o.name} ${off}.`,
             `Referee's seen it: ${o.name} ${off}. Free kick.`]));
@@ -1211,7 +1230,7 @@ function think(dt){
           ENGINE_HOOKS.spawnNote(o.x,o.y-20,"tackle!",TEAMS[o.team].color,TEAMS[o.team].accent);
         }
         stam(o,+0.10); stam(victim,-0.12);
-        if(o.role!=="K" && Math.random()<0.28) ENGINE_HOOKS.say(pick([
+        if(o.role!=="K" && Math.random()<0.28) sayLogged(pick([
           `${o.name} muscles ${victim.name} off the ball!`,
           `Crunching challenge — ${o.name} strips it from ${victim.name}.`,
           `${o.name} picks ${victim.name}'s pocket!`,
@@ -1345,7 +1364,7 @@ function physics(dt){
     if(o.team!==lastPossessTeam){
       if(clockSec-lastPossessComment>6 && lastPossessTeam!==null){
         lastPossessComment=clockSec;
-        ENGINE_HOOKS.say(pick([
+        sayLogged(pick([
           `${o.name} wins it for ${tm(o.team)}.`,
           `${tm(o.team)} on the ball — ${o.name} carries.`,
           `Turnover! ${o.name} takes charge for ${tm(o.team)}.`,
@@ -1375,7 +1394,7 @@ function physics(dt){
           const tgt2=goalCenter(targets[win.team]??win.team);
           ball.lastTouch=win.team; ball.lastKicker=win;
           ENGINE_HOOKS.spawnNote(ball.x,ball.y-24,"header!",TEAMS[win.team].color,TEAMS[win.team].accent);
-          if(Math.random()<0.4) ENGINE_HOOKS.say(pick([
+          if(Math.random()<0.4) sayLogged(pick([
             `${win.name} rises highest!`,
             `Up goes ${win.name} — wins it in the air!`,
             `${win.name} climbs above the crowd!`,
@@ -1419,7 +1438,7 @@ function physics(dt){
       const strayer=(ball.strayF>0)?ball.strayer:null;
       if(ball.allyPass&&ball.lastKicker&&best.team!==ball.lastKicker.team&&allied(ball.lastKicker.team,best.team)
         &&Math.random()<0.5){
-        ENGINE_HOOKS.say(pick([
+        sayLogged(pick([
           `The alliance is real — ${ball.lastKicker.name} slips it to ${best.name}!`,
           `Enemy of my enemy: ${ball.lastKicker.name} finds ${best.name} across battle lines!`,
           `A pass BETWEEN teams! ${ball.lastKicker.name} to ${best.name} — the leader should worry.`,
@@ -1430,10 +1449,16 @@ function physics(dt){
       ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
       if(ball.flameShot&&best.role==="K") ENGINE_HOOKS.spawnNote(best.x,best.y-24,"🔥 extinguished!","#ffd166");
       ball.flameShot=false;
-      GKSTAT.claims=(GKSTAT.claims||0)+1; TEL.keeperClaims++;
+      // EVERY claim by ANYBODY, which is what this has always counted. I put it in the report
+      // labelled "keeper claims" and it read as 199 keeper touches in 170 seconds — a number that
+      // looked alarming and was simply mislabelled. 199 possession changes in 170 seconds is
+      // ordinary football, which is why nothing looked wrong to somebody watching.
+      GKSTAT.claims=(GKSTAT.claims||0)+1; TEL.claims++;
+      if(best.role==="K") TEL.gkClaims++;
       if(clockSec-(GKSTAT.lastClaimAt||-9)<0.45
          && Math.hypot(ball.x-(GKSTAT.lastClaimX||-999),ball.y-(GKSTAT.lastClaimY||-999))<70)
-        GKSTAT.rapid=(GKSTAT.rapid||0)+1;   // scramble signature: fast AND same spot
+        { GKSTAT.rapid=(GKSTAT.rapid||0)+1;   // scramble signature: fast AND same spot
+        TEL.rapid++; if(best.role==="K") TEL.gkRapid++; }
       GKSTAT.lastClaimAt=clockSec; GKSTAT.lastClaimX=ball.x; GKSTAT.lastClaimY=ball.y;
       if((typeof __NOCLEAR==="undefined")&&best.role!=="K"&&nowMs()>=restartHold){
         // CONFIDENT CLEAR: two+ wolves at the door — boot it out of the scramble first-time
@@ -1456,7 +1481,7 @@ function physics(dt){
           }
           kick(kx9, ky9, 7.6, false);
           ball.clearT=clockSec+0.4;                            // the escape guarantee: no claims, no headers, just OUT
-          if(Math.random()<0.18) ENGINE_HOOKS.say(pick([
+          if(Math.random()<0.18) sayLogged(pick([
             `${best.name} wants none of that scramble — hoofed clear!`,
             `No dwelling from ${best.name}. First time, out of the furnace.`,
             `${best.name} clears ${PRN(best).his} lines. Tidy is for open field.`]),false);
@@ -1491,7 +1516,7 @@ function physics(dt){
           ball.vx=dx3/dl3*spd*0.68; ball.vy=dy3/dl3*spd*0.68;
           ball.noClaim=best; ball.noClaimF=10; ball.isShot=false;
           ENGINE_HOOKS.spawnNote(best.x,best.y-22,"tipped wide!","#ffd166");
-          if(Math.random()<0.6) ENGINE_HOOKS.say(pick([
+          if(Math.random()<0.6) sayLogged(pick([
             `${best.name} can only parry it away!`,
             `Strong hands from ${best.name} — pushed wide, still live!`,
             `${best.name} tips it around... danger not cleared!`,
@@ -1502,7 +1527,7 @@ function physics(dt){
           return;
         }
         ENGINE_HOOKS.spawnNote(best.x,best.y-20,"SAVE!","#ffd166");
-        if(Math.random()<0.5) ENGINE_HOOKS.say(pick([
+        if(Math.random()<0.5) sayLogged(pick([
           `<span class="goal">SAVE!</span> ${best.name} denies ${kicker.name}!`,
           `What a stop by ${best.name} — ${kicker.name} can't believe it!`,
           `${kicker.name} lets fly... ${best.name} gets a strong hand to it!`,
@@ -1542,7 +1567,7 @@ function physics(dt){
       } else if(oobRule){
         if(d<2){
           if(ball.isShot && ball.lastKicker){
-            ENGINE_HOOKS.say(pick([
+            sayLogged(pick([
               `${ball.lastKicker.name} drags it wide!`,
               `Off target — ${ball.lastKicker.name} will want that one back.`,
               `${ball.lastKicker.name} leans back and it sails over!`,
@@ -1560,7 +1585,7 @@ function physics(dt){
         }
       } else {
         if(ball.isShot && ball.lastKicker){
-          ENGINE_HOOKS.say(pick([
+          sayLogged(pick([
             `${ball.lastKicker.name} drags it wide!`,
             `Off target — ${ball.lastKicker.name} will want that one back.`,
             `${ball.lastKicker.name} shoots... nowhere near it.`,
@@ -1642,20 +1667,20 @@ function goalScored(concederTeam){
       // two left: this goal settles it
       const champ=legit?scorerTeam:aliveTeams().find(t=>t!==concederTeam);
       if(legit&&scorer&&scorer.team===scorerTeam) goldenScorer=scorer;
-      ENGINE_HOOKS.say(`<span class="goal">⚽ GOLDEN GOAL!</span> ${name??tm(champ)} settles it!`,true);
+      sayLogged(`<span class="goal">⚽ GOLDEN GOAL!</span> ${name??tm(champ)} settles it!`,true);
       champInfo={t:champ,how:legit?`golden goal by ${name}`:`golden goal — own-goal heartbreak for ${TEAMS[concederTeam].name}`};
       ENGINE_HOOKS.crownChampion(champ, champInfo.how);
       return;
     }
     // three left: the conceder is eliminated, survivors play golden goal
-    ENGINE_HOOKS.say(`<span class="goal">💀 ELIMINATED!</span> ${tm(concederTeam)} concede in overtime and they're OUT!`,true);
+    sayLogged(`<span class="goal">💀 ELIMINATED!</span> ${tm(concederTeam)} concede in overtime and they're OUT!`,true);
     knockOut(concederTeam);          // the RULE, not just the announcement
     otGolden=true;
     const survivors=aliveTeams();
     ENGINE_HOOKS.showCelebration(TEAMS[concederTeam].color,"💀 ELIMINATED!",
       `${tm(concederTeam)} are out`,
       `${legit?name+" delivers the killing blow":"an own goal ends it"} — ${tm(survivors[0])} v ${tm(survivors[1])}, next goal wins`,"");
-    ENGINE_HOOKS.say(`Golden goal! ${tm(survivors[0])} against ${tm(survivors[1])} — next goal takes the title!`,true);
+    sayLogged(`Golden goal! ${tm(survivors[0])} against ${tm(survivors[1])} — next goal takes the title!`,true);
     computeTargets();
     ENGINE_HOOKS.flash(concederTeam);
     pendingKickoff=survivors[Math.floor(Math.random()*2)];
@@ -1676,7 +1701,7 @@ function goalScored(concederTeam){
         `${tm(scorerTeam)} climb to ${st2>0?"+":""}${st2}`,
         `${tm(scorerTeam)} +1, and ${tm(concederTeam)} pay the bill`,
         `${tm(scorerTeam)} +1, ${tm(concederTeam)} −1`]);
-    ENGINE_HOOKS.say(pick([
+    sayLogged(pick([
       `<span class="goal">⚽ GOOOAL!</span> ${name} beats ${keeper.name} — ${scoreline}!`,
       `<span class="goal">⚽ GOOOAL!</span> ${name} finds the net! ${scoreline}!`,
       `<span class="goal">⚽ IT'S IN!</span> ${keeper.name} rooted — ${name} scores! ${scoreline}!`,
@@ -1694,7 +1719,7 @@ function goalScored(concederTeam){
     if(momentumOn && wasTrailing){
       boostUntil[scorerTeam]=clockSec+20;
       caughtFire=true;
-      ENGINE_HOOKS.say(pick([
+      sayLogged(pick([
         `${tm(scorerTeam)} catch fire! 🔥 The underdogs are flying for the next 20 seconds.`,
         `🔥 Belief is a fuel — ${tm(scorerTeam)} are burning it! 20 seconds of fury!`,
         `The comeback spark! 🔥 ${tm(scorerTeam)} find another gear!`,
@@ -1706,7 +1731,7 @@ function goalScored(concederTeam){
       `beats ${keeper.name} · ${tm(concederTeam)} concede (${conceded[concederTeam]})`,
       caughtFire?`🔥 ${TEAMS[scorerTeam].name} catch fire — 20s boost!`:"");
   } else {
-    ENGINE_HOOKS.say(`<span class="goal">⚽ Own goal!</span> Chaos in the box and ${tm(concederTeam)} put it in their own net.`,true);
+    sayLogged(`<span class="goal">⚽ Own goal!</span> Chaos in the box and ${tm(concederTeam)} put it in their own net.`,true);
     ENGINE_HOOKS.showCelebration(TEAMS[concederTeam].color, "😱 OWN GOAL!",
       `${tm(concederTeam)} concede`,
       `chaos in the box — it's in their own net (${conceded[concederTeam]} conceded)`, "");
@@ -1727,11 +1752,13 @@ const TEL = {
   frames:0, loose:0, deadFrames:0, aerial:0,
   throwIns:0, corners:0, goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0,
   poss:[0,0,0], jumps:0, bigJumps:0, maxJump:0, lastX:null, lastY:null,
+  claims:0, gkClaims:0, rapid:0, gkRapid:0,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
 function telReset(){
   Object.assign(TEL, { frames:0, loose:0, deadFrames:0, aerial:0, throwIns:0, corners:0,
     goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0, poss:[0,0,0], jumps:0,
+    claims:0, gkClaims:0, rapid:0, gkRapid:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
 }
@@ -1783,7 +1810,10 @@ function buildMatchReport(){
   const p90=x=>Math.round(x*(5400/Math.max(1,secs)));
   md+=`| throw-ins | ${TEL.throwIns} | ${p90(TEL.throwIns)} | ~40 |\n`;
   md+=`| corners | ${TEL.corners} | ${p90(TEL.corners)} | ~10 |\n`;
-  md+=`| keeper claims | ${TEL.keeperClaims} | ${p90(TEL.keeperClaims)} | ~8 |\n`;
+  md+=`| possession changes | ${TEL.claims} | ${p90(TEL.claims)} | ~250 |\n`;
+  md+=`| of those, to a keeper | ${TEL.gkClaims} | ${p90(TEL.gkClaims)} | ~8 |\n`;
+  md+=`| **scrambles** (re-claim <0.45s, same spot) | ${TEL.rapid} | ${p90(TEL.rapid)} | rare |\n`;
+  md+=`| of those, a keeper juggling | ${TEL.gkRapid} | ${p90(TEL.gkRapid)} | ~0 |\n`;
   md+=`| ball loose | ${Math.round(100*TEL.loose/f)}% | | ~35% |\n`;
   md+=`| ball airborne | ${Math.round(100*TEL.aerial/f)}% | | ~20% |\n`;
   md+=`| in a keeper's gloves | ${Math.round(100*TEL.keeperFrames/ow)}% of owned | | ~5% |\n`;
@@ -1826,17 +1856,17 @@ function resolveFullTime(){
   // dead level at the top: golden-concession overtime
   phase="overtime";
   [0,1,2].filter(t=>!leaders.includes(t)).forEach(t=>{
-    ENGINE_HOOKS.say(`Full time — ${tm(t)} are eliminated on the tiebreak.`,true);
+    sayLogged(`Full time — ${tm(t)} are eliminated on the tiebreak.`,true);
     knockOut(t);
   });
   otGolden=(aliveTeams().length===2);
   if(otGolden){
-    ENGINE_HOOKS.say(`<span class="goal">FULL TIME — dead level!</span> ${tm(leaders[0])} v ${tm(leaders[1])}: golden goal, next score wins the title!`,true);
+    sayLogged(`<span class="goal">FULL TIME — dead level!</span> ${tm(leaders[0])} v ${tm(leaders[1])}: golden goal, next score wins the title!`,true);
     ENGINE_HOOKS.showCelebration("#f7c948","⏱️ OVERTIME",
       `${tm(leaders[0])} v ${tm(leaders[1])}`,
       `Golden goal — next score wins the title`,"");
   } else {
-    ENGINE_HOOKS.say(`<span class="goal">FULL TIME — all three level!</span> Golden-concession overtime: concede and you're OUT.`,true);
+    sayLogged(`<span class="goal">FULL TIME — all three level!</span> Golden-concession overtime: concede and you're OUT.`,true);
     ENGINE_HOOKS.showCelebration("#f7c948","⏱️ OVERTIME",
       `All three teams level`,
       `Golden concession — CONCEDE AND YOU'RE OUT`,"");
@@ -1886,7 +1916,7 @@ function colorCommentary(){
   // style & matchup color (~every 45s)
   if(clockSec-lastStyleAt>45&&Math.random()<0.4){
     const ls=styleLines();
-    if(ls.length){ lastStyleAt=clockSec; ENGINE_HOOKS.say(pick(ls)); }
+    if(ls.length){ lastStyleAt=clockSec; sayLogged(pick(ls)); }
   }
   // fatigue watch (~every 40s)
   if(clockSec-lastFatigueComment>40){
@@ -1897,7 +1927,7 @@ function colorCommentary(){
     }
     if(wv<0.55){
       lastFatigueComment=clockSec;
-      ENGINE_HOOKS.say(pick([
+      sayLogged(pick([
         `Legs are getting heavy for ${tm(worst)} — they're running on fumes.`,
         `${tm(worst)} look gassed out there. The pressing has taken its toll.`,
         `You can see ${tm(worst)} slowing down. Fatigue is real on the hex.`,
@@ -1914,7 +1944,7 @@ function colorCommentary(){
     const L=leaderIdx();
     const others=[0,1,2].filter(t=>t!==L);
     if(targets[others[0]]===L && targets[others[1]]===L){
-      ENGINE_HOOKS.say(pick([
+      sayLogged(pick([
         `The pincer is on — ${tm(others[0])} and ${tm(others[1])} are both hunting ${tm(L)}!`,
         `Nobody stays on top for long here: ${tm(L)} lead, so ${tm(others[0])} and ${tm(others[1])} have formed an alliance of convenience.`,
         `Two thieves who agree on the target: everyone wants a piece of ${tm(L)}.`,
@@ -2339,7 +2369,7 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
   pendingRestart={p:thr, x:sx, y:sy, team:thr.team, cap:nowMs()+2000, readyAt:nowMs()+1100};
   suppress={team:toucher,until:clockSec+0.8};
   ENGINE_HOOKS.spawnNote(sx,sy-24,"throw-in!",TEAMS[thr.team].color,TEAMS[thr.team].accent);
-  if(Math.random()<0.4) ENGINE_HOOKS.say(pick([
+  if(Math.random()<0.4) sayLogged(pick([
     `Out of play — throw-in ${tm(thr.team)}, quickly taken.`,
     `Into touch. ${thr.name} hurls it back in for ${tm(thr.team)}.`,
     `${tm(thr.team)} with the throw — no time wasted.`,
@@ -2352,7 +2382,7 @@ function stageGoalKick(t){
   ball.owner=gk; ball.lastTouch=t; ball.lastKicker=gk;
   ball.x=gk.x; ball.y=gk.y; ball.touchT=0.4;
   ENGINE_HOOKS.spawnNote(gk.x,gk.y-24,"goal kick",TEAMS[t].color,TEAMS[t].accent);
-  if(Math.random()<0.35) ENGINE_HOOKS.say(pick([
+  if(Math.random()<0.35) sayLogged(pick([
     `Behind for a goal kick — ${tm(t)} restart.`,
     `${gk.name} places it for the goal kick. Deep breath.`,
     `Nothing doing — goal kick ${tm(t)}.`,
@@ -2374,7 +2404,7 @@ function stageCorner(ownerT,e,ex,ey){
   cornerTaker=taker; cornerGoal=ownerT;
   restartHold=Math.max(restartHold,nowMs()+2900);   // corners earn a longer ceremony — let the box fill GKSTAT.cornerStage=(GKSTAT.cornerStage||0)+1;
   ENGINE_HOOKS.spawnNote(taker.x,taker.y-26,"corner!",TEAMS[att].color,TEAMS[att].accent);
-  ENGINE_HOOKS.say(pick([
+  sayLogged(pick([
     `<b style="color:${TEAMS[att].color}">Corner to ${tm(att)}</b> — ${taker.name} to swing it in...`,
     `<b style="color:${TEAMS[att].color}">Corner ${tm(att)}!</b> Big bodies forward... ${taker.name} over the flag.`,
     `<b style="color:${TEAMS[att].color}">Corner to ${tm(att)}</b> — the box fills. ${taker.name} whips it...`,
@@ -2398,7 +2428,7 @@ function stagePenalty(){
     if(d<170){ q.x=g.x+(q.x-g.x)/d*178; q.y=g.y+(q.y-g.y)/d*178; }});
   penaltyShooter=shooter; penaltyGoalTeam=conceder;
   ENGINE_HOOKS.spawnNote(sx,sy-28,"PENALTY!","#ffd166");
-  ENGINE_HOOKS.say(pick([
+  sayLogged(pick([
     `${shooter.name} places the ball on the spot... the keeper crouches...`,
     `${shooter.name} steps up. The stadium holds its breath...`,
     `Twelve yards between ${shooter.name} and glory. The keeper waits...`,
