@@ -985,6 +985,18 @@ const ACTIONS_LIVE = false;
 // rather than a per-action hesitance.
 const PLAY_ON_WEIGHT = 2800;
 
+/** The cascade's RK — a side's appetite for a shot. Named because both shot actions read it and
+ *  it was an inline expression in each.
+ *
+ *  ADDED AFTER THE FACT, and that is worth recording: the shots were filled and referenced this
+ *  before it existed. Dormant code does not crash, so a parse check and six green matches said
+ *  nothing was wrong. THAT IS THE COST OF THE SWITCH-OFF SPLIT — it buys safety on main and pays
+ *  in latent faults that surface only on the flip. Better to know that now than during it. */
+function riskOf(p){
+  const t=T(p.team);
+  return (t && t.risk!==undefined) ? t.risk : 0.5;
+}
+
 /** The keeper's outlet search, which three of his four actions need. Lifted from the cascade
  *  unchanged and computed once per call — the cascade did it once and branched; the list needs
  *  it available to each can(), which is the one real cost of the scored shape. */
