@@ -323,7 +323,7 @@
 <div id="coachMenu"><div id="cmCard"></div></div>
 <div id="teamPick"><div id="tpCard"></div></div>
 
-<script src="engine.js?v=63"></script>
+<script src="engine.js?v=64"></script>
 <script>
 function statBars(lib){   // display stats DERIVED from the engine bundle — the UI never lies
   const A={TikiTaka:4,RouteOne:3,Swashbuckle:5,Probe:3,Balanced:3};
@@ -653,7 +653,7 @@ if(speechOK) setInterval(()=>{
 },2000);
 
 let lastSayAt=-99;
-let NAME_COL=null, matchLog=[], champInfo=null, matchLive=false, matchBoards=[], lastChatterAt=-99;
+let NAME_COL=null, matchLog=[], matchLive=false, matchBoards=[], lastChatterAt=-99;   // champInfo is the engine's now
 let captionsOn=false, capToken=0;
 function showCaption(t){
   if(!captionsOn)return;
@@ -1176,6 +1176,7 @@ function loop(now){
         retargetTimer+=step;
         if(retargetTimer>6){retargetTimer=0;computeTargets();}
         think(step); physics(step); colorCommentary();
+        if (typeof telFrame === 'function') telFrame();   // telemetry for the match report
 
       }
       const m=Math.floor(clockSec/60), ss=String(Math.floor(clockSec%60)).padStart(2,"0");
