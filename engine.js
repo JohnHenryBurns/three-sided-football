@@ -706,6 +706,16 @@ function kick(tx,ty,power,isShot){
 // asked where anything can ask it.
 function holdingPlay(){ return nowMs() < restartHold; }
 
+// ── STATE THE INSTRUCTIONS NEED TO SEE ──────────────────────────────────────
+// An instruction can only be extracted once everything it reads is visible from outside think().
+// That is the main structural obstacle to finishing the extraction, and this is the fix: the
+// facts think() computes each frame live out here, so anything can ask.
+//
+// `chaser` is each side's nearest man to the ball — the one whose job it is to go and get it.
+// It was a `const` inside think(), recomputed every frame and invisible to everything else,
+// which is why prowling could not be extracted.
+let chaser = [null, null, null];
+
 function job(p, what, tier){
   TEL.jobFrames[what] = (TEL.jobFrames[what]||0) + 1;
   p.job = what;
@@ -1097,13 +1107,35 @@ const INSTRUCTIONS = [
       return true;
     } },
 
-  // PROWLING IS NOT EXTRACTABLE YET. It needs `chaser[]`, which is a local inside think() — the
-  // same class of problem as holdActive, and that one I solved with a predicate because the
-  // question was cheap to re-ask. `chaser` is a computed assignment, not a question, so hoisting
-  // it properly is its own change and I am not doing it inside an extraction.
+  // ── PROWLING ──────────────────────────────────────────────────────────────
+  // The chaser, while play is held: he orbits at 52 rather than standing over the ball. Ten
+  // yards, which is the distance a referee gives you — the engine already knew that, and the
+  // comment on the branch said "prowl the ten yards".
   //
-  // Left in the cascade and written into INSTRUCTIONS.md. The general shape: an instruction can
-  // only be extracted once everything it reads is visible from outside think().
+  // This needed `chaser[]` hoisted out of think() to be extractable at all, which is the
+  // structural change this commit is really about.
+  { name:'prowling', tier:TIER.PLAYER, base:390,
+    applies:p => !!(holdingPlay() && ball.owner && p===chaser[p.team]
+                    && ball.owner.team!==p.team && !p.out && !p.sentOff),
+    score:p => 390,
+    act:p => {
+      const dx3=p.x-ball.x, dy3=p.y-ball.y, d3=Math.hypot(dx3,dy3)||1;
+      steer(p, ball.x+dx3/d3*52, ball.y+dy3/d3*52, 1.9);
+      return true;
+    } },
+
+  // ── CLOSING THE BALL DOWN ─────────────────────────────────────────────────
+  // The same man when play is NOT held: he leads the ball by six frames rather than chasing
+  // where it is, and how hard he presses comes from his side's tactics. Extractable for the same
+  // reason — the chaser is now a fact anything can read.
+  { name:'closing it down', tier:TIER.PLAYER, base:395,
+    applies:p => !!(!holdingPlay() && p===chaser[p.team] && !p.out && !p.sentOff
+                    && (!ball.owner || ball.owner.team!==p.team)),
+    score:p => 395,
+    act:p => {
+      steer(p, ball.x+ball.vx*6, ball.y+ball.vy*6, 2.15+0.4*T(p.team).press);
+      return true;
+    } },
 
   // ── OFFERING AFTER A RESTART ──────────────────────────────────────────────
   // NOT explicit: he has taken it and is choosing to make himself available rather than chase.
@@ -1160,7 +1192,7 @@ function think(dt){
     players.forEach(q=>{ if(q.team!==ball.owner.team&&!q.out&&!q.sentOff&&q.role!=="K"&&dist(q,ball.owner)<55)GKSTAT.scrumOpp++; });
   }
   const oppOf=t=>players.filter(p=>p.team!==t&&!p.out&&!p.sentOff);
-  const chaser=[];
+  // computed here as before, but into the shared array rather than a local
   for(let t=0;t<3;t++){
     let best=null,bd=1e9;
     players.forEach(p=>{ if(p.team===t&&(p.role!=="K"||FL[t]===0)&&!p.out&&!p.sentOff){const d=dist(p,ball); if(d<bd){bd=d;best=p;}}});
