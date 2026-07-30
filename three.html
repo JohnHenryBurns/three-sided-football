@@ -461,7 +461,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=71"></script>
+<script src="engine.js?v=72"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1945,9 +1945,27 @@ let drawGL = function drawGL(){
         b.g.scale.set(0.72, SIT, 0.72);                    // squat, not shrunk: still his width
       }
     } else {
-      b.g.position.set(p.x, 0, p.y);
+      b.g.position.set(p.x, p._jump || 0, p.y);
       b.g.rotation.y = -Math.atan2(p.hy, p.hx);
       b.g.scale.setScalar(1);
+      // ── THE JUMP ────────────────────────────────────────────────────────
+      // A header is the one moment a footballer leaves the ground, and nobody here ever did. The
+      // engine's threshold for "too high to control" is ball.z > 34, and a player is 34 tall —
+      // so a ball in the header band is, by the engine's own arithmetic, exactly at the top of
+      // somebody's head. That is a jump waiting to be drawn.
+      //
+      // Render-only: it does not change who wins the ball, which the simulation decides. It
+      // shows the contest that was already happening.
+      const bz2 = Math.max(0, ball.z || 0);
+      const nearBall = Math.hypot(p.x - ball.x, p.y - ball.y) < R_P + 14;
+      if (!p.out && nearBall && bz2 > H_P * 0.62 && bz2 < H_P + 30) {
+        // How high he needs to go to meet it, capped so nobody levitates.
+        const want = Math.min(16, Math.max(0, bz2 - H_P * 0.78));
+        p._jump = Math.max(p._jump || 0, want);
+      }
+      p._jump = (p._jump || 0) * 0.86;            // and back down, quickly
+      if (p._jump < 0.3) p._jump = 0;
+
       // ── THE DIVE ────────────────────────────────────────────────────────
       // A keeper spends 0.6 of his burst to reach 23 instead of 17 for 1.2 seconds, and NEITHER
       // page has ever drawn it — the most consequential number in the mechanic was invisible,
@@ -1970,7 +1988,7 @@ let drawGL = function drawGL(){
         b.g.position.y = Math.sin(lean) * R_P * 0.5;         // the pivot is his feet, not his middle
       } else {
         b.g.rotation.z = 0;
-        b.g.position.y = 0;
+        b.g.position.y = p._jump || 0;   // a keeper who is not diving can still jump
       }
     }
     // ONLY WHOEVER HAS THE BALL IS NAMED. Fifteen labels over fifteen cylinders is a wall of
