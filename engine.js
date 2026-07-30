@@ -478,7 +478,7 @@ function kickoff(toTeam){
   telPort('kickoff'); ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
   ball.touchT=0; ball.strayer=null; ball.strayF=0; ball.z=0; ball.zv=0;
   cornerTaker=null; cornerGoal=null; restartHold=0; pendingRestart=null; throwPending=null;
-  freeKick=null;
+  freeKick=null; goalRestart=null;
   const fwd=players.find(p=>p.team===toTeam&&p.role==="F"&&!p.out&&!p.sentOff)
     ||players.find(p=>p.team===toTeam&&p.role!=="K"&&!p.out&&!p.sentOff)
     ||players.find(p=>p.team===toTeam&&p.role==="K"&&!p.out);
@@ -722,6 +722,30 @@ function DEAD(who){ DEADHIT[who] = (DEADHIT[who]||0) + 1; }
 // It was a `const` inside think(), recomputed every frame and invisible to everything else,
 // which is why prowling could not be extracted.
 let chaser = [null, null, null];
+
+// ── THE GOAL RESTART ────────────────────────────────────────────────────────
+// A goal is the most choreographed moment in the game and it was pure front-end animation: the
+// ball's flight back, the taker walking out, everybody drifting into shape — all of it in
+// three.html, none of it in the engine, and the flat page got none of it.
+//
+// So it was not a script in the sense we have been using the word. It was a picture of one.
+//
+// Now the engine owns it: who fetches, who takes it, and where everybody else stands. SCRIPT
+// tier, because a restart is the game doing something to the players rather than the players
+// deciding — and a renderer that wants to draw it can read the same state.
+let goalRestart = null;   // { conceder, taker, fetcher, until }
+
+/** Called when a goal is given. Names the parts; the instructions play them. */
+function stageGoalRestart(concederTeam, scorerTeam){
+  const kicking = (scorerTeam!==null && scorerTeam!==undefined) ? concederTeam : concederTeam;
+  // whoever is nearest the ball goes and gets it, whatever shirt he is wearing — that is what
+  // happens, and it is often not the side who will take the kick-off
+  let fetcher=null, fd=1e9;
+  players.forEach(q=>{ if(q.out||q.sentOff) return; const d=dist(q,ball); if(d<fd){fd=d;fetcher=q;} });
+  const taker = players.find(q=>q.team===kicking && q.role==='F' && !q.out && !q.sentOff)
+             || players.find(q=>q.team===kicking && q.role!=='K' && !q.out && !q.sentOff) || null;
+  goalRestart = { conceder:concederTeam, kicking, taker, fetcher, at:clockSec };
+}
 
 function job(p, what, tier){
   TEL.jobFrames[what] = (TEL.jobFrames[what]||0) + 1;
@@ -1293,6 +1317,43 @@ const INSTRUCTIONS = [
       const og9=goalCenter(p.team);
       const ax=p.x-og9.x, ay=p.y-og9.y, al9=Math.hypot(ax,ay)||1;
       steer(p, og9.x+ax/al9*250, og9.y+ay/al9*250, 1.9);
+      return true;
+    } },
+
+  // ── AFTER A GOAL: FETCH IT ────────────────────────────────────────────────
+  // SCRIPT. Whoever was nearest goes and gets the ball, whatever shirt he is wearing — which is
+  // what actually happens, and it is often not the side taking the kick-off.
+  { name:'retrieving after a goal', tier:TIER.SCRIPT, base:950,
+    applies:p => !!(goalRestart && goalRestart.fetcher===p && !p.out && !p.sentOff),
+    score:p => 950,
+    act:p => { steer(p, ball.x, ball.y, 2.4); return true; } },
+
+  // ── AFTER A GOAL: TAKE THE KICK-OFF ───────────────────────────────────────
+  // SCRIPT. The man who will restart it walks to the spot and waits, which is why the ball
+  // arriving at the centre should meet somebody rather than a bare patch of grass.
+  { name:'walking to the spot', tier:TIER.SCRIPT, base:945,
+    applies:p => !!(goalRestart && goalRestart.taker===p && !p.out && !p.sentOff),
+    score:p => 945,
+    act:p => { steer(p, CX-8, CY, 2.2); return true; } },
+
+  // ── AFTER A GOAL: EVERYBODY ELSE ──────────────────────────────────────────
+  // SCRIPT, and the reason the whole thing is one: fifteen players walking into a formation is
+  // choreography, not fifteen decisions that happen to agree.
+  //
+  // Each side gathers in ITS OWN THIRD of the hex — the third containing its own goal — spread
+  // laterally by the same stable hash the corner waves use, so a formation forms without anybody
+  // being told a slot.
+  { name:'taking up position', tier:TIER.SCRIPT, base:940,
+    applies:p => !!(goalRestart && goalRestart.fetcher!==p && goalRestart.taker!==p
+                    && !p.out && !p.sentOff && p.role!=='K'),
+    score:p => 940,
+    act:p => {
+      const own=goalCenter(p.team);
+      const ax=CX-own.x, ay=CY-own.y, al=Math.hypot(ax,ay)||1;
+      const px=-ay/al, py=ax/al;
+      const lat=((p.k1*911)%1-0.5)*180;
+      const dep=0.45+((p.k2*631)%1)*0.25;          // 45-70% of the way to the middle
+      steer(p, own.x+ax*dep+px*lat, own.y+ay*dep+py*lat, 2.0);
       return true;
     } },
 
@@ -2691,6 +2752,7 @@ const RED_OFFENSES=[
   "declared the penalty area sovereign territory and defended the border"];
 
 function goalScored(concederTeam){
+  stageGoalRestart(concederTeam, ball.shotBy);
   // A GOAL BELONGS TO WHOEVER SHOT IT, not to whoever touched it last.
   //
   // `lastTouch` was doing both jobs, so any defensive touch on the way in — a keeper's fingertips,
