@@ -706,6 +706,13 @@ function kick(tx,ty,power,isShot){
 // asked where anything can ask it.
 function holdingPlay(){ return nowMs() < restartHold; }
 
+// ── IS IT ACTUALLY DEAD? ────────────────────────────────────────────────────
+// Eight cascade branches duplicate instructions that are now live. They SHOULD be unreachable —
+// the list scores first and returns — but "should be" is how you delete something that was still
+// running. This records any that fire, so deletion is evidence-led rather than confident.
+const DEADHIT = {};
+function DEAD(who){ DEADHIT[who] = (DEADHIT[who]||0) + 1; }
+
 // ── STATE THE INSTRUCTIONS NEED TO SEE ──────────────────────────────────────
 // An instruction can only be extracted once everything it reads is visible from outside think().
 // That is the main structural obstacle to finishing the extraction, and this is the fix: the
@@ -1619,6 +1626,7 @@ function think(dt){
     } else if(p===chaser[p.team] && (!owner || owner.team!==p.team)){
       if(holdActive&&owner){
         const dx3=p.x-ball.x, dy3=p.y-ball.y, d3=Math.hypot(dx3,dy3)||1;
+      DEAD('prowling');
         steer(p, ball.x+dx3/d3*52, ball.y+dy3/d3*52, 1.9);   // prowl the ten yards
       } else
       steer(p, ball.x+ball.vx*6, ball.y+ball.vy*6, 2.15+0.4*T(p.team).press);
