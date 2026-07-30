@@ -222,6 +222,21 @@ function play(opts){
     },
     poss: own.map(x => 100 * x / owned),
     possGap: Math.max(...own.map(x => 100*x/owned)) - Math.min(...own.map(x => 100*x/owned)),
+    // ── IS THIS MATCH USABLE? ───────────────────────────────────────────────
+    // Roughly one in ten comes out degenerate. It is NOT a fixed code path: instrumenting it
+    // consumes Math.random(), the sequence shifts, and the match comes out normal — so it is a
+    // state the sim occasionally falls into rather than a branch that is wrong.
+    //
+    // For calibration the distinction matters less than the handling: a sweep must not average a
+    // broken match in with nine good ones, because one at 87% loose moves a mean by three points
+    // and nothing in the result says why.
+    //
+    // So every match says whether it is usable and WHY NOT, and a sweep can discard and count.
+    // If that count climbs, something has been broken rather than tuned.
+    ok: !(100*loose/frames > 75 || 100*loose/frames < 45 || crowd/frames < 1.4),
+    why: 100*loose/frames > 75 ? 'nobody chasing'
+       : 100*loose/frames < 45 ? 'ball held too long'
+       : crowd/frames < 1.4    ? 'nobody near the ball' : null,
     loosePct: 100 * loose / frames,
     aerialPct: 100 * aerial / frames,
     keeperPct: 100 * keeper / owned,
