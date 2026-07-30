@@ -373,6 +373,41 @@ distinction is what the runner was built for and these are the first two to use 
 and gassed-carrier terms becomes a score of ~47, which is 1.5% of the frames a tackler is
 in range. Every factor survives as a term.
 
+## The flip, attempt two: the crash is fixed, the behaviour is not
+
+**It runs.** No crash, six matches to completion. That is real progress — the crash took
+three attempts and is now gone at the root rather than guarded.
+
+**What fixed it, in order of how much it mattered:**
+
+1. **`dive` became a keeper action.** The shooter no longer reaches across to move a
+   goalkeeper.
+2. **`tackle` became a tackler's action.** The carrier no longer rolls dice for his own
+   tacklers.
+3. **The owner block requires a *current* owner** — `if(owner && ball.owner===owner)`.
+   `owner` is captured before the player loop; an action may have taken the ball since,
+   and a block that reasons about a man in possession is wrong when he no longer has it.
+
+That third line is the crash in one condition. **Not a guard on twelve call sites: a
+statement that a block about the ball's owner requires the ball's owner.**
+
+### And then it stalls
+
+```
+0/6 usable   loose 84-88% on every seed   "nobody chasing"
+```
+
+The ball sits. **The ported actions do not reproduce what the cascade was doing** — most
+likely their `can()` prerequisites are stricter than the branches they replaced, so
+restarts never complete and nobody takes possession.
+
+**That is a behaviour gap, not a structural one**, and it is the right kind of problem to
+be left with: fifteen named actions whose conditions can be checked one at a time against
+a seed, rather than a crash whose cause is somewhere in 495 lines.
+
+**Next:** instrument which actions fire during a flipped match and which never do. The
+ones that never fire are the ones whose `can()` is wrong.
+
 ## Order
 
 1. find the common shape, or establish that there isn't one
