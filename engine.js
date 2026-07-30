@@ -627,6 +627,9 @@ function steer(p,tx,ty,maxV){
   const v=Math.hypot(p.vx,p.vy); if(v>maxV){p.vx*=maxV/v;p.vy*=maxV/v;}
 }
 function kick(tx,ty,power,isShot){
+  // A CORNER TAKER DOES NOT CHASE HIS OWN CORNER either — same reasoning as the throw. He is
+  // forty yards from where it lands and has no business arriving before it.
+  if(cornerPending===ball.owner && ball.owner){ ball.owner.noChase=clockSec+1.8; }
   cornerPending=null; cornerSpot=null;   // struck: the pin is released
   const o=ball.owner;
   ball.allyPass=false;
@@ -970,6 +973,16 @@ function think(dt){
       //
       // The 0.55 is how eager he is. Lower reads as chaotic, higher as psychic; this is the dial
       // between the two and wants watching rather than solving.
+      // A MAN WHO HAS JUST RESTARTED PLAY DOES NOT CHASE IT. He offers himself instead — back
+      // onto the pitch, at passing distance, facing the ball. Without this the taker and the ball
+      // travel together and the restart looks like a dribble.
+      if(p.noChase && clockSec<p.noChase){
+        const bx8=ball.x-p.x, by8=ball.y-p.y, bl8=Math.hypot(bx8,by8)||1;
+        const inward={x:CX-p.x, y:CY-p.y}, il=Math.hypot(inward.x,inward.y)||1;
+        steer(p, p.x+inward.x/il*40, p.y+inward.y/il*40, 1.6);
+        p.hx=bx8/bl8; p.hy=by8/bl8;                 // watching where it went
+        return;
+      }
       if(!ball.owner && ball.z>H_HEAD*0.8 && ball.zv<0 && bd7<34 && p.jz<=0 && Math.random()<0.55){
         tryJump(p, ball.z>H_HEAD*1.3 && p.burst>0.7);
       }
@@ -1082,6 +1095,16 @@ function think(dt){
     if(holdActive){ owner.vx*=0.85; owner.vy*=0.85; return; }
     if(throwPending===owner){
       throwPending=null;
+      // ── HE THROWS IT AND STAYS ────────────────────────────────────────────
+      // The general chase logic took over the instant the ball left him, so the thrower sprinted
+      // after his own throw and the two moved as one — which reads as carrying it in, not
+      // throwing it.
+      //
+      // A thrower does not chase. He steps back onto the pitch and offers himself for the return,
+      // which is what the man who took a throw-in is actually doing while you watch the ball.
+      // 1.4 seconds is long enough for the ball to get somewhere without him.
+      owner.noChase=clockSec+1.4;
+      owner.jz=Math.max(owner.jz||0, 0.01); owner.jzv=1.6;   // the hop off the line
       const mates=players.filter(m=>m.team===owner.team&&m!==owner&&!m.out&&!m.sentOff);
       let pickM=null,bs=-1e9;
       mates.forEach(m=>{
