@@ -478,7 +478,23 @@ function kickoff(toTeam){
   telPort('kickoff'); ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
   ball.touchT=0; ball.strayer=null; ball.strayF=0; ball.z=0; ball.zv=0;
   cornerTaker=null; cornerGoal=null; restartHold=0; pendingRestart=null; throwPending=null;
-  freeKick=null; goalRestart=null;
+  // ── EVERY PIECE OF PER-MATCH STATE, CLEARED ────────────────────────────────
+  // A match could begin holding a stale free kick, a stale goal restart, or a chaser pointing at
+  // a player from the previous game — because these are module-level and resetMatch() did not
+  // touch them. Run one match and it is invisible; run ten back to back and roughly one in ten
+  // starts in somebody else's leftovers.
+  //
+  // THE BROWSER NEVER SHOWED IT because a page load is a fresh module. Eleven real matches, all
+  // normal, while the harness produced 27%-loose and 87%-loose matches — and I spent three
+  // commits treating that as a property of the game.
+  //
+  // FIVE OF THESE I ADDED TODAY: chaser, goalRestart, walking, cornerPending, freeKick. Each one
+  // was hoisted to module scope so instructions could see it, and each time I did not ask what
+  // clears it.
+  freeKick=null; goalRestart=null; walking=null; cornerPending=null; cornerSpot=null;
+  chaser=[null,null,null];
+  retargetTimer=0; celebrateUntil=0; camFocusP=null; camFocusUntil=0;
+  lastBlazeSay=-99; lastStyleAt=-99; recentChatter=[];
   const fwd=players.find(p=>p.team===toTeam&&p.role==="F"&&!p.out&&!p.sentOff)
     ||players.find(p=>p.team===toTeam&&p.role!=="K"&&!p.out&&!p.sentOff)
     ||players.find(p=>p.team===toTeam&&p.role==="K"&&!p.out);
