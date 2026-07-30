@@ -985,6 +985,20 @@ const ACTIONS_LIVE = false;
 // rather than a per-action hesitance.
 const PLAY_ON_WEIGHT = 2800;
 
+// THE SETUP NO-OP. A mandated action competes against this while it ripens, so a restart is
+// taken on a sampled frame rather than a scheduled one. Smaller than PLAY_ON_WEIGHT because a
+// restart should not take all day: an action ripening at 400 a second crosses this in about two
+// seconds and is nearly certain by four.
+const SETUP_WEIGHT = 900;
+
+/** How ripe a mandated action is. Grows from nothing to well past SETUP_WEIGHT, so it is
+ *  unlikely at first, likely soon, and effectively certain in the end — without a deadline
+ *  anywhere. `rate` is where a side's urgency enters. */
+function ripeness(since, rate){
+  const t = Math.max(0, clockSec - since);
+  return t*t*rate;            // quadratic: hesitant, then decisive, which is how people are
+}
+
 /** The cascade's RK — a side's appetite for a shot. Named because both shot actions read it and
  *  it was an inline expression in each.
  *
@@ -1071,23 +1085,63 @@ const PORTED = [
       return true;
     } },
 
+  // ── THE THROW ─────────────────────────────────────────────────────────────
+  // It RIPENS rather than waiting on readyAt. A side with tempo takes it quickly; a side that
+  // wants to settle takes its time; and which frame it actually lands on is sampled, so no two
+  // throw-ins in a match look alike.
+  //
+  // That replaces `readyAt: nowMs()+1100` — a constant that made every throw identical and could
+  // not be quick even when quick was right.
   { name:'throw-in', tier:TIER.SCRIPT, ported:true,
     coach:T => 0,
     can:p => !!(throwPending===p && ball.owner===p),
-    score:p => 400,
-    act:p => { return false; } },      // the cascade's target logic moves here on the flip
+    score:p => ripeness(p.restartSince||clockSec, 260 + 340*T(p.team).direct),
+    act:p => {
+      const best=bestPass(p);
+      const tgt = best || players.find(m=>m.team===p.team && m!==p && onPitch(m) && m.role!=='K');
+      if(!tgt){ kick(CX,CY,6); return true; }
+      kick(tgt.x+tgt.vx*6, tgt.y+tgt.vy*6, Math.min(6.4, Math.max(2.8, dist(tgt,p)/66*1.15)), false);
+      const throwD=dist(tgt,p);
+      ball.zv = 2.6 + Math.min(1.6, throwD/260*1.6);
+      throwPending=null;
+      return true;
+    } },      // the cascade's target logic moves here on the flip
 
+  // ── THE PENALTY ───────────────────────────────────────────────────────────
+  // Ripens slowest of the three. A penalty is the one restart where the pause IS the drama, and
+  // nothing about a side's tempo should hurry it — no coach weight, no direct term.
   { name:'penalty', tier:TIER.SCRIPT, ported:true,
     coach:T => 0,
     can:p => !!(penaltyShooter===p && ball.owner===p),
-    score:p => 500,
-    act:p => { return false; } },
+    score:p => ripeness(p.restartSince||clockSec, 130),
+    act:p => { return false; } },   // the cascade's penalty body is elaborate; it moves at the flip
 
+  // ── THE FREE KICK ─────────────────────────────────────────────────────────
+  // Ripens too, but from the moment the wall is legal rather than from the award — waiting for
+  // ten yards is not hesitation, it is the rule. A direct side ripens faster, which is a quick
+  // free kick becoming a tactic rather than a coin toss.
   { name:'free-kick', tier:TIER.SCRIPT, ported:true,
     coach:T => 0,
-    can:p => !!(freeKick && freeKick.taker===p && freeKick.done && ball.owner===p),
-    score:p => 400,
-    act:p => { return false; } },
+    can:p => !!(freeKick && freeKick.taker===p && ball.owner===p),
+    score:p => ripeness(freeKick ? freeKick.at : clockSec, 200 + 300*T(p.team).direct),
+    act:p => {
+      const aim = (freeKick && freeKick.aim!==undefined) ? freeKick.aim : targets[p.team];
+      const tgt = goalCenter(aim);
+      const d9 = dist(p,tgt);
+      if(d9 < 250){                                  // in range: have a go
+        const e=EDGES[GOAL_EDGE[aim]];
+        const off=(RNG()*2-1)*e.len*GOAL_HALF*0.8;
+        kick(tgt.x+e.ux*off, tgt.y+e.uy*off, 10.6, true);
+        gkDiveCheck(aim, false);
+      } else {
+        const best=bestPass(p);
+        if(best) kick(best.x+best.vx*8, best.y+best.vy*8, Math.min(8, dist(best,p)/66*1.15));
+        else kick(tgt.x, tgt.y, 8.4, false);
+      }
+      freeKick=null;
+      p.noChase=clockSec+1.0;
+      return true;
+    } },
 
   // ── PLAYER: his call, weighted by the bench ───────────────────────────────
   // The keeper's four. gk-clear is PLAYER tier now, not COACH — John's correction: the bench
@@ -1412,7 +1466,20 @@ function runAction(p){
     total += w;
     return w;
   });
+  // ── AND A NO-OP AT SCRIPT TIER TOO ────────────────────────────────────────
+  // John's idea, and it removes every hardcoded restart delay in the engine. A mandated action
+  // does not fire the instant it is legal; it RIPENS. Its weight grows each frame against a fixed
+  // no-op, so the probability of it happening rises from nearly nothing to a certainty — and
+  // WHICH frame it lands on is sampled rather than set.
+  //
+  // That is the variable pause John asked for on throws, corners and kick-offs, and "sometimes
+  // they can move quick" falls out of it rather than being a special case. A quick throw is not
+  // a different rule; it is the tail of the same distribution.
+  //
+  // The growth rate is where tactics reach it: a side that wants tempo ripens fast, one that
+  // wants to settle ripens slowly. Same action, different urgency, no second code path.
   if(topTier===TIER.PLAYER) total += PLAY_ON_WEIGHT;
+  else if(topTier===TIER.SCRIPT) total += SETUP_WEIGHT;
 
   let r = RNG()*total;
   for(let i=0;i<pool.length;i++){
