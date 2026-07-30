@@ -165,9 +165,17 @@ function buildPitch(){
   const shape = new THREE.Shape();
   V.forEach((p, i) => i ? shape.lineTo(p.x, p.y) : shape.moveTo(p.x, p.y));
   shape.closePath();
+  // THE GRASS WAS BLACK. A Shape is built in the XY plane and its normals point along +Z;
+  // rotating the mesh -90 degrees about X lays it flat and points every normal at the floor, so
+  // the sun lit the underside and the top got nothing but ambient. Rotating +90 and taking the
+  // other side is the fix, and DoubleSide means it cannot happen again from the other direction.
   const grass = new THREE.Mesh(new THREE.ShapeGeometry(shape),
-    new THREE.MeshLambertMaterial({ color: 0x1e5a2c }));
-  grass.rotation.x = -Math.PI/2;
+    new THREE.MeshLambertMaterial({ color: 0x2a6b38, side: THREE.DoubleSide }));
+  // PLUS ninety, not minus. A Shape lives in XY and rotating it -90 about X sends (x,y) to
+  // (x,0,-y) — the pitch came out mirrored through the centre line, sitting south of the players
+  // who are placed at z = +p.y. The lines were built as explicit Vector3s with y as z, so THEY
+  // were right, which is why the markings and the grass disagreed.
+  grass.rotation.x = Math.PI/2;
   scene.add(grass);
 
   const lineMat = new THREE.LineBasicMaterial({ color: 0xdfe8df, transparent: true, opacity: 0.5 });
@@ -221,10 +229,23 @@ function buildBodies(){
         new THREE.MeshLambertMaterial({ color: new THREE.Color(TEAMS[p.team].accent) }));
       band.position.y = H_P - 6; g.add(band);
     }
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(5, 12, 8),
-      new THREE.MeshLambertMaterial({ color: new THREE.Color(TEAMS[p.team].accent) }));
-    nose.rotation.z = -Math.PI/2;
-    nose.position.set(R_P + 4, H_P*0.62, 0); g.add(nose);
+    // EYES, NOT A BEAK. A cone on the front pointed the way the player faced and read as a bird,
+    // which my four-year-old reviewer spotted before I did. Two eyes carry the same information —
+    // you can see which way something is looking — and a face is easier to read at a glance than
+    // an arrow, because reading faces is a thing people are extremely good at.
+    //
+    // Set slightly apart and slightly forward, so the direction is legible in profile as well as
+    // head on: from the side you see one eye, which is still a heading.
+    const eyeW = new THREE.MeshLambertMaterial({ color: 0xf6f8f6 });
+    const eyeD = new THREE.MeshBasicMaterial({ color: 0x14181a });
+    for (const side of [-1, 1]) {
+      const white = new THREE.Mesh(new THREE.SphereGeometry(3.1, 10, 8), eyeW);
+      white.position.set(R_P - 1.4, H_P * 0.74, side * 4.2);
+      g.add(white);
+      const pupil = new THREE.Mesh(new THREE.SphereGeometry(1.5, 8, 6), eyeD);
+      pupil.position.set(R_P + 1.2, H_P * 0.74, side * 4.2);
+      g.add(pupil);
+    }
     // stamina, as a ring on the grass. The 2D page shortened an arc; from a raised camera an arc
     // is unreadable, so the value lives in colour, opacity and radius instead.
     const ring = new THREE.Mesh(new THREE.RingGeometry(R_P + 3, R_P + 7, 24),
