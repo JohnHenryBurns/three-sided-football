@@ -107,6 +107,10 @@ button.on{border-color:var(--hot);color:var(--hot)}
 #celeCard .sub{font-size:.9rem;color:var(--ink-dim);margin-top:.3rem}
 /* The flavour line, in the card's own colour — it is the bit with the joke in it. */
 #celeCard .fire{font-size:.92rem;font-weight:600;color:var(--cele,#ffd166);margin-top:.45rem}
+/* The commentary's own line, under the facts. Smaller than the headline and looser than the
+   sub, because it is a sentence rather than a stat. */
+#celeCard .flav{font-size:.94rem;line-height:1.32;margin-top:.5rem;
+  padding-top:.5rem;border-top:1px solid var(--panel-edge)}
 @media (max-width:560px){ #celeCard .big{font-size:1.5rem} }
 
 /* Confetti. Twenty-eight strips is enough to read as celebration and few enough
@@ -349,7 +353,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=19"></script>
+<script src="engine.js?v=20"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -358,6 +362,23 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
 const feedEl = document.getElementById('feed');
 function say(html, big){
   announce(html, big);
+  // THE CARD SITS ON TOP OF THE FEED, so a goal's flavour line — the good one, "HOLY HAND
+  // GRENADE from Kane", "John Wick calm, one look one finish" — arrived in the feed at exactly
+  // the moment the celebration was covering it, and was gone by the time the card lifted.
+  //
+  // A big line while a card is up belongs ON the card. It is the same event described twice: the
+  // hook gives the facts, the commentary gives the flavour, and separating them across two
+  // layers means you only ever see the facts.
+  if (big && celeUntil && celeCard) {
+    const slot = celeCard.querySelector('.flav');
+    if (slot) slot.innerHTML = html;
+    else {
+      const d = document.createElement('div');
+      d.className = 'flav';
+      d.innerHTML = html;
+      celeCard.appendChild(d);
+    }
+  }
   const p = document.createElement('p');
   p.innerHTML = String(html || '');
   if (big) p.className = 'goal';
@@ -494,12 +515,55 @@ function buildPitch(){
   const lineMat = new THREE.LineBasicMaterial({ color: 0xdfe8df, transparent: true, opacity: 0.5 });
   scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(
     V.concat([V[0]]).map(p => new THREE.Vector3(p.x, 0.7, p.y))), lineMat));
-  const circ = [];
-  for (let k = 0; k <= 64; k++) {
-    const a = k/64 * Math.PI*2;
-    circ.push(new THREE.Vector3(CX + 92*Math.cos(a), 0.7, CY + 92*Math.sin(a)));
-  }
-  scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(circ), lineMat));
+  // A closed ring of points, at the flat page's own radius of 70 rather than the 92 I guessed.
+  const ring = (r, cx, cy, from, to) => {
+    const pts = [];
+    const a0 = from === undefined ? 0 : from, a1 = to === undefined ? Math.PI*2 : to;
+    for (let k = 0; k <= 64; k++) {
+      const a = a0 + (a1 - a0) * k/64;
+      pts.push(new THREE.Vector3((cx === undefined ? CX : cx) + r*Math.cos(a), 0.7,
+                                 (cy === undefined ? CY : cy) + r*Math.sin(a)));
+    }
+    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat));
+  };
+  ring(70);
+  scene.add(new THREE.Mesh(new THREE.CircleGeometry(4, 10),
+    new THREE.MeshBasicMaterial({ color: 0xdfe8df })).rotateX(Math.PI/2));
+
+  // THE HEX DIVISIONS. Dashed spokes from the centre to the three NON-goal edges, which is what
+  // divides the pitch into three thirds — one per team. Two-goal football has a halfway line;
+  // this is the three-sided equivalent and the flat page draws it.
+  [1, 3, 5].forEach(k => {
+    const e = EDGES[k], pts = [];
+    for (let i = 0; i <= 22; i++) {            // dashes, as short segments
+      if (i % 2) continue;
+      const t0 = i/22, t1 = Math.min(1, (i+1)/22);
+      const g = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(CX + (e.mx-CX)*t0, 0.7, CY + (e.my-CY)*t0),
+        new THREE.Vector3(CX + (e.mx-CX)*t1, 0.7, CY + (e.my-CY)*t1)]);
+      scene.add(new THREE.Line(g, lineMat));
+    }
+  });
+
+  // THE PENALTY ARCS. One in front of each goal, at the distance the engine actually uses for
+  // the zone rule rather than a number that merely looks right — a line the ball ignores is
+  // worse than no line.
+  // 112, taken from the rule rather than chosen. Two numbers live in that code: the ball opens
+  // the zone at 110, and a player who strays inside is pushed back out to 112. The one you can
+  // SEE is 112 — it is where attackers visibly stop — so that is the one to draw. A line at any
+  // other radius would be a line the players ignore, which is worse than no line.
+  const PEN = 112;
+  GOAL_EDGE.forEach(gi => {
+    const e = EDGES[gi];
+    const face = Math.atan2(e.ny, e.nx);       // inward, toward the middle
+    ring(PEN, e.mx, e.my, face - Math.PI/2, face + Math.PI/2);
+    // the spot
+    const spot = new THREE.Mesh(new THREE.CircleGeometry(3.4, 10),
+      new THREE.MeshBasicMaterial({ color: 0xdfe8df }));
+    spot.rotation.x = Math.PI/2;
+    spot.position.set(e.mx + e.nx*PEN*0.62, 0.75, e.my + e.ny*PEN*0.62);
+    scene.add(spot);
+  });
 
   // three goals, on the three goal edges the engine nominates
   const postMat = new THREE.MeshLambertMaterial({ color: 0xf2f4f2 });
