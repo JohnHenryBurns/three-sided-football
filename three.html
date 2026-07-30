@@ -353,7 +353,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=24"></script>
+<script src="engine.js?v=25"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1261,10 +1261,18 @@ let drawGL = function drawGL(){
     // rather than a floor. The simulation still owns who wins the header and where the ball
     // goes; this only makes the contact visible.
     const HEAD = H_P + 9;
-    const inBand = z > H_P * 0.55 && z < H_P + 16;   // airborne, around head height
+    // NOT WHILE IT IS BEING HELD. A keeper hugs the ball at z 21 and a thrower holds it at 43,
+    // and the header band runs 18.7 to 50 — so both hold heights sit inside it, and the holder
+    // is by definition within a player's radius of the ball. The pop fired every frame, decayed,
+    // and fired again: the ball hopped in the keeper's arms.
+    //
+    // A held ball cannot be headed, which is a rule as well as a rendering fact, so the gate is
+    // the same `held` the lift already uses.
+    const inBand = !held && z > H_P * 0.55 && z < H_P + 16;
     if (inBand && by < HEAD) {
       for (const p of players) {
         if (p.out) continue;
+        if (p === ball.owner) continue;      // you do not head a ball you are already carrying
         if (Math.hypot(p.x - ball.x, p.y - ball.y) > R_P + 7) continue;
         headPop = Math.max(headPop, HEAD - by + 5);   // the kick off the skull
         break;
