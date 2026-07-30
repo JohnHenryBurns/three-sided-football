@@ -122,22 +122,35 @@ button.on{border-color:var(--hot);color:var(--hot)}
 #setup{position:absolute;inset:0;z-index:8;display:none;overflow:auto;
   background:rgba(6,10,8,.93);padding:1rem}
 #setup.on{display:block}
-.setupCard{max-width:26rem;margin:0 auto;padding:1rem 1.2rem 1.4rem;
+.setupCard{max-width:24rem;margin:0 auto;padding:.85rem 1rem 1.05rem;
   background:var(--panel);border:1px solid var(--panel-edge);border-radius:14px}
-.setupCard h2{font-size:1.25rem;color:var(--hot);letter-spacing:-.01em}
-.setupCard .tag{font-family:var(--mono);font-size:.72rem;color:var(--ink-dim);
-  letter-spacing:.05em;margin:.15rem 0 .9rem}
-.frow{display:flex;flex-direction:column;gap:.28rem;margin-top:.75rem}
-.frow>label{font-size:.74rem;color:var(--ink-dim);letter-spacing:.07em;text-transform:uppercase}
-.frow select{width:100%;font-family:inherit;font-size:.95rem;padding:.45rem .5rem;
+/* A chalk rule under the title, like a touchline — the flat page has one and the card looks
+   unfinished without it. */
+.setupCard h2{font-size:1.2rem;color:var(--hot);letter-spacing:-.01em;line-height:1}
+.setupCard .tag{font-family:var(--mono);font-size:.66rem;color:var(--ink-dim);
+  letter-spacing:.06em;margin:.12rem 0 .7rem;padding-bottom:.6rem;
+  border-bottom:1px solid var(--panel-edge)}
+
+/* TIGHTER. A row was a stacked label and control with three quarters of a rem above it, which is
+   a lot of card spent on air when there are seven of them. Label and control share a line now,
+   the label sized to the longest of them so the controls align down the right. */
+.frow{display:flex;align-items:center;gap:.5rem;margin-top:.42rem}
+.frow>label{flex:0 0 5.6rem;font-size:.7rem;color:var(--ink-dim);letter-spacing:.07em;
+  text-transform:uppercase}
+.frow select{flex:1;min-width:0;font-family:inherit;font-size:.9rem;padding:.36rem .45rem;
   background:var(--bg);color:var(--ink);border:1px solid var(--panel-edge);border-radius:7px}
-.chk{display:flex;justify-content:space-between;align-items:center;margin-top:.6rem;
-  font-size:.92rem}
-.chk input{width:1.15rem;height:1.15rem;accent-color:var(--hot)}
+
+/* The three toggles as one block, hairline-separated, rather than three loose rows. */
+.chks{margin-top:.7rem;border:1px solid var(--panel-edge);border-radius:9px;overflow:hidden}
+.chk{display:flex;justify-content:space-between;align-items:center;
+  padding:.4rem .6rem;font-size:.88rem;background:var(--bg)}
+.chk+.chk{border-top:1px solid var(--panel-edge)}
+.chk input{width:1.05rem;height:1.05rem;accent-color:var(--hot)}
 #teamSlots{display:flex;flex-direction:column;gap:.3rem}
 #teamSlots select{width:100%;font-family:inherit;font-size:.92rem;padding:.4rem .5rem;
   background:var(--bg);color:var(--ink);border:1px solid var(--panel-edge);border-radius:7px}
-#btnStart{width:100%;margin-top:1.1rem;font-size:1.05rem;font-weight:600;padding:.6rem;
+#btnStart{width:100%;margin-top:.85rem;font-size:1.05rem;font-weight:700;padding:.55rem;
+  letter-spacing:.03em;
   background:var(--hot);color:#1a1005;border:0;border-radius:9px}
 #btnStart:hover{filter:brightness(1.08)}
 
@@ -209,9 +222,11 @@ button.on{border-color:var(--hot);color:var(--hot)}
 
       <div class="frow"><label>Teams</label><div id="teamSlots"></div></div>
 
-      <div class="chk"><label for="setMom">Underdog fire</label><input id="setMom" type="checkbox" checked></div>
-      <div class="chk"><label for="setZone" title="Attackers can't enter the penalty area before the ball">Enforce offsides</label><input id="setZone" type="checkbox"></div>
-      <div class="chk"><label for="setOob" title="Throw-ins, goal kicks, corners, keeper parries">Out of bounds</label><input id="setOob" type="checkbox" checked></div>
+      <div class="chks">
+        <div class="chk"><label for="setMom">🔥 Underdog fire</label><input id="setMom" type="checkbox" checked></div>
+        <div class="chk"><label for="setZone" title="Attackers can't enter the penalty area before the ball">🚩 Enforce offsides</label><input id="setZone" type="checkbox"></div>
+        <div class="chk"><label for="setOob" title="Throw-ins, goal kicks, corners, keeper parries">↩️ Out of bounds</label><input id="setOob" type="checkbox" checked></div>
+      </div>
 
       <button id="btnStart">Kick off</button>
     </div>
@@ -234,7 +249,7 @@ button.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=11"></script>
+<script src="engine.js?v=12"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -400,21 +415,39 @@ const trailPts = [];
 // Names as sprites, which always face the camera. A mesh label would need turning every frame
 // and would still be edge-on half the time; a sprite is the one thing in three.js that is
 // allowed to cheat, and a name is exactly the sort of thing that should.
-function nameSprite(text, colour){
+/** The outline that keeps a colour readable on grass.
+ *
+ *  A fixed dark stroke is what made the dark blues unreadable — England's navy shorts colour or
+ *  Italy's blue, outlined in black, is a dark shape on a dark shape. And the flat page's own
+ *  default is `rgba(0,0,0,.65)`, so it had the same exposure; it just never showed because SVG
+ *  text is crisper than a canvas at this size.
+ *
+ *  Chosen from the fill's own lightness instead, so contrast is guaranteed rather than hoped for:
+ *  a dark label gets a white edge, a light one gets a black edge. The pink reads better with
+ *  white for exactly this reason. */
+// 0.62 rather than a midpoint. A midpoint puts the Sparkle Princesses' pink at 0.55 and the
+// Netherlands' orange at 0.56 on the dark-edge side, and both read better with white — a mid
+// colour on mid-green grass needs a LIGHT edge to separate it, not a dark one that merges with
+// the shadow under it. Only the genuinely pale sides keep a black edge.
+const outlineFor = fill => lum(fill) < 0.62 ? 'rgba(255,255,255,.95)' : 'rgba(6,10,8,.92)';
+
+function nameSprite(text, colour, px, stroke){
+  const size = px || 34;
   const c = document.createElement('canvas');
   const ctx = c.getContext('2d');
-  const font = '600 34px "Barlow Condensed", "Arial Narrow", sans-serif';
+  const font = '700 ' + size + 'px "Barlow Condensed", "Arial Narrow", sans-serif';
   ctx.font = font;
-  c.width = Math.ceil(ctx.measureText(text).width) + 20;
-  c.height = 46;
+  c.width = Math.ceil(ctx.measureText(text).width) + 26;
+  c.height = Math.round(size * 1.45);
   const g = c.getContext('2d');
   g.font = font;
   g.textBaseline = 'middle';
-  g.lineWidth = 5;
-  g.strokeStyle = 'rgba(6,10,8,.92)';        // an outline, because grass is not a uniform colour
-  g.strokeText(text, 10, 24);
+  g.lineJoin = 'round';                      // so the stroke does not spike at sharp corners
+  g.lineWidth = Math.max(4, size * 0.17);
+  g.strokeStyle = stroke || outlineFor(colour);
+  g.strokeText(text, 13, c.height/2);
   g.fillStyle = colour;
-  g.fillText(text, 10, 24);
+  g.fillText(text, 13, c.height/2);
   const tex = new THREE.CanvasTexture(c);
   tex.minFilter = THREE.LinearFilter;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
@@ -429,8 +462,12 @@ function nameSprite(text, colour){
 // expands and fades — a tackle, a shot. Both are on the pitch rather than in the feed because
 // WHERE they happened is half of what they say, and the feed cannot carry that.
 const notes3 = [], pings3 = [];
-ENGINE_HOOKS.spawnNote = (x, y, text, colour) => {
-  const sp = nameSprite(String(text), colour || '#ffffff');
+ENGINE_HOOKS.spawnNote = (x, y, text, colour, stroke) => {
+  // An engine-supplied stroke is honoured only if it actually contrasts with the fill — several
+  // sides pass their own accent, and a few of those are as dark as the colour they outline.
+  const fill = colour || '#ffffff';
+  const ok = stroke && Math.abs(lum(stroke) - lum(fill)) > 0.35;
+  const sp = nameSprite(String(text), fill, 30, ok ? stroke : outlineFor(fill));
   sp.position.set(x, 46, y);
   scene.add(sp);
   notes3.push({ sp, t0: performance.now(), y0: 46 });
@@ -813,9 +850,11 @@ function buildBodies(){
       back.position.y = H_P * 0.66;
       g.add(back);
     }
-    const label = nameSprite(p.name.split(' ').slice(-1)[0], TEAMS[p.team].accent);
+    // WHITE WITH A BLACK EDGE, at the same size as an on-pitch note. It was the team's accent
+    // at half scale, which meant the one name on screen was smaller and less legible than the
+    // annotations around it — and on some sides it was a dark colour on dark grass.
+    const label = nameSprite(p.name.split(' ').slice(-1)[0], '#ffffff', 30, 'rgba(6,10,8,.92)');
     label.position.set(0, H_P + 26, 0);
-    label.scale.multiplyScalar(0.55);
     g.add(label);
     scene.add(g);
     return { g, ring, flames, pip, label };
