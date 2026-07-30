@@ -738,6 +738,66 @@ const INSTRUCTIONS = [
       return true;
     } },
 
+  // ── INTO THE BOX FOR A CORNER ─────────────────────────────────────────────
+  // EXPLICIT. Named from its steer target: g9 plus 46 along the goal's inward normal, with a
+  // per-player lateral offset — that is "get in the box and spread across its width".
+  { name:'into the box', explicit:true, base:860,
+    applies:p => !!(pendingRestart && cornerTaker===pendingRestart.p && cornerGoal!==null
+                    && p!==pendingRestart.p && p.team===pendingRestart.team),
+    score:p => 860,
+    act:p => {
+      const g9=goalCenter(cornerGoal), e9=EDGES[GOAL_EDGE[cornerGoal]];
+      const lat=((p.k1*997)%1-0.5)*90;
+      steer(p, g9.x+e9.nx*46+e9.ux*lat, g9.y+e9.ny*46+e9.uy*lat, 2.2);
+      return true;
+    } },
+
+  // ── MARKING AT A CORNER ───────────────────────────────────────────────────
+  // EXPLICIT. Target: fifteen units from his man, on the line between that man and the goal —
+  // which is goal-side marking, and is the whole of defending a corner.
+  { name:'marking at a corner', explicit:true, base:850,
+    applies:p => !!(pendingRestart && cornerTaker===pendingRestart.p && cornerGoal!==null
+                    && p.team===cornerGoal),
+    score:p => 850,
+    act:p => {
+      const g9=goalCenter(cornerGoal);
+      let mk=null,mkd=1e9;
+      players.forEach(q=>{ if(q.team!==pendingRestart.team||q.out||q.sentOff)return;
+        const d9=dist(q,g9); if(d9<mkd){mkd=d9;mk=q;} });
+      if(!mk) return false;
+      const gx=g9.x-mk.x, gy=g9.y-mk.y, gl=Math.hypot(gx,gy)||1;
+      steer(p, mk.x+gx/gl*15, mk.y+gy/gl*15, 2.2);
+      return true;
+    } },
+
+  // ── SHOWING FOR A THROW ───────────────────────────────────────────────────
+  // NOT explicit — he is offering, not obeying. Target: the throw mark itself, from beyond 110,
+  // which is "come and be available at throwing distance".
+  { name:'showing for a throw', explicit:false, base:760,
+    applies:p => !!(pendingRestart && cornerTaker!==pendingRestart.p && p!==pendingRestart.p
+                    && p.team===pendingRestart.team
+                    && dist(p,{x:pendingRestart.x,y:pendingRestart.y})>110),
+    score:p => 760,
+    act:p => { steer(p, pendingRestart.x, pendingRestart.y, 2.0); return true; } },
+
+  // ── DENYING A THROW ───────────────────────────────────────────────────────
+  // Target: the midpoint between the thrower and the man he most wants, which is a body in the
+  // passing lane rather than a man marking a man.
+  { name:'denying a throw', explicit:false, base:750,
+    applies:p => !!(pendingRestart && cornerTaker!==pendingRestart.p
+                    && p.team!==pendingRestart.team
+                    && dist(p,{x:pendingRestart.x,y:pendingRestart.y})<150),
+    score:p => 750,
+    act:p => {
+      const R=pendingRestart;
+      let mk=null,mkd=1e9;
+      players.forEach(q=>{ if(q.team!==R.team||q===R.p||q.out||q.sentOff)return;
+        const dd=dist(q,{x:R.x,y:R.y}); if(dd<mkd){mkd=dd;mk=q;} });
+      if(!mk) return false;
+      steer(p, (mk.x+R.x)/2, (mk.y+R.y)/2, 2.0);
+      return true;
+    } },
+
   // ── OFFERING AFTER A RESTART ──────────────────────────────────────────────
   // NOT explicit: he has taken it and is choosing to make himself available rather than chase.
   // Released by POSSESSION — the moment anybody else has the ball he is a player again — with
@@ -798,53 +858,14 @@ function think(dt){
     if(pendingRestart){
       const R=pendingRestart;
 
-      // ── EVERYBODY ELSE HAS A JOB TOO ──────────────────────────────────────
-      // While one man fetches, the other fourteen stood in whatever shape open play had left
-      // them in — which is not what happens. A restart is the one moment football is
-      // choreographed: attackers go where the ball is going, defenders go where the attackers
-      // are.
+      // ── THE RESTART CHOREOGRAPHY MOVED TO THE INSTRUCTION LIST ────────────
+      // Four instructions now — into the box, marking at a corner, showing for a throw, denying
+      // a throw — each named from the steer target that already told you what it did. The block
+      // that used to live here is gone rather than duplicated, because two copies of a decision
+      // is how they drift apart.
       //
-      // Corners get the full treatment because a corner IS the choreography. Throw-ins get a
-      // lighter version: show for it, or deny the show.
-      if(p!==R.p && !p.out && !p.sentOff){
-        const isCorner=(cornerTaker===R.p);
-        if(isCorner && cornerGoal!==null){
-          const g9=goalCenter(cornerGoal);
-          if(p.team===R.team){ job(p,'into the box');
-            // ATTACKING A CORNER: get in the box, and spread across its width rather than
-            // stacking on one spot — a lateral offset per player, stable so nobody jitters.
-            const lat=((p.k1*997)%1-0.5)*90;
-            const e9=EDGES[GOAL_EDGE[cornerGoal]];
-            steer(p, g9.x+e9.nx*46+e9.ux*lat, g9.y+e9.ny*46+e9.uy*lat, 2.2);
-            return;
-          }
-          if(p.team===cornerGoal){
-            // DEFENDING IT: mark the nearest attacker, goal-side. A defender stands between his
-            // man and his own goal, which is the whole of defending a corner.
-            let mk=null,mkd=1e9;
-            players.forEach(q=>{ if(q.team!==R.team||q.out||q.sentOff)return;
-              const d9=dist(q,g9); if(d9<mkd){mkd=d9;mk=q;} });
-            if(mk){
-              const gx=g9.x-mk.x, gy=g9.y-mk.y, gl=Math.hypot(gx,gy)||1;
-              steer(p, mk.x+gx/gl*15, mk.y+gy/gl*15, 2.2);
-              return;
-            }
-          }
-        } else if(!isCorner){
-          // A THROW-IN. The taker's own side offers itself — spread along the line, at throwing
-          // distance rather than on top of him. Everyone else pushes up to deny the easy one.
-          const tx9=R.x, ty9=R.y;
-          const d9=dist(p,{x:tx9,y:ty9});
-          if(p.team===R.team && d9>110){ steer(p, tx9, ty9, 2.0); return; }
-          if(p.team!==R.team && d9<150){
-            // between the thrower and the man he wants, which is goal-side of the nearest
-            let mk=null,mkd=1e9;
-            players.forEach(q=>{ if(q.team!==R.team||q===R.p||q.out||q.sentOff)return;
-              const dd=dist(q,{x:tx9,y:ty9}); if(dd<mkd){mkd=dd;mk=q;} });
-            if(mk){ steer(p, (mk.x+tx9)/2, (mk.y+ty9)/2, 2.0); return; }
-          }
-        }
-      }
+      // They run above via runInstruction(), which is reached before this whole pendingRestart
+      // section, so the taker's own branch below is all that is left here.
 
       if(p===R.p){
         // ── FETCH FIRST, THEN TAKE IT ─────────────────────────────────────

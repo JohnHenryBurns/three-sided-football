@@ -362,10 +362,32 @@ each player, and nothing has to work first time.
 cascade underneath as the fallback:
 
 ```
-fetching the ball             explicit, base 900
-retreating from a free kick   explicit, base 880
-just restarted — offering     autonomous, base 700
+fetching the ball             explicit,   900
+retreating from a free kick   explicit,   880
+into the box                  explicit,   860
+marking at a corner           explicit,   850
+showing for a throw           autonomous, 760
+denying a throw               autonomous, 750
+just restarted — offering     autonomous, 700
 ```
+
+**Seven of fifty-three**, and the four added in PR #131 were named from their steer
+targets exactly as planned — `steer(p, g9.x+e9.nx*46+e9.ux*lat, ...)` is *get in the
+box and spread across its width*, and `steer(p, mk.x+gx/gl*15, ...)` is *fifteen units
+from your man on the line to the goal*, which is goal-side marking.
+
+The cascade copies were **deleted rather than left in place**. Two copies of a decision
+is how they drift apart.
+
+### Where this leads
+
+The list makes things possible that a cascade could not express:
+
+- **plays** — an instruction that applies to several players at once, each with a
+  different part, sharing a trigger
+- **coaching by relative position** — a `score()` can read where everybody is, so an
+  instruction can want a player *more* when the shape is right for it
+- **per-side commitment** — `COMMIT` in the coach menu beside ATK/DEF/AGG
 
 `runInstruction(p)` scores everything that applies, adds `COMMIT` to whatever he is
 already on, and runs the winner. Explicit instructions get +1000, so being **told**
