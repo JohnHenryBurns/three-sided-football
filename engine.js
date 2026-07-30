@@ -694,6 +694,55 @@ function think(dt){
     if(p.out||p.sentOff||targets[p.team]===null)return;
     if(pendingRestart){
       const R=pendingRestart;
+
+      // ── EVERYBODY ELSE HAS A JOB TOO ──────────────────────────────────────
+      // While one man fetches, the other fourteen stood in whatever shape open play had left
+      // them in — which is not what happens. A restart is the one moment football is
+      // choreographed: attackers go where the ball is going, defenders go where the attackers
+      // are.
+      //
+      // Corners get the full treatment because a corner IS the choreography. Throw-ins get a
+      // lighter version: show for it, or deny the show.
+      if(p!==R.p && !p.out && !p.sentOff){
+        const isCorner=(cornerTaker===R.p);
+        if(isCorner && cornerGoal!==null){
+          const g9=goalCenter(cornerGoal);
+          if(p.team===R.team){
+            // ATTACKING A CORNER: get in the box, and spread across its width rather than
+            // stacking on one spot — a lateral offset per player, stable so nobody jitters.
+            const lat=((p.k1*997)%1-0.5)*90;
+            const e9=EDGES[GOAL_EDGE[cornerGoal]];
+            steer(p, g9.x+e9.nx*46+e9.ux*lat, g9.y+e9.ny*46+e9.uy*lat, 2.2);
+            return;
+          }
+          if(p.team===cornerGoal){
+            // DEFENDING IT: mark the nearest attacker, goal-side. A defender stands between his
+            // man and his own goal, which is the whole of defending a corner.
+            let mk=null,mkd=1e9;
+            players.forEach(q=>{ if(q.team!==R.team||q.out||q.sentOff)return;
+              const d9=dist(q,g9); if(d9<mkd){mkd=d9;mk=q;} });
+            if(mk){
+              const gx=g9.x-mk.x, gy=g9.y-mk.y, gl=Math.hypot(gx,gy)||1;
+              steer(p, mk.x+gx/gl*15, mk.y+gy/gl*15, 2.2);
+              return;
+            }
+          }
+        } else if(!isCorner){
+          // A THROW-IN. The taker's own side offers itself — spread along the line, at throwing
+          // distance rather than on top of him. Everyone else pushes up to deny the easy one.
+          const tx9=R.x, ty9=R.y;
+          const d9=dist(p,{x:tx9,y:ty9});
+          if(p.team===R.team && d9>110){ steer(p, tx9, ty9, 2.0); return; }
+          if(p.team!==R.team && d9<150){
+            // between the thrower and the man he wants, which is goal-side of the nearest
+            let mk=null,mkd=1e9;
+            players.forEach(q=>{ if(q.team!==R.team||q===R.p||q.out||q.sentOff)return;
+              const dd=dist(q,{x:tx9,y:ty9}); if(dd<mkd){mkd=dd;mk=q;} });
+            if(mk){ steer(p, (mk.x+tx9)/2, (mk.y+ty9)/2, 2.0); return; }
+          }
+        }
+      }
+
       if(p===R.p){
         // ── FETCH FIRST, THEN TAKE IT ─────────────────────────────────────
         // A fetching restart has the ball lying where it went out rather than sitting on the
@@ -709,12 +758,20 @@ function think(dt){
           ENGINE_HOOKS.spawnNote(ball.x, ball.y-22, "\u{1F450} fetched", TEAMS[p.team].color);
         }
         if(R.fetch && R.got){
-          // CARRYING IT BACK, and putting it DOWN once the mark is within reach. The ball must
-          // end up on the mark and the thrower behind it — if it stays in his hands he walks it
-          // outside the line and it goes out again, which is the loop.
           const md=Math.hypot(R.x-p.x, R.y-p.y);
-          if(md>16){ ball.x=p.x; ball.y=p.y; ball.z=0; ball.vx=0; ball.vy=0; }
-          else { ball.x=R.x; ball.y=R.y; ball.z=0; ball.vx=0; ball.vy=0; R.placed=true; }
+          if(R.ground){
+            // A CORNER IS DRIBBLED. He never picks it up, so the ball travels at his feet rather
+            // than in his hands — just ahead of him, which is what a dribble is.
+            const hl9=Math.hypot(p.hx,p.hy)||1;
+            if(md>10){ ball.x=p.x+(p.hx/hl9)*9; ball.y=p.y+(p.hy/hl9)*9; ball.z=0; ball.vx=0; ball.vy=0; }
+            else { ball.x=R.x; ball.y=R.y; ball.z=0; ball.vx=0; ball.vy=0; R.placed=true; }
+          } else {
+            // CARRYING IT BACK, and putting it DOWN once the mark is within reach. The ball must
+            // end up on the mark and the thrower behind it — if it stays in his hands he walks it
+            // outside the line and it goes out again, which is the loop.
+            if(md>16){ ball.x=p.x; ball.y=p.y; ball.z=0; ball.vx=0; ball.vy=0; }
+            else { ball.x=R.x; ball.y=R.y; ball.z=0; ball.vx=0; ball.vy=0; R.placed=true; }
+          }
         }
         // throwers take their mark BEHIND the chalk; corner and goal-kick takers stand on their spot
         let sx8=R.x, sy8=R.y;
@@ -2781,11 +2838,22 @@ function stageCorner(ownerT,e,ex,ey){
     .sort((a,b)=>dist(a,vtx)-dist(b,vtx))[0];
   if(!taker){ stageGoalKick(ownerT); return; }
   const cx2=vtx.x+e.nx*14, cy2=vtx.y+e.ny*14;
-  // THE CORNER'S OWN PLACEMENT, distinct from the taker walking to it below. Also untagged.
-  telPort('corner: ball to the flag'); ball.owner=null; ball.x=cx2; ball.y=cy2;
-  pendingRestart={p:taker, x:cx2, y:cy2, team:att, cap:nowMs()+2400, readyAt:nowMs()+1250};
+  // ── THE BALL ROLLS TO THE FLAG, IT IS NOT PLACED THERE ────────────────────
+  // Same as a throw-in with one difference that matters: A CORNER IS TAKEN FROM THE GROUND. He
+  // does not pick it up, so there is nothing to carry — he dribbles it to the flag, which is
+  // slower and looks like what it is.
+  //
+  // The ball stays where it went out. He walks to it, then nudges it across, and only when it is
+  // on the arc does the ceremony start.
+  ball.owner=null;
+  ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+  ball.fetch={ by:taker, sx:cx2, sy:cy2, team:att, at:clockSec, ground:true };
+  pendingRestart={p:taker, x:cx2, y:cy2, team:att, fetch:true, ground:true,
+                  cap:nowMs()+20000, readyAt:nowMs()};
   cornerTaker=taker; cornerGoal=ownerT;
-  restartHold=Math.max(restartHold,nowMs()+2900);   // corners earn a longer ceremony — let the box fill GKSTAT.cornerStage=(GKSTAT.cornerStage||0)+1;
+  // The ceremony starts when the ball reaches the flag, not when the corner is awarded — he
+  // has to walk there first, and the box should fill while he does rather than before.
+  restartHold=Math.max(restartHold,nowMs()+2900);   // corners earn a longer ceremony GKSTAT.cornerStage=(GKSTAT.cornerStage||0)+1;
   ENGINE_HOOKS.spawnNote(taker.x,taker.y-26,"corner!",TEAMS[att].color,TEAMS[att].accent);
   sayLogged(pick([
     `<b style="color:${TEAMS[att].color}">Corner to ${tm(att)}</b> — ${taker.name} to swing it in...`,
