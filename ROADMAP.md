@@ -356,6 +356,27 @@ fallback.**
 That way the refactor is testable at every step, `?jobs` shows which system is driving
 each player, and nothing has to work first time.
 
+## Progress
+
+**Started (PR #130).** The framework is in and three instructions are live, with the
+cascade underneath as the fallback:
+
+```
+fetching the ball             explicit, base 900
+retreating from a free kick   explicit, base 880
+just restarted — offering     autonomous, base 700
+```
+
+`runInstruction(p)` scores everything that applies, adds `COMMIT` to whatever he is
+already on, and runs the winner. Explicit instructions get +1000, so being **told**
+always beats choosing — which is the line between the two kinds.
+
+`COMMIT` is **12** and global. It becomes per-side, in the coach menu, once there are
+enough instructions for the difference to show.
+
+**Three of fifty-three.** If none applies, the player falls through to the cascade
+exactly as before, so both systems run side by side and nothing had to work first time.
+
 ## The order
 
 1. name the branches from their steer targets
