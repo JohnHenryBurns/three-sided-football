@@ -2081,7 +2081,10 @@ function think(dt){
         if(dist(q,owner)<95) wolves2++; });
       if(wolves2>=2 && pickM && dist(pickM,owner)<110){ pickM=null; }
       if(pickM){
-        kick(pickM.x+pickM.vx*4, pickM.y+pickM.vy*4, Math.min(6.2,3.2+dist(pickM,owner)*0.015), false);
+        // Same reasoning for the roll: 6.2 carries 387, and this is thrown at a man 40 to 260
+        // away. Distance-derived, floored so a short one still reaches him.
+        const throwPw=Math.min(6.2, Math.max(2.4, dist(pickM,owner)/66 * 1.15));
+        kick(pickM.x+pickM.vx*4, pickM.y+pickM.vy*4, throwPw, false);
         // A KEEPER'S THROW LOFTS. 2.4 peaked at 21 — a flat skimmer that reached knee height and
         // arrived before anybody could move for it. He is throwing it out to a teammate forty to
         // two hundred and sixty away, and that is a lobbed ball with hang on it.
@@ -2202,8 +2205,26 @@ function think(dt){
       // table: he finds the deepest man he can, and if there is nobody deep he clears it.
       const wantPunt=far&&((fd>255&&(nd2>140||RNG()<0.11)) || (crowded&&fd>150));
       if(wantPunt){
+        // ── POWER FOR THE DISTANCE, NOT A CONSTANT ────────────────────────
+        // The comment said "drop it TO the man, not past him" and the arithmetic did the
+        // opposite. At friction 0.985 a kick carries:
+        //
+        //   power  6.2  ->  387 units
+        //   power  9    ->  574
+        //   power 11.5  ->  740
+        //   power 13.5  ->  873      on a pitch 680 across
+        //
+        // So a punt aimed at a man 255 away travelled three times that and went out on the far
+        // side, which is exactly what John has been watching. The old formula reached 13.5 at
+        // any distance over 570 and was capped there — a cap that was never the problem, since
+        // even 9 overshoots.
+        //
+        // Solved rather than tuned: pick the power that CARRIES the distance. Sum of a geometric
+        // series, v0 = d*(1-f)/(1-f^n) with the flight time n≈220 frames, which reduces to
+        // roughly d/66 for this friction. A little over, because a ball he has to run onto is
+        // better than one he has to come back for.
         const dTo=dist(owner,far);
-        const pw=Math.min(13.5, 5.5+dTo*0.014);   // drop it TO the man, not past him
+        const pw=Math.min(11.5, Math.max(4.2, dTo/66 * 1.12));
         kick(far.x+far.vx*7, far.y+far.vy*7, pw, false);
         // 4.6, not 3.4. A real match measured the ball ABOVE THE CROSSBAR for 0% of its
         // airborne time, topping out at 45 against a bar of 54 — so nothing in the game ever
