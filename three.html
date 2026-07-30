@@ -422,7 +422,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=44"></script>
+<script src="engine.js?v=45"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1145,7 +1145,17 @@ function buildGround(){
       // The same plain texture on both faces is right, and is what a real hoarding does anyway:
       // printed once, seen from either side, legible from both.
       [edgeMat, edgeMat, edgeMat, edgeMat, faceMat, faceMat]);
-    board.position.set(e.mx - e.nx * 34, 13, e.my - e.ny * 34);
+    // BACK AGAINST THE STANDS. At 34 the boards sat INSIDE the goal frame, which reaches 40
+    // behind the line — so a hoarding ran straight through the stanchions on all three goal
+    // edges. Nothing was wrong with either piece; they were competing for the same ground.
+    //
+    // 64 puts them clear of the frame at 40 and in front of the first stand tier, whose face is
+    // at 72 — with room for the lean, which tilts the top of a 26-tall board about 3 further
+    // back. At 68 the top cleared the seating by barely a unit.
+    //
+    // Which is also where hoardings live in a real ground: at the foot of the seating, not out
+    // on the grass.
+    board.position.set(e.mx - e.nx * 64, 13, e.my - e.ny * 64);
     // ORDER MATTERS. three.js applies Euler angles XYZ by default, so setting .x then .y leans
     // the board in WORLD space and only then swings it to face the pitch — which points the lean
     // somewhere different on every edge, and is exactly what "askew" looks like. YXZ faces it
