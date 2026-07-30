@@ -223,6 +223,44 @@ The seeded harness. **Six identical matches before and after**, and a discard co
 must not climb. That check did not exist this morning and it is the whole reason a
 transplant is now a reasonable thing to attempt rather than a reckless one.
 
+## Step two: written, not wired
+
+**All thirteen exist on the `transplant` branch. None of them fires.**
+
+`ACTIONS_LIVE` is `false`, `runAction` skips the ported set, and the cascade does every
+kick exactly as it did this morning. Proven rather than asserted:
+
+```
+six seeds against baseline.json, switch off
+6/6 IDENTICAL — goals, throw-ins and loose% to two decimals
+```
+
+**This is the split the surgery rule allows.** The transplant must be atomic, because the
+*mixture* is what crashes — some kicks releasing the ball through `runAction` while
+others release it inline. But **writing the organ is not fitting it.** With the switch
+off there is no mixture: the cascade owns every release, as before.
+
+### What each one carries
+
+```
+SCRIPT   corner-swing  throw-in  penalty  free-kick
+PLAYER   gk-roll  gk-punt  gk-clear  gk-hopeful
+         pass  pass-safe  pass-alt  shot  shot-power
+```
+
+Every one has `can`, `score`, `tier` and **`coach(T)`** — John's correction, that the
+bench weights *every* action rather than owning a tier. `gk-clear` is PLAYER now: a
+bunkering side weights it +110 and a passing side does not, and neither is being ordered.
+
+**The `score()` floors are the interesting part.** `pass-safe` at 90 and `gk-hopeful` at
+100 are deliberately below everything else — they are what happens when nothing better
+applies, which is how the cascade's `else` branches translate into a scored list. An
+`else` is just the lowest score.
+
+**The `act()` bodies are stubs returning false.** Filling them is the flip: move each
+cascade site's body into its action, delete the site, set `ACTIONS_LIVE = true`. One
+commit, six seeds, and it either holds or reverts whole.
+
 ## Order
 
 1. find the common shape, or establish that there isn't one
