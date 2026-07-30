@@ -156,6 +156,23 @@ line.
 **Third instance today.** The shape is always: one flag, two meanings, and the bug appears
 only where the meanings diverge.
 
+## Action instructions
+
+Designed and analysed in **`ACTIONS.md`**, not built. The short version:
+
+- **headers are not an instruction** — *going for the header* is a `job()` tag on a
+  surviving cascade branch, which is why it reads 0% in every log
+- actions cannot join the position list, because **instructions steer** and `mustKick`
+  proved it at 6/6 → 3/6
+- they want a **second list**, because a carrier moves *and* decides at once
+- **only three of ten kick sites have a readable guard.** The rest are positions inside a
+  larger block — so several action decisions **do not exist yet** and would have to be
+  authored rather than extracted
+
+That last point is the important one: the position extraction was safe because it moved
+code without changing behaviour. An action extraction cannot be, because half of it is
+new judgement.
+
 ## Not everything is an instruction
 
 **John asked whether the back-pass rule is one. I tried it and it should not be.**
