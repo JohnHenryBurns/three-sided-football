@@ -1753,12 +1753,15 @@ const TEL = {
   throwIns:0, corners:0, goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0,
   poss:[0,0,0], jumps:0, bigJumps:0, maxJump:0, lastX:null, lastY:null,
   claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
+  zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
 function telReset(){
   Object.assign(TEL, { frames:0, loose:0, deadFrames:0, aerial:0, throwIns:0, corners:0,
     goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0, poss:[0,0,0], jumps:0,
-    claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0, behindGoal:0, behindOwn:0, behindOther:0,
+    claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
+    zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0,
+  zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
 }
@@ -1768,6 +1771,14 @@ function telFrame(){
   if(ball.owner){ TEL.ownedFrames++; TEL.poss[ball.owner.team]++; if(ball.owner.role==="K") TEL.keeperFrames++; }
   else TEL.loose++;
   if((ball.z||0)>4) TEL.aerial++;
+  // HOW HIGH, not just whether. "14% airborne" is true of a game where the ball hops 5 units and
+  // of one where it is launched over a stand, and those are different games. Buckets, so a real
+  // match can say which this is.
+  const bz=ball.z||0;
+  if(bz>4){
+    if(bz<20) TEL.zLow++; else if(bz<50) TEL.zMid++; else if(bz<100) TEL.zHigh++; else TEL.zSky++;
+    if(bz>TEL.zMax) TEL.zMax=bz;
+  }
   let nearest=1e9;
   for(const p of players){ if(p.out) continue;
     const d=Math.hypot(p.x-ball.x,p.y-ball.y); if(d<nearest) nearest=d; }
@@ -1818,6 +1829,11 @@ function buildMatchReport(){
   md+=`| of those, a keeper juggling | ${TEL.gkRapid} | ${p90(TEL.gkRapid)} | ~0 |\n`;
   md+=`| ball loose | ${Math.round(100*TEL.loose/f)}% | | ~35% |\n`;
   md+=`| ball airborne | ${Math.round(100*TEL.aerial/f)}% | | ~20% |\n`;
+  md+=`| \u2014 ankle to knee (4-20) | ${Math.round(100*TEL.zLow/f)}% | | most of it |\n`;
+  md+=`| \u2014 head height (20-50) | ${Math.round(100*TEL.zMid/f)}% | | |\n`;
+  md+=`| \u2014 above the crossbar (50-100) | ${Math.round(100*TEL.zHigh/f)}% | | |\n`;
+  md+=`| \u2014 over 100 | ${Math.round(100*TEL.zSky/f)}% | | rare |\n`;
+  md+=`| highest the ball got | ${Math.round(TEL.zMax)} | | crossbar is 54 |\n`;
   md+=`| in a keeper's gloves | ${Math.round(100*TEL.keeperFrames/ow)}% of owned | | ~5% |\n`;
   md+=`| loose with nobody within 40 | ${Math.round(100*TEL.deadFrames/f)}% | | |\n`;
   md+=`| stalls over 0.5s | ${TEL.stalls} | ${p90(TEL.stalls)} | |\n`;
