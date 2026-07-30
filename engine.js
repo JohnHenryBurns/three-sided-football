@@ -1581,6 +1581,58 @@ function physics(dt){
       const along=(ball.x-e.mx)*e.ux+(ball.y-e.my)*e.uy;
       const gTeam=e.goal?GOAL_EDGE.indexOf(k):-1;
       const inMouth=e.goal && !out[gTeam] && Math.abs(along)<e.len*GOAL_HALF;
+
+      // ── THE WOODWORK ──────────────────────────────────────────────────────
+      // Now that the rule and the picture agree about where the frame is, the frame can be HIT.
+      // A shot was a goal, a save, or out — never NEARLY, which is most of what makes football
+      // worth watching.
+      //
+      // No new geometry: the post is at |along| == the mouth's half width, the bar is at GOAL_H,
+      // and both are the same numbers the goal test already uses. A hit is the ball arriving at
+      // the plane within a post's radius of one of them.
+      if(e.goal && !out[gTeam] && d<1 && d>-7 && (ball.isShot||Math.hypot(ball.vx,ball.vy)>4) && !ball.woodT){
+        const half=e.len*GOAL_HALF, R_POST=4.2;
+        const offPost=Math.abs(Math.abs(along)-half), offBar=Math.abs(ball.z-GOAL_H);
+        const hitPost=offPost<R_POST && ball.z<GOAL_H;
+        const hitBar =offBar<R_POST && Math.abs(along)<half+R_POST;
+        if(hitPost||hitBar){
+          ball.woodT=clockSec;                       // one hit per approach, not one per frame
+          TEL.woodwork++;
+          const nm=ball.lastKicker?ball.lastKicker.name:"Somebody";
+          if(hitBar){
+            TEL.bars++;
+            // off the bar and DOWN, the way it comes back: vertical speed reversed and bled,
+            // and the ball kept live because what happens next is the point of hitting it.
+            ball.zv=-Math.abs(ball.zv||2)*0.55;
+            ball.vx*=0.45; ball.vy*=0.45;
+            sayLogged(pick([
+              `<span class="goal">OFF THE BAR!</span> ${nm} is on his knees.`,
+              `<span class="goal">CROSSBAR!</span> ${nm} beat the keeper and lost to the woodwork.`,
+              `${nm} rattles the bar \u2014 the whole hex heard that one.`,
+              `OFF THE UNDERSIDE! It bounces down and the scramble is ON.`]),true);
+          } else {
+            TEL.posts++;
+            // off the post: the sideways component is reversed, so it comes back ACROSS the face
+            // rather than straight out — which is where the rebounds people remember come from.
+            const sgn=along>0?1:-1;
+            const lat=ball.vx*e.ux+ball.vy*e.uy;
+            ball.vx-=2*lat*e.ux; ball.vy-=2*lat*e.uy;
+            ball.vx+=e.ux*sgn*1.2; ball.vy+=e.uy*sgn*1.2;
+            ball.vx-=e.nx*1.6; ball.vy-=e.ny*1.6;    // and back out of the goal
+            ball.vx*=0.62; ball.vy*=0.62;
+            sayLogged(pick([
+              `<span class="goal">OFF THE POST!</span> ${nm} cannot believe it.`,
+              `<span class="goal">POST!</span> The width of the paint denies ${nm}.`,
+              `${nm} hits the upright \u2014 and it stays live!`,
+              `WOODWORK! ${nm} is looking at the sky.`]),true);
+          }
+          ball.isShot=false;
+          ENGINE_HOOKS.spawnNote(ball.x,ball.y-24,hitBar?"\u{1F94A} CROSSBAR!":"\u{1F94A} POST!","#ffd166");
+          return;                                    // it did not cross; it is still in play
+        }
+      }
+      if(ball.woodT && clockSec-ball.woodT>0.6) ball.woodT=0;
+
       if(inMouth){
         if(d<-6){
           if(ball.z<GOAL_H){ goalScored(GOAL_EDGE.indexOf(k)); return; }
@@ -1776,15 +1828,15 @@ const TEL = {
   throwIns:0, corners:0, goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0,
   poss:[0,0,0], jumps:0, bigJumps:0, maxJump:0, lastX:null, lastY:null,
   claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
-  zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{},
+  zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
 function telReset(){
   Object.assign(TEL, { frames:0, loose:0, deadFrames:0, aerial:0, throwIns:0, corners:0,
     goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0, poss:[0,0,0], jumps:0,
     claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
-    zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, port:{},
-  zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, behindGoal:0, behindOwn:0, behindOther:0,
+    zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0, woodwork:0, bars:0, posts:0, port:{},
+  zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
 }
@@ -1866,7 +1918,10 @@ function buildMatchReport(){
   md+=`| \u2014 head height (20-50) | ${Math.round(100*TEL.zMid/f)}% | | |\n`;
   md+=`| \u2014 above the crossbar (50-100) | ${Math.round(100*TEL.zHigh/f)}% | | |\n`;
   md+=`| \u2014 over 100 | ${Math.round(100*TEL.zSky/f)}% | | rare |\n`;
-  md+=`| highest the ball got | ${Math.round(TEL.zMax)} | | crossbar is 54 |\n`;
+  md+=`| highest the ball got | ${Math.round(TEL.zMax)} | | crossbar is ${GOAL_H} |\n`;
+  md+=`| **woodwork** | ${TEL.woodwork} | ${p90(TEL.woodwork)} | ~2 |\n`;
+  md+=`| \u2014 crossbar | ${TEL.bars} | | |\n`;
+  md+=`| \u2014 post | ${TEL.posts} | | |\n`;
   md+=`| in a keeper's gloves | ${Math.round(100*TEL.keeperFrames/ow)}% of owned | | ~5% |\n`;
   md+=`| loose with nobody within 40 | ${Math.round(100*TEL.deadFrames/f)}% | | |\n`;
   md+=`| stalls over 0.5s | ${TEL.stalls} | ${p90(TEL.stalls)} | |\n`;
