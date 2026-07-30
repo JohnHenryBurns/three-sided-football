@@ -111,25 +111,27 @@ only twice in 600 seconds, while forty-odd goals are scored.** So goals are not 
 this code at all, and the woodwork test is sitting on a path the ball almost never
 takes.
 
-**Found, and it is worse than a missing test.** Instrumenting the goal line itself:
+**I reported 26,031 duplicate goal calls. That was my own diagnostic, not the engine.**
+
+My loop called `think(); physics();` with no celebration hold, so after a goal the ball
+sat past the line and re-scored every frame. Measured through the harness, which holds
+play properly:
 
 ```
-goalScored called in 600s          26,031
-goals where the ball was already
-past the line the frame before     26,031
-goals where it genuinely crossed        0
+goalScored calls   21
+goals reported     21      no duplicates at all
 ```
 
-**The ball does not cross the goal plane. It rests beyond it**, and `goalScored` fires
-on every frame it sits there — something downstream must be swallowing the repeats or
-the score would read in the thousands.
+Nothing is being swallowed. **The engine was fine and my instrument was wrong**, which
+is the fourth time today a measurement has invented a problem.
 
-That is why the woodwork can never fire: **a post cannot be struck by a ball that is
-never in flight across the plane.** Tunnelling was real and irrelevant.
+**What survives the correction:** all 21 goals still have `dPrev <= 0` — the ball is
+already past the line on the frame before a goal is given. That is because the goal
+needs `d < -6`, so the crossing happens an **earlier** frame than the award. The
+woodwork test therefore looks at the wrong frame, and that part of the diagnosis stands.
 
-**Next:** find why the ball comes to rest past the line rather than passing through, and
-what is absorbing 26,000 duplicate goal calls. Both are more serious than the woodwork,
-and the woodwork is a symptom of the first. The
+**Next:** find the frame where the ball actually crosses d=0 and test the woodwork
+there, rather than on the frame the goal is given. The
 guard is `if(d<7)` inside a six-iteration edge loop — one of those is filtering the
 ball out before the crossing test ever sees it.
 
