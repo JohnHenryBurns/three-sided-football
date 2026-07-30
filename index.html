@@ -333,7 +333,7 @@ function statBars(lib){   // display stats DERIVED from the engine bundle — th
   const G={Clean:1,Firm:2,Nasty:4,Filthy:5};
   return {ATT:A[lib.id.atk],FLR:F[lib.id.atk],PRS:P[lib.id.def],DEF:D[lib.id.def],AGG:G[lib.id.agg]};
 }
-const feedEl=document.getElementById("feed");   // `feed` itself is sim state and lives in sim.js
+const feedEl=document.getElementById("feed");   // `feed` itself is engine state and lives in engine.js
 
 
 function flamePop(q2){
@@ -1633,7 +1633,7 @@ requestAnimationFrame(loop);
 
 
 
-// What this front end lends the simulation. sim.js calls these and knows nothing else about
+// What this front end lends the engine. engine.js calls these and knows nothing else about
 // the page; a different renderer supplies its own and the rules do not change.
 ENGINE_HOOKS.drawBoards = () => drawBoards();
 ENGINE_HOOKS.clearMarks = () => { pings.forEach(pg=>pg.e.remove()); pings=[]; };
