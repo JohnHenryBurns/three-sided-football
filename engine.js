@@ -896,6 +896,41 @@ const INSTRUCTIONS = [
       return true;
     } },
 
+  // ── COVERING A ROLL LANE ──────────────────────────────────────────────────
+  // A midfielder or forward against a keeper who is holding: stand 62% of the way along the line
+  // from him to one of his outlets, so the short distribution has a body in it. Each player picks
+  // a DIFFERENT outlet from a stable per-player hash, which is why a whole side does not converge
+  // on the same lane.
+  //
+  // The 85 floor keeps him out of the keeper's area — the same distance the area rule uses, and
+  // it was already here before I gave keepers that clamp.
+  { name:'covering a roll lane', explicit:false, base:580,
+    applies:p => !!(gkHolding() && ball.owner && p.team!==ball.owner.team && p.role!=='K'
+                    && !allied(p.team, ball.owner.team) && p.role!=='D'
+                    && players.some(m=>m.team===ball.owner.team && m.role!=='K' && !m.out && !m.sentOff)),
+    score:p => 580,
+    act:p => {
+      const gk2=ball.owner;
+      const outs=players.filter(m=>m.team===gk2.team&&m.role!=='K'&&!m.out&&!m.sentOff);
+      const o5=outs[Math.floor(((p.k1*769)%1)*outs.length)%outs.length];
+      let lx=gk2.x+(o5.x-gk2.x)*0.62, ly=gk2.y+(o5.y-gk2.y)*0.62;
+      const dgk=Math.hypot(lx-gk2.x,ly-gk2.y);
+      if(dgk<85){ lx=gk2.x+(lx-gk2.x)/(dgk||1)*85; ly=gk2.y+(ly-gk2.y)/(dgk||1)*85; }
+      GKSTAT.laneCover=(GKSTAT.laneCover||0)+1;
+      steer(p,lx,ly,1.2);
+      return true;
+    } },
+
+  // ── NOBODY TO COVER ───────────────────────────────────────────────────────
+  // The same situation with no outlets left to stand in front of — a side down to its keeper.
+  // He holds the middle, which is the only useful thing left to do.
+  { name:'holding the middle', explicit:false, base:570,
+    applies:p => !!(gkHolding() && ball.owner && p.team!==ball.owner.team && p.role!=='K'
+                    && !allied(p.team, ball.owner.team) && p.role!=='D'
+                    && !players.some(m=>m.team===ball.owner.team && m.role!=='K' && !m.out && !m.sentOff)),
+    score:p => 570,
+    act:p => { steer(p,CX,CY,0.9); return true; } },
+
   // ── OFFERING AFTER A RESTART ──────────────────────────────────────────────
   // NOT explicit: he has taken it and is choosing to make himself available rather than chase.
   // Released by POSSESSION — the moment anybody else has the ball he is a player again — with
@@ -1076,17 +1111,9 @@ function think(dt){
       // The allied-keeper and defender-depth branches moved to the instruction list, deleted
       // rather than duplicated. What is left here is the M/F lane-covering below, which is a
       // genuinely different job.
-      // M/F: cover the roll lanes — stand between the keeper and his outlets
-      const outs=players.filter(m=>m.team===gk2.team&&m.role!=="K"&&!m.out&&!m.sentOff);
-      if(outs.length){
-        const o5=outs[Math.floor(((p.k1*769)%1)*outs.length)%outs.length];
-        let lx=gk2.x+(o5.x-gk2.x)*0.62, ly=gk2.y+(o5.y-gk2.y)*0.62;
-        const dgk=Math.hypot(lx-gk2.x,ly-gk2.y);
-        if(dgk<85){ lx=gk2.x+(lx-gk2.x)/(dgk||1)*85; ly=gk2.y+(ly-gk2.y)/(dgk||1)*85; }
-        GKSTAT.laneCover=(GKSTAT.laneCover||0)+1;
-        steer(p,lx,ly,1.2); return;
-      }
-      steer(p,CX,CY,0.9); return;
+      // Lane-covering and holding-the-middle moved to the instruction list. This whole block is
+      // now empty of decisions — everything a player does while a keeper holds the ball is an
+      // instruction, which is the first branch family fully extracted.
     }
     if(holdActive){
       const rx=pendingRestart?pendingRestart.x:ball.x, ry=pendingRestart?pendingRestart.y:ball.y;
