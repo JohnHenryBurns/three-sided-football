@@ -453,7 +453,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=54"></script>
+<script src="engine.js?v=55"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -552,36 +552,106 @@ const strip = html => String(html)
 
 function shutUp(){
   if (speechOK) { try { speechSynthesis.cancel(); } catch(e){} }
+  // The queue goes too. Without this, resetting mid-match leaves a goal from the last one
+  // waiting to be shouted over the setup screen.
+  highQ = []; speakingPrio = null; highLockUntil = 0;
+  if (pendingHigh) { clearTimeout(pendingHigh); pendingHigh = null; }
   capEl.classList.remove('on');
 }
 
-// Big lines jump the queue. A goal said thirty seconds late, behind four throw-ins, is worse than
-// a goal not said at all — so anything urgent cancels what is in progress rather than joining it.
+// ── THE ANNOUNCER'S QUEUE ───────────────────────────────────────────────────
+//
+// Goals were being dropped, and sometimes the voice went silent altogether. My version did
+// `cancel()` then `speak()` on the next line — and the flat page's comments name both faults
+// exactly, having hit them first:
+//
+//   "the old 'latest wins' slot let a goal be replaced by its own follow-ups"
+//   "Android fires onend for CANCELLED utterances"
+//   "the Android speech engine is unstable under cancel/speak churn"
+//
+// cancel() is asynchronous. A speak() issued in the same tick is routinely swallowed, which is
+// the silence. And a goal followed within a second by its own commentary meant the second call
+// cancelled the first — so the goal itself never got said.
+//
+// So: big calls QUEUE IN ORDER and never clobber one another. Cancelling low speech defers the
+// next call by 90ms rather than racing it. And a big call holds the microphone for two seconds
+// so ordinary chatter cannot jump in front of a goal.
+let highQ = [], speakingPrio = null, pendingHigh = null, highLockUntil = 0, lastCancelAt = 0;
+
+function utter(text, cap, isGoal){
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate  = isGoal ? 0.98 : 1.12;      // the goal call slows down and lifts
+  u.pitch = isGoal ? 1.06 : 1;
+  if (capsOn && cap) {
+    capEl.textContent = cap;
+    capEl.classList.add('on');
+    clearTimeout(capEl._t);
+    capEl._t = setTimeout(() => capEl.classList.remove('on'), isGoal ? 4200 : 2800);
+  }
+  u.onend = u.onerror = () => {
+    speakingPrio = null;
+    // Only drain if nothing is already deferred: a cancelled utterance fires onend too, and
+    // without this guard that ghost drains the queue ahead of the goal it was cancelled for.
+    if (highQ.length && !pendingHigh) {
+      const nxt = highQ.shift();
+      highLockUntil = performance.now() + 2000;
+      setTimeout(() => {
+        try { speakingPrio = 'high'; speechSynthesis.speak(utter(nxt[0], nxt[1], nxt[2])); }
+        catch (e) { speakingPrio = null; }
+      }, 40);
+    }
+  };
+  return u;
+}
+
 function announce(html, big){
   const text = strip(html);
+  // The caption keeps its punctuation and em-dashes — only the speech needs those flattened.
+  const cap = String(html).replace(/<[^>]*>/g, '')
+    .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, '')
+    .replace(/\s+/g, ' ').trim();
   if (!text) return;
-  if (capsOn) {
-    capEl.textContent = text;
+
+  if (capsOn && !sayAloud) {           // captions without a voice still need showing
+    capEl.textContent = cap;
     capEl.classList.add('on');
     clearTimeout(capEl._t);
     capEl._t = setTimeout(() => capEl.classList.remove('on'), big ? 4200 : 2800);
   }
   if (!sayAloud || !speechOK) return;
+
+  const isGoal = /G+O+A+L+|IT'S IN|NET BULGES/i.test(html);
   const now = performance.now();
-  if (big) { try { speechSynthesis.cancel(); } catch(e){} }
-  else if (speechSynthesis.speaking || speechSynthesis.pending) return;   // do not stack up
-  else if (now - lastSpokeAt < 900) return;
+  const fire = () => {
+    try { speakingPrio = big ? 'high' : 'low'; speechSynthesis.speak(utter(text, cap, isGoal)); }
+    catch (e) { speakingPrio = null; }
+  };
+
+  if (big) {
+    highLockUntil = now + 2000;        // the mic belongs to the big calls
+    if (speakingPrio === 'high' || pendingHigh || highQ.length) {
+      if (highQ.length < 4) highQ.push([text, cap, isGoal]);   // in order, never clobbered
+      return;
+    }
+    if (speechSynthesis.speaking || speechSynthesis.pending) {
+      // Interrupting ordinary chatter: cancel, then WAIT. Speaking in the same tick as a cancel
+      // is what loses the utterance.
+      if (now - lastCancelAt > 150) { try { speechSynthesis.cancel(); } catch (e) {} lastCancelAt = now; }
+      pendingHigh = setTimeout(() => { pendingHigh = null; fire(); }, 90);
+      return;
+    }
+    fire();
+    return;
+  }
+
+  // Chatter waits its turn, and stays out of the way of anything big.
+  if (now < highLockUntil || speakingPrio || pendingHigh || highQ.length) return;
+  if (speechSynthesis.speaking || speechSynthesis.pending) return;
+  if (now - lastSpokeAt < 900) return;
   lastSpokeAt = now;
-  try {
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = big ? 1.08 : 1.0;
-    u.pitch = big ? 1.15 : 1.0;
-    speechSynthesis.speak(u);
-  } catch(e) { /* refused: the caption still carries it */ }
+  fire();
 }
 
-// Android suspends speech when the tab blurs and does not always resume; nudging it is the
-// standard workaround and costs nothing when it is unnecessary.
 setInterval(() => { try { if (sayAloud && speechSynthesis.speaking) speechSynthesis.resume(); } catch(e){} }, 4000);
 document.addEventListener('visibilitychange', () => { if (document.hidden) shutUp(); });
 
