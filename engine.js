@@ -590,7 +590,10 @@ function kick(tx,ty,power,isShot){
   ball.lastTouch=o.team; ball.lastKicker=o; ball.isShot=!!isShot;
   ball.noClaim=o; ball.noClaimF=14; ball.owner=null;
   ball.z=0; ball.zv=0;
-  if(!isShot && d>235){ ball.zv=3.0; }   // long balls travel through the air
+  // A long ball travels THROUGH THE AIR, which at 3.0 meant an apex of 32 — over a head and
+  // under everything else. 3.8 gives 52, which is a ball you have to deal with rather than one
+  // you can step under.
+  if(!isShot && d>235){ ball.zv=3.8; }   // long balls travel through the air
   if(isShot){ stats.shots[o.team]++; ENGINE_HOOKS.spawnNote(ball.x,ball.y-18,"shot!","#ffd166");
     // The guard here was `typeof spawnPing==="function" && ballHalo` — a check that the front end
     // had both, written when the front end was the only thing there was. After the extraction
@@ -942,7 +945,9 @@ function think(dt){
         : (Math.random()*2-1)*e2.len*GOAL_HALF*0.7;
       const txc=g.x+e2.ux*off2+e2.nx*44, tyc=g.y+e2.uy*off2+e2.ny*44;
       kick(txc,tyc,6.8,false);
-      ball.zv=2.8;                       // it swings in high, whatever the distance
+      // A corner should clear the defenders it is aimed over: 3.6 peaks at 46, above every
+      // head on the pitch, where 2.8 peaked at 28 and arrived at chest height.
+      ball.zv=3.6;                       // it swings in high, whatever the distance
       if(farPost){ GKSTAT.farPost=(GKSTAT.farPost||0)+1;
         if(Math.random()<0.6) sayLogged(pick([
           `Coach Eric's voice carries clear across the pitch: FAR POST! FAR POST!`,
@@ -994,7 +999,12 @@ function think(dt){
         const dTo=dist(owner,far);
         const pw=Math.min(13.5, 5.5+dTo*0.014);   // drop it TO the man, not past him
         kick(far.x+far.vx*7, far.y+far.vy*7, pw, false);
-        ball.zv=3.4;   // up into the lights — headers await on the far side
+        // 4.6, not 3.4. A real match measured the ball ABOVE THE CROSSBAR for 0% of its
+        // airborne time, topping out at 45 against a bar of 54 — so nothing in the game ever
+        // cleared it, and "up into the lights" reached shoulder height. At 4.6 this punt peaks
+        // near 76, comfortably over, and hangs for 1.1s instead of 0.8 — long enough for the
+        // far side to actually get under it, which is what the comment always claimed.
+        ball.zv=4.6;   // up into the lights — headers await on the far side
         GKSTAT.punts++; ball.puntBy=owner.team;
         sayLogged(pick([
           `${owner.name} LAUNCHES it — a drop kick clearing the county line!`,
