@@ -2,6 +2,12 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b1410">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <title>Three-Sided Football · 3D</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
@@ -148,7 +154,6 @@ button.on{border-color:var(--hot);color:var(--hot)}
   padding:.4rem .6rem;font-size:.88rem;background:var(--bg)}
 .chk+.chk{border-top:1px solid var(--panel-edge)}
 .chk input{width:1.05rem;height:1.05rem;accent-color:var(--hot)}
-#teamSlots{display:flex;flex-direction:column;gap:.3rem}
 #teamSlots select{width:100%;font-family:inherit;font-size:.92rem;padding:.4rem .5rem;
   background:var(--bg);color:var(--ink);border:1px solid var(--panel-edge);border-radius:7px}
 #btnStart{width:100%;margin-top:.85rem;font-size:1.05rem;font-weight:700;padding:.55rem;
@@ -163,7 +168,7 @@ button.on{border-color:var(--hot);color:var(--hot)}
    side by on the pitch. */
 /* flex:1 so it fills the row. Without it the slot chips had no width to share and each dropped
    onto its own line — which is the column of buttons in the screenshot, not three side by side. */
-#teamSlots{flex:1;min-width:0;display:flex;gap:.4rem;align-items:stretch}
+#teamSlots{flex:1;min-width:0;display:flex;flex-direction:row;gap:.4rem;align-items:stretch}
 .slotBtn{flex:1;min-width:0;font-family:var(--sans);font-size:1.05rem;font-weight:700;letter-spacing:.04em;
   padding:.5rem .2rem;background:var(--bg);border:2px solid var(--panel-edge);border-radius:9px;
   cursor:pointer}
@@ -231,6 +236,19 @@ header #reset{font-size:.78rem;padding:.28rem .55rem;margin-left:.1rem}
 header #reset,header #full{font-size:.78rem;padding:.28rem .5rem}
 header #full{padding:.3rem .42rem}
 header #full.on{border-color:var(--hot);color:var(--hot)}
+
+/* The countdown, straight from the flat page. Four beats over 6.6 seconds: the ball waits for
+   the booth, which is what gives a kick-off the feeling of a thing about to start rather than a
+   thing that already has. */
+#countdown{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+  z-index:7;pointer-events:none;font-weight:900;font-size:7rem;color:#fff;
+  text-shadow:0 4px 22px rgba(0,0,0,.75)}
+#countdown.on{display:flex}
+#countdown span{animation:countPop 1.06s ease-out forwards;display:block}
+@keyframes countPop{0%{transform:scale(1.7);opacity:0}22%{transform:scale(1);opacity:1}
+  82%{opacity:1}100%{transform:scale(.92);opacity:0}}
+@media (max-width:560px){ #countdown{font-size:5rem} }
+@media (prefers-reduced-motion:reduce){ #countdown span{animation:none;opacity:1} }
 </style>
 
 <header>
@@ -289,6 +307,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
   <div id="tp"><div id="tpCard"></div></div>
   <div id="cm"><div id="cmCard"></div></div>
   <div id="cele"><div id="celeCard"></div><div id="confetti"></div></div>
+  <div id="countdown"></div>
   <div id="caption"></div>
   <div id="feed"></div>
 </div>
@@ -309,7 +328,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=17"></script>
+<script src="engine.js?v=18"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1314,8 +1333,33 @@ function startMatch(){
   running = true;
   setPlayIcon();
   if (oobRule) say('Touchlines in play \u2014 throw-ins, goal kicks, and corners.');
+  startCountdown();
 }
 document.getElementById('btnStart').addEventListener('click', startMatch);
+
+
+// ── THE COUNTDOWN ───────────────────────────────────────────────────────────
+// Four beats, 6.6 seconds, and the ball waits for the booth. That wait is the whole point: it
+// gives a kick-off the feeling of a thing about to start rather than a thing that already has.
+//
+// Each step checks the menu is still down before drawing, because a reset during the count would
+// otherwise leave a "2" floating over the setup screen.
+let countTok = 0;
+function startCountdown(){
+  const tok = ++countTok;
+  const el2 = document.getElementById('countdown');
+  resumeAt = performance.now() + 6600;
+  el2.classList.add('on');
+  ['3', '2', '1', 'GO!'].forEach((t2, i) => setTimeout(() => {
+    if (tok !== countTok || setupEl.classList.contains('on')) { el2.classList.remove('on'); return; }
+    el2.innerHTML = '<span' + (t2 === 'GO!' ? ' style="font-size:.74em;letter-spacing:.05em"' : '') +
+      '>' + t2 + '</span>';
+    if (t2 === 'GO!') {
+      ENGINE_HOOKS.spawnNote(CX, CY - 46, 'kick-off!', '#ffd166');
+      setTimeout(() => { if (tok === countTok) el2.classList.remove('on'); }, 1100);
+    }
+  }, 1500 + i * 1250));
+}
 
 // ── THE LOOP ────────────────────────────────────────────────────────────────
 // Deliberately simpler than the 2D page's. That one carries celebration timing, the walk of
