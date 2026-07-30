@@ -323,7 +323,7 @@
 <div id="coachMenu"><div id="cmCard"></div></div>
 <div id="teamPick"><div id="tpCard"></div></div>
 
-<script src="engine.js?v=119"></script>
+<script src="engine.js?v=120"></script>
 <script>
 function statBars(lib){   // display stats DERIVED from the engine bundle — the UI never lies
   const A={TikiTaka:4,RouteOne:3,Swashbuckle:5,Probe:3,Balanced:3};
@@ -1135,7 +1135,7 @@ function loop(now){
         resumeAt=performance.now()+1200; }   // beat of stillness before play resumes
       else if(celebrateUntil>0&&celebrateUntil!==Infinity){
         hideCelebration();
-        if(walkPending){ walkOff=walkPending; walkPending=null; }
+        if(walkPending){ walkOff=walkPending; if(typeof setWalking==='function') setWalking(walkOff); walkPending=null; }
         else if(pendingPenalty){ stagePenalty(); } else resumeAt=performance.now()+350;
       }
       if(walkOff){
@@ -1147,7 +1147,7 @@ function loop(now){
         camFocusP=q; camFocusUntil=performance.now()+400;
         resumeAt=performance.now()+120;
         if(bd<12){
-          q.out=true; q.sentOff=false; walkOff=null; camFocusP=null;
+          q.out=true; q.sentOff=false; walkOff=null; if(typeof setWalking==='function') setWalking(null); camFocusP=null;
           q.benched=true;
           q.seat=players.filter(o=>o.team===q.team&&o.benched).length-1;
           say(pick([
@@ -1375,7 +1375,7 @@ document.getElementById("btnStart").onclick=()=>{
   foulMult=parseFloat(document.getElementById("setRef").value);
   setupEl.classList.remove("show");
   camX=camTX=CX; camY=camTY=CY; resumeAt=0; camFocusP=null; camFocusUntil=0; restartHold=0; pendingRestart=null;
-  walkOff=null; walkPending=null;
+  walkOff=null; if(typeof setWalking==='function') setWalking(null); walkPending=null;
   resetMatch(); updateBars(); draw();
   running=true; setPlayBtn();
   startCountdown();   // LAST: nothing downstream may touch resumeAt before the whistle

@@ -735,6 +735,16 @@ let chaser = [null, null, null];
 // deciding — and a renderer that wants to draw it can read the same state.
 let goalRestart = null;   // { conceder, taker, fetcher, until }
 
+// WHETHER A WALK IS HAPPENING. `walkPending` says one is due; both front ends then run their own
+// copy of the walk — three.html and index.html each move the man to their own bench, with their
+// own arrival test. That is the champInfo shape again: shared behaviour implemented twice.
+//
+// Not unifying the walk itself here, because the bench position is genuinely front-end geometry.
+// But the engine needs to KNOW a walk is running, because everybody else has something to do
+// while it does — and that they had nothing to do is exactly what John spotted.
+let walking = null;
+function setWalking(p){ walking = p || null; }
+
 /** Called when a goal is given. Names the parts; the instructions play them. */
 function stageGoalRestart(concederTeam, scorerTeam){
   const kicking = (scorerTeam!==null && scorerTeam!==undefined) ? concederTeam : concederTeam;
@@ -1354,6 +1364,26 @@ const INSTRUCTIONS = [
       const lat=((p.k1*911)%1-0.5)*180;
       const dep=0.45+((p.k2*631)%1)*0.25;          // 45-70% of the way to the middle
       steer(p, own.x+ax*dep+px*lat, own.y+ay*dep+py*lat, 2.0);
+      return true;
+    } },
+
+  // ── WAITING OUT A SENDING-OFF ─────────────────────────────────────────────
+  // A man is walking to the bench and the other fourteen stood exactly where the foul left them.
+  // A sending-off is thirty seconds of dead time and it looked like a freeze-frame with one man
+  // moving through it.
+  //
+  // They take up their kick-off shape while he goes — the same positions as after a goal, which
+  // is right, because the same thing happens next. SCRIPT: nobody is deciding this.
+  { name:'waiting out a sending-off', tier:TIER.SCRIPT, base:930,
+    applies:p => !!(walking && walking!==p && !p.out && !p.sentOff && p.role!=='K'),
+    score:p => 930,
+    act:p => {
+      const own=goalCenter(p.team);
+      const ax=CX-own.x, ay=CY-own.y, al=Math.hypot(ax,ay)||1;
+      const px=-ay/al, py=ax/al;
+      const lat=((p.k1*911)%1-0.5)*180;
+      const dep=0.45+((p.k2*631)%1)*0.25;
+      steer(p, own.x+ax*dep+px*lat, own.y+ay*dep+py*lat, 1.6);   // no hurry; he has a walk to finish
       return true;
     } },
 
