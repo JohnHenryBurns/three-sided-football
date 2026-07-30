@@ -8,6 +8,26 @@
   "theme_color": "#0b1410",
   "description": "Three teams. One ball. No permanent friends.",
   "icons": [
-    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "3D 3-Sided Football",
+      "short_name": "3D Football",
+      "description": "The modelled pitch — cameras, kits and a crowd",
+      "url": "three.html",
+      "icons": [
+        {
+          "src": "icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
   ]
 }
