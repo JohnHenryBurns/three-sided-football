@@ -134,7 +134,7 @@ button.on{border-color:#ff8a4c;color:#ff8a4c}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=5"></script>
+<script src="engine.js?v=6"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -558,15 +558,40 @@ function buildBodies(){
   bodies.forEach(b => scene.remove(b.g));
   bodies = players.map(p => {
     const g = new THREE.Group();
-    const col = new THREE.Color(TEAMS[p.team].color);
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(R_P, R_P*0.9, H_P, 14),
+    const T = TEAMS[p.team];
+    const col = new THREE.Color(T.color);
+    const acc = new THREE.Color(T.accent || '#ffffff');
+    const thr = new THREE.Color(T.third  || T.accent || '#222222');
+
+    // ── THE KIT ──────────────────────────────────────────────────────────
+    // Every team already carries three colours and the 3D page was using one of them, so fifteen
+    // cylinders came out as three flat blocks of colour. Shirt, shorts and a collar is the least
+    // that reads as a kit, and it uses exactly the palette the flat page already draws with.
+    //
+    // Built as three stacked cylinders rather than one textured body: a texture would have to be
+    // authored per team and would blur at this scale, and the geometry costs nothing.
+    const SHORTS = H_P * 0.3;
+    const shirt = new THREE.Mesh(
+      new THREE.CylinderGeometry(R_P, R_P * 0.97, H_P - SHORTS, 16),
       new THREE.MeshLambertMaterial({ color: col }));
-    body.position.y = H_P/2; g.add(body);
-    if (p.role === 'K') {                                   // the keeper wears the accent
-      const band = new THREE.Mesh(new THREE.CylinderGeometry(R_P*1.07, R_P*1.07, 7, 14),
-        new THREE.MeshLambertMaterial({ color: new THREE.Color(TEAMS[p.team].accent) }));
-      band.position.y = H_P - 6; g.add(band);
+    shirt.position.y = SHORTS + (H_P - SHORTS)/2;
+    g.add(shirt);
+    const shorts = new THREE.Mesh(
+      new THREE.CylinderGeometry(R_P * 0.97, R_P * 0.9, SHORTS, 16),
+      new THREE.MeshLambertMaterial({ color: thr }));
+    shorts.position.y = SHORTS/2;
+    g.add(shorts);
+    // a collar, and for a keeper the whole shirt is the accent instead — which is what a keeper
+    // kit IS, rather than a badge stuck on an outfield one
+    if (p.role === 'K') {
+      shirt.material.color.copy(acc);
+      shorts.material.color.copy(col);
     }
+    const collar = new THREE.Mesh(
+      new THREE.CylinderGeometry(R_P * 1.04, R_P * 1.04, 3.4, 16),
+      new THREE.MeshLambertMaterial({ color: p.role === 'K' ? col : acc }));
+    collar.position.y = H_P - 2.4;
+    g.add(collar);
     // EYES, NOT A BEAK. A cone on the front pointed the way the player faced and read as a bird,
     // which my four-year-old reviewer spotted before I did. Two eyes carry the same information —
     // you can see which way something is looking — and a face is easier to read at a glance than
@@ -619,19 +644,29 @@ function buildBodies(){
     const num = (typeof shirtOf === 'function') ? shirtOf(p.name) : 0;
     if (num) {
       const c = document.createElement('canvas');
-      c.width = 64; c.height = 64;
+      c.width = 96; c.height = 64;
       const x = c.getContext('2d');
       x.font = '700 46px "Barlow Condensed", "Arial Narrow", sans-serif';
       x.textAlign = 'center'; x.textBaseline = 'middle';
-      x.fillStyle = lum(TEAMS[p.team].color) > 0.62 ? '#14181a' : '#f6f8f6';
-      x.fillText(String(num), 32, 34);
+      // Ink chosen against whatever the shirt actually is — the keeper's is the accent, so
+      // testing the team colour would give a white number on a yellow keeper.
+      const shirtCol = p.role === 'K' ? (TEAMS[p.team].accent || '#ffffff') : TEAMS[p.team].color;
+      x.fillStyle = lum(shirtCol) > 0.62 ? '#14181a' : '#f6f8f6';
+      x.fillText(String(num), 48, 34);
       const tex = new THREE.CanvasTexture(c);
       tex.minFilter = THREE.LinearFilter;
+      // A CURVED PANEL, NOT A FLAT ONE. A plane hovering off the back of a cylinder reads as a
+      // sign held behind a player, which is what looked wrong: shirts are not flat and neither
+      // are the numbers on them. This is a 90-degree slice of a cylinder at the shirt's own
+      // radius, so the number wraps with the body and catches the light the same way.
+      //
+      // openEnded, and rotated to sit on the BACK: theta starts at +X in three.js, so a quarter
+      // turn back from there puts the middle of the slice behind the player.
       const back = new THREE.Mesh(
-        new THREE.PlaneGeometry(15, 15),
-        new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
-      back.position.set(-R_P - 0.4, H_P * 0.66, 0);
-      back.rotation.y = -Math.PI/2;
+        new THREE.CylinderGeometry(R_P * 1.005, R_P * 0.985, 15, 14, 1, true,
+                                   Math.PI * 0.75, Math.PI * 0.5),
+        new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
+      back.position.y = H_P * 0.66;
       g.add(back);
     }
     const label = nameSprite(p.name.split(' ').slice(-1)[0], TEAMS[p.team].accent);
