@@ -17,17 +17,10 @@
   ],
   "shortcuts": [
     {
-      "name": "3D 3-Sided Football",
-      "short_name": "3D Football",
-      "description": "The modelled pitch — cameras, kits and a crowd",
-      "url": "three.html",
-      "icons": [
-        {
-          "src": "icon.svg",
-          "sizes": "any",
-          "type": "image/svg+xml"
-        }
-      ]
+      "name": "Flat (retired)",
+      "short_name": "Flat",
+      "url": "flat.html",
+      "description": "The 2D page, kept for reference and no longer maintained."
     }
   ]
 }
