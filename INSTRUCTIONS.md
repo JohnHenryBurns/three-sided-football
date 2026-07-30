@@ -49,6 +49,19 @@ An instruction can only be extracted once **everything it reads is visible from 
 Anything an instruction needs to read is shared state, not a local — and the alternative
 is that the extraction stops at whatever the cascade happens to have hoisted already.
 
+## Coverage
+
+**94% of decisions come from the list**, up from 3% when it was first wired in. The
+remaining 6% of cascade is mostly the bunker M/F variants and whatever the burst
+decision does — small, and the last of it will need care rather than volume.
+
+The two that did it are the two nobody was looking at:
+
+- **the back line** — 29%. Where a defender stands when he is not chasing.
+- **finding space** — 27%. Everybody else, fanned sideways, with a spread that grows as
+  play compresses toward the target goal. **55 normally, up to 158 in the last 230** —
+  width instead of pile-in, and the reason a crowded box is not a scrum.
+
 ## To investigate
 
 **The corner trio is duplicated.** The three waves are in the list *and* still in the
