@@ -1238,6 +1238,27 @@ const PORTED = [
   // The cascade's chance: 0.010 * (0.6+0.8*press) * aggression, times fresh-tackler and
   // gassed-carrier terms. At 60fps that is 0.6-1.5 a second, so a score of roughly 30-70 against
   // PLAY_ON_WEIGHT — and every one of those factors survives as a term.
+  // ── SECURE IT ─────────────────────────────────────────────────────────────
+  // The keeper catching it — "his ball, his moment, his name in lights", as the cascade puts it.
+  // John named this one first, alongside the kick and the dive, and it is the last piece of
+  // keeper behaviour still living in the owner block.
+  //
+  // It is the entanglement that made the separation look expensive: gkHolder and gkHoldUntil are
+  // SET here and READ by four instructions. As an action the setting moves out and the reading
+  // stays put — which is the whole separation for this piece, and it turns out to be small.
+  //
+  // Not available on a back-pass: he may not hold what his own side played to him, which is the
+  // mustKick rule and it belongs in can() rather than as a check inside the hold.
+  { name:'secure it', tier:TIER.SCRIPT, ported:true,
+    coach:T => 0,
+    can:p => !!(p.role==='K' && ball.owner===p && gkHolder!==p && !p.mustKick && onPitch(p)),
+    score:p => 900,                    // he has caught it; there is nothing to decide
+    act:p => {
+      gkHolder=p; gkHoldUntil=clockSec+1.6; GKSTAT.holds=(GKSTAT.holds||0)+1;
+      ENGINE_HOOKS.spawnNote(p.x,p.y-26,"\u{1F9E4} secured!",TEAMS[p.team].color,TEAMS[p.team].accent);
+      return false;                    // holding is not releasing: his frame continues
+    } },
+
   { name:'tackle', tier:TIER.PLAYER, ported:true,
     coach:T => T.press*60,
     can:p => {
