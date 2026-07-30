@@ -699,7 +699,7 @@ function think(dt){
         // A fetching restart has the ball lying where it went out rather than sitting on the
         // spot. He goes and GETS it, carries it to the mark, and only then takes the throw. Play
         // is not held for any of this — everyone else is still playing.
-        if(false && R.fetch && ball.fetch && !R.got){   // fetch is off; see stageThrowIn
+        if(R.fetch && ball.fetch && !R.got){
           const bd9=dist(p,ball);
           if(bd9>13){
             steer(p, ball.x, ball.y, 2.6);         // jog out to it
@@ -708,9 +708,13 @@ function think(dt){
           R.got=true;                              // picked up
           ENGINE_HOOKS.spawnNote(ball.x, ball.y-22, "\u{1F450} fetched", TEAMS[p.team].color);
         }
-        if(false && R.fetch && R.got){
-          // carrying it back to the mark, ball in hand
-          ball.x=p.x; ball.y=p.y; ball.z=0; ball.vx=0; ball.vy=0;
+        if(R.fetch && R.got){
+          // CARRYING IT BACK, and putting it DOWN once the mark is within reach. The ball must
+          // end up on the mark and the thrower behind it — if it stays in his hands he walks it
+          // outside the line and it goes out again, which is the loop.
+          const md=Math.hypot(R.x-p.x, R.y-p.y);
+          if(md>16){ ball.x=p.x; ball.y=p.y; ball.z=0; ball.vx=0; ball.vy=0; }
+          else { ball.x=R.x; ball.y=R.y; ball.z=0; ball.vx=0; ball.vy=0; R.placed=true; }
         }
         // throwers take their mark BEHIND the chalk; corner and goal-kick takers stand on their spot
         let sx8=R.x, sy8=R.y;
@@ -2659,7 +2663,11 @@ function outOfBounds(k,e){
   //
   // That is the fetch change's own bug, and the rebuilt harness found it within a minute of
   // being able to reach a throw-in at all.
-  if(pendingRestart||ball.fetch) return;
+  // OUT OF PLAY IS A TRANSITION, NOT A STATE. Once a restart has been awarded the ball is dead
+  // until it is put back in, and a dead ball lying outside the line must not be awarded again
+  // every frame. This is what stops the count running to six hundred; the loop that survived it
+  // was a genuinely different fault, of the ball being handed to a man standing out of play.
+  if(pendingRestart||ball.fetch||nowMs()<restartHold) return;
   const toucher=ball.lastTouch;
   const ex=ball.x, ey=ball.y;
   ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0; ball.owner=null; ball.noClaim=null; ball.isShot=false; ball.allyPass=false; ball.flameShot=false;
@@ -2723,8 +2731,21 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
   // A teleport is worse than a fetch and far better than a game that cannot restart. The idea is
   // right and it needs the thrower and the ball to end up on opposite sides of the line, which is
   // the part I did not think through.
-  telPort('throw-in'); ball.owner=null; ball.x=sx; ball.y=sy;
-  pendingRestart={p:thr, x:sx, y:sy, team:thr.team, cap:nowMs()+2000, readyAt:nowMs()+1100};
+  // ── THE BALL STAYS WHERE IT WENT OUT ──────────────────────────────────────
+  // Somebody fetches it. What broke this the first time was not the fetching — it was that the
+  // ball ended up ON the thrower, and a thrower stands twenty units OUTSIDE the line. A ball
+  // outside the line is out of play, so it went out again the instant he picked it up.
+  //
+  // THE RULE THE LOOP VIOLATED: the ball waits on the MARK, six inside the line, and the thrower
+  // steps behind it. They are on opposite sides of the chalk — that is what a throw-in IS, and
+  // it is why the original placing version never looped.
+  //
+  // So he fetches it, carries it, and puts it DOWN ON THE MARK. He does not keep hold of it.
+  ball.owner=null;
+  ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+  ball.fetch={ by:thr, sx, sy, team:thr.team, at:clockSec };
+  pendingRestart={p:thr, x:sx, y:sy, team:thr.team, fetch:true,
+                  cap:nowMs()+20000, readyAt:nowMs()};
   suppress={team:toucher,until:clockSec+0.8};
   ENGINE_HOOKS.spawnNote(sx,sy-24,"throw-in!",TEAMS[thr.team].color,TEAMS[thr.team].accent);
   if(Math.random()<0.4) sayLogged(pick([
