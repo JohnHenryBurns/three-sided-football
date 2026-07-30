@@ -453,7 +453,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=58"></script>
+<script src="engine.js?v=59"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1422,6 +1422,31 @@ let emberNext = 0;
 /** A soft round blob, brightest in the middle. Additive blending turns overlapping blobs into a
  *  hot core without any of them having to know about the others, which is why fire drawn this
  *  way looks lit from inside rather than painted. */
+/** A five-pointed star, drawn once and shared. Additive, so overlapping stars glow rather than
+ *  stack, and bright in the middle so it reads as light rather than as a sticker. */
+let starTex = null;
+function starTexture(){
+  if (starTex) return starTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const x = c.getContext('2d');
+  const g2 = x.createRadialGradient(32, 32, 0, 32, 32, 30);
+  g2.addColorStop(0, 'rgba(255,255,255,.9)');
+  g2.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = g2; x.beginPath(); x.arc(32, 32, 30, 0, Math.PI*2); x.fill();
+  x.beginPath();
+  for (let k = 0; k < 10; k++) {
+    const a = k * Math.PI/5 - Math.PI/2, r = k % 2 ? 11 : 27;
+    const px = 32 + r*Math.cos(a), py = 32 + r*Math.sin(a);
+    k ? x.lineTo(px, py) : x.moveTo(px, py);
+  }
+  x.closePath();
+  x.fillStyle = '#ffffff'; x.fill();
+  starTex = new THREE.CanvasTexture(c);
+  starTex.minFilter = THREE.LinearFilter;
+  return starTex;
+}
+
 function emberTexture(){
   const c = document.createElement('canvas');
   c.width = c.height = 64;
@@ -1503,17 +1528,20 @@ function emit(p, pal, hard){
 // of what you actually watch glowing red, which is what a blast of heat looks like.
 const HEAT_IN  = ['#fff0d8', '#ffb347'];                          // the flash, brief
 const HEAT_OUT = ['#ff7a18', '#ff3d00', '#c81a00', '#7a0d00', '#360400'];   // the long red fall
+// HERS IS NOT FIRE AT ALL. Bookending her rainbow with a heat ramp meant seven of her thirteen
+// stops were somebody else's flame — she arrived orange and left red, and the rainbow was a
+// stripe in the middle. If she is the easter egg, she should not be spending most of her life
+// looking like everybody else.
+//
+// So an ordinary side burns pure heat, and she burns pure rainbow: white-hot for an instant
+// because everything hot is, then straight round the wheel twice, ending on a colour rather than
+// on ash. Twice, because one pass over a third of a second is a gradient and two is a shimmer.
+const SPARK_IN = '#ffffff';
 function heatRamp(pal){
-  // ONLY INSERT A TEAM PALETTE THAT SAYS SOMETHING. For an ordinary side firePal() returns
-  // FLAME3 — which is amber, amber, orange — so splicing it in duplicated the ambers and put
-  // half the ramp back in the band this change exists to leave. An ordinary side burns pure
-  // heat now.
-  //
-  // A rainbow side is different by definition, so hers goes in and she burns through all six
-  // colours between the flash and the fall. The easter egg is the only reason this branch
-  // exists, and it is louder for it: hers is the only fire on the pitch that is not simply red.
   const special = pal.length > 3;
-  return special ? HEAT_IN.concat(pal.slice().reverse(), HEAT_OUT) : HEAT_IN.concat(HEAT_OUT);
+  if (!special) return HEAT_IN.concat(HEAT_OUT);
+  const wheel = pal.concat(pal);
+  return [SPARK_IN].concat(wheel, [pal[0]]);
 }
 
 /** Age every live ember, cooling it along its own heat ramp. */
@@ -1570,7 +1598,13 @@ const lum = hex => {
 };
 let bodies = [];
 function buildBodies(){
-  bodies.forEach(b => scene.remove(b.g));
+  // Ribbons are added to the SCENE rather than to a player's group, so they lag behind her
+  // instead of being carried by her — which means they have to be removed by hand here, or a
+  // team change leaves streamers hanging over an empty pitch.
+  bodies.forEach(b => {
+    scene.remove(b.g);
+    if (b.ribbons) for (const rb of b.ribbons) for (const m of rb.seg) scene.remove(m);
+  });
   bodies = players.map(p => {
     const g = new THREE.Group();
     const T = TEAMS[p.team];
@@ -1679,6 +1713,45 @@ function buildBodies(){
     //
     // A sprite, so it faces you from any camera, and additive so it reads as light rather than a
     // sticker stuck above a head.
+    // ── STARS AND RIBBONS, FOR HERS ONLY ─────────────────────────────────
+    // She gets every easter egg. Three stars turning around her at different radii and speeds,
+    // and two ribbons streaming off her shoulders — both drawn only for a side flagged `she`, so
+    // they cost nothing at all for anybody else.
+    //
+    // The stars turn on their OWN clocks rather than a shared one, because three things orbiting
+    // in lockstep read as a mechanism and three at different rates read as magic.
+    const sparkly = !!TEAMS[p.team].she;
+    const stars = [], ribbons = [];
+    if (sparkly) {
+      for (let k = 0; k < 3; k++) {
+        const st = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: starTexture(), transparent: true, depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          color: new THREE.Color(pal[(k * 2) % pal.length]), opacity: 0.9 }));
+        st.scale.set(9 - k, 9 - k, 1);
+        g.add(st);
+        stars.push({ sp: st, r: 15 + k * 4, y: H_P * (0.45 + k * 0.22),
+                     w: 1.4 + k * 0.55, ph: k * 2.1 });
+      }
+      // Ribbons: a short strip of segments that lags behind the shoulder, so it trails when she
+      // runs and hangs when she stops — the same idea as the ball's trail and for the same
+      // reason, that a streamer which does not lag is a stick.
+      for (const side of [-1, 1]) {
+        const seg = [];
+        for (let k = 0; k < 7; k++) {
+          const r = new THREE.Mesh(
+            new THREE.PlaneGeometry(5.5 - k * 0.5, 3.2),
+            new THREE.MeshBasicMaterial({
+              color: new THREE.Color(pal[(k + (side > 0 ? 3 : 0)) % pal.length]),
+              side: THREE.DoubleSide, transparent: true, opacity: 0.85 - k * 0.09,
+              depthWrite: false }));
+          scene.add(r);                       // in the world, not the group: it must LAG
+          seg.push(r);
+        }
+        ribbons.push({ seg, side, hist: [] });
+      }
+    }
+
     const mo = new THREE.Sprite(new THREE.SpriteMaterial({
       map: emberTexture(), transparent: true, depthWrite: false,
       blending: THREE.AdditiveBlending, color: new THREE.Color(pal[0]), opacity: 0 }));
@@ -1744,7 +1817,7 @@ function buildBodies(){
     label.material.depthWrite = false;
     g.add(label);
     scene.add(g);
-    return { g, ring, flames, pip, label, pal, mo };
+    return { g, ring, flames, pip, label, pal, mo, stars, ribbons };
   });
 }
 
@@ -1891,6 +1964,34 @@ let drawGL = function drawGL(){
         b.mo.material.opacity = 0.5 + 0.32 * Math.sin(w);
         const k = 13 + 4 * Math.sin(w * 1.7);
         b.mo.scale.set(k, k, 1);
+      }
+    }
+    // ── HER STARS AND RIBBONS ────────────────────────────────────────────
+    if (b.stars && b.stars.length) {
+      const tSec = nowMs / 1000;
+      for (const st of b.stars) {
+        const a = tSec * st.w + st.ph;
+        st.sp.position.set(Math.cos(a) * st.r, st.y + Math.sin(a * 1.7) * 3, Math.sin(a) * st.r);
+        st.sp.material.opacity = 0.55 + 0.4 * Math.sin(a * 2.3);   // twinkle, off its own clock
+        st.sp.material.rotation = a * 0.6;
+      }
+    }
+    if (b.ribbons && b.ribbons.length) {
+      for (const rb of b.ribbons) {
+        // Remember where the shoulder has been; each segment sits on an older position, which is
+        // what makes it lag and therefore trail.
+        const hl2 = Math.hypot(p.hx, p.hy) || 1;
+        const sx = -p.hy/hl2 * rb.side * 9, sz = p.hx/hl2 * rb.side * 9;
+        rb.hist.unshift({ x: p.x + sx, y: H_P * 0.78, z: p.y + sz });
+        if (rb.hist.length > rb.seg.length * 3) rb.hist.length = rb.seg.length * 3;
+        rb.seg.forEach((m, k) => {
+          const h = rb.hist[Math.min(rb.hist.length - 1, k * 3)];
+          if (!h) { m.visible = false; return; }
+          m.visible = true;
+          m.position.set(h.x, h.y - k * 1.1, h.z);
+          m.lookAt(cam.position);                     // always edge-on to nobody
+          m.material.opacity = (0.85 - k * 0.09) * 0.9;
+        });
       }
     }
     b.pip.visible = !!(p.redCard || p.yellows > 0);
