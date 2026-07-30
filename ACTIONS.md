@@ -344,6 +344,35 @@ team explicitly or moving the call into the shot actions where the shooter is kn
 Larger than a flip and smaller than a rewrite. **The organ is ready and the cavity needs
 preparing** — and knowing that precisely is worth more than another attempt at the boolean.
 
+## Fourteen, and the two inversions
+
+**`dive` and `tackle` were both written from the wrong player's frame**, and that is what
+made the flip crash rather than anything about kicks.
+
+```
+gkDiveCheck(defT)    called by the SHOOTER, reaching across to move a keeper
+the tackle           a rate inside a forEach over opponents, run from the CARRIER's frame
+```
+
+Both reach through a variable that means something at the top of the frame and something
+else by the time it is read. **Guarding that is impossible from inside the loop; removing
+the reach makes it a non-question.**
+
+As actions they belong to the player who acts:
+
+```
+dive     his prerequisite is "a shot is coming at my goal"
+tackle   his prerequisite is "somebody near me has the ball"
+```
+
+**And both return `false`.** A dive is not a touch and a tackle *gains* the ball rather
+than releasing it — so the frame continues and the positional instruction still runs. That
+distinction is what the runner was built for and these are the first two to use it.
+
+**Rates preserved:** the tackle's `0.010*(0.6+0.8*press)*aggression` with its fresh-tackler
+and gassed-carrier terms becomes a score of ~47, which is 1.5% of the frames a tackler is
+in range. Every factor survives as a term.
+
 ## Order
 
 1. find the common shape, or establish that there isn't one

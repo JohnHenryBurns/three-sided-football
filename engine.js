@@ -1230,6 +1230,47 @@ const PORTED = [
   // A DIVE IS SOMETHING THE KEEPER DOES. His prerequisite is "a shot is coming at my goal", which
   // is a fact he can read himself — ball.isShot, moving, and heading his way. Nobody reaches
   // across anything, and the shooter's frame ends when the shot leaves his foot, as it should.
+  // ── THE TACKLE ────────────────────────────────────────────────────────────
+  // John is right that this belongs here. It is the clearest action in the game — a player takes
+  // the ball off another player — and it has been a rate inside a forEach over opponents, run
+  // from the CARRIER's frame rather than the tackler's. Same inversion as the dive.
+  //
+  // The cascade's chance: 0.010 * (0.6+0.8*press) * aggression, times fresh-tackler and
+  // gassed-carrier terms. At 60fps that is 0.6-1.5 a second, so a score of roughly 30-70 against
+  // PLAY_ON_WEIGHT — and every one of those factors survives as a term.
+  { name:'tackle', tier:TIER.PLAYER, ported:true,
+    coach:T => T.press*60,
+    can:p => {
+      if(!onPitch(p) || p.role==='K') return false;
+      const o=ball.owner;
+      if(!o || o.team===p.team) return false;
+      if(o.role==='K' && gkHolding()) return false;         // you cannot rob a keeper holding it
+      if(suppress && suppress.team===p.team && clockSec<suppress.until) return false;
+      if(holdingPlay()) return false;
+      return dist(p,o) < 26;                                // MUST stay above body radius 23
+    },
+    score:p => {
+      const o=ball.owner;
+      let sc = 44 * (0.6+0.8*T(p.team).press) * AGG_PRESETS[teamAGG[p.team]].t;
+      sc *= (0.55+0.45*p.stamina);                          // fresh tacklers bite harder
+      sc *= (1.35-0.5*(o?o.stamina:1));                     // gassed carriers are easier to rob
+      if(momentumOn && clockSec<boostUntil[p.team]) sc *= 1.3;
+      return sc;
+    },
+    act:p => {
+      const victim=ball.owner;
+      if(!victim) return false;
+      ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.isShot=false;
+      if(p.role==='K'){
+        ENGINE_HOOKS.spawnNote(p.x,p.y-20,"smothered!",TEAMS[p.team].color,TEAMS[p.team].accent);
+      } else {
+        stats.tackles[p.team]++; p.tackles++;
+        ENGINE_HOOKS.spawnNote(p.x,p.y-20,"tackle!",TEAMS[p.team].color,TEAMS[p.team].accent);
+      }
+      stam(p,+0.10); stam(victim,-0.06);
+      return false;    // he now HAS the ball; his frame continues so he can carry it
+    } },
+
   { name:'dive', tier:TIER.PLAYER, ported:true,
     coach:T => 0,
     can:p => {
