@@ -100,7 +100,22 @@ the file twice trying to delete them. Delete carefully, with the brace depth che
 behaviour. Three moves in one direction is not noise. Suspects: the clearance path, the
 area clamp, the crowded-keeper rule.
 
-**Woodwork 0 in ten matches** with 7% of airborne time above the crossbar and a max of
+**Woodwork: tunnelling found and fixed, and it was not enough.** The test asked whether
+the ball was INSIDE an 8-unit band across the goal plane, and a shot travels 8.5 units a
+frame — so it was never once measured inside. Textbook tunnelling. Now it tests the
+CROSSING: where the ball was against where it is, with the height and lateral position
+interpolated to the moment it met the plane.
+
+**Still zero.** And the diagnosis found something bigger: **the ball crosses a goal plane
+only twice in 600 seconds, while forty-odd goals are scored.** So goals are not reaching
+this code at all, and the woodwork test is sitting on a path the ball almost never
+takes.
+
+Next: find where a goal is actually detected, because it is evidently not here. The
+guard is `if(d<7)` inside a six-iteration edge loop — one of those is filtering the
+ball out before the crossing test ever sees it.
+
+**Previously: woodwork 0 in ten matches** with 7% of airborne time above the crossbar and a max of
 81. That is not rarity, that is a test that does not fire. Check the hit condition
 before assuming anything about frequency.
 
