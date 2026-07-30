@@ -54,13 +54,16 @@ h1{font-size:1.1rem;font-weight:600;letter-spacing:-.01em;color:var(--hot)}
 /* The score. Three teams, so no home-and-away layout to borrow — they sit in a row and the one
    in the lead is marked, which is the only ranking that fits on a phone. */
 .scores{display:flex;gap:.35rem}
+/* Over grass now rather than a dark bar, so the panel colour is not enough on its own — the chip
+   carries its own shadow and a slightly heavier ground, or a pale kit behind it eats the edge. */
 .sc{display:flex;align-items:center;gap:.32rem;padding:.2rem .5rem;border-radius:7px;
-  background:var(--panel);border:1px solid var(--panel-edge);font-size:.82rem;white-space:nowrap}
+  background:rgba(13,20,16,.86);border:1px solid var(--panel-edge);font-size:.82rem;
+  white-space:nowrap;box-shadow:0 1px 6px rgba(0,0,0,.5)}
 .sc .sw{width:.6rem;height:.6rem;border-radius:2px;flex:0 0 auto}
 .sc b{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .sc.lead{border-color:var(--hot)}
 .sc.out{opacity:.42}
-#clock{font-family:var(--mono);font-size:.9rem;font-variant-numeric:tabular-nums;color:var(--ink-dim)}
+
 
 #stage{position:relative;flex:1;min-height:0}
 #gl{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
@@ -249,14 +252,28 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
   82%{opacity:1}100%{transform:scale(.92);opacity:0}}
 @media (max-width:560px){ #countdown{font-size:5rem} }
 @media (prefers-reduced-motion:reduce){ #countdown span{animation:none;opacity:1} }
+
+/* ── THE SCOREBOARD ────────────────────────────────────────────────────────
+   On the pitch rather than in the header. A score belongs to the match you are
+   watching, and putting it in a bar above the picture makes it a page element —
+   which is also why it vanished the moment you went fullscreen and the page went
+   away. It travels with the pitch now.
+
+   The clock sits centred UNDER the scores because it belongs to all three of
+   them equally. Beside them it looked like a fourth team's column. */
+#hud{position:absolute;top:0;left:0;right:0;z-index:4;pointer-events:none;
+  display:flex;flex-direction:column;align-items:center;gap:.22rem;
+  padding:.5rem .6rem 0;
+  background:linear-gradient(rgba(6,10,8,.72),transparent)}
+#hud .scores{display:flex;gap:.35rem;flex-wrap:wrap;justify-content:center}
+#hud #clock{font-family:var(--mono);font-size:.86rem;font-variant-numeric:tabular-nums;
+  color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.9);letter-spacing:.04em}
 </style>
 
 <header>
   <h1>Three-Sided Football</h1>
   <span class="sub">3D · experimental</span>
   <span class="spacer"></span>
-  <div class="scores" id="scores"></div>
-  <span id="clock">0:00</span>
   <button id="reset" title="New match">Kick off</button>
   <button id="full" title="Fullscreen" aria-label="Enter fullscreen">
     <svg viewBox="0 0 24 24" class="ico"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
@@ -264,6 +281,10 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
 
 <div id="stage">
   <canvas id="gl"></canvas>
+  <div id="hud">
+    <div class="scores" id="scores"></div>
+    <span id="clock">0:00</span>
+  </div>
   <div id="setup" class="on">
     <div class="setupCard">
       <h2>Three-Sided Football</h2>
@@ -328,7 +349,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=18"></script>
+<script src="engine.js?v=19"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
