@@ -2014,3 +2014,97 @@ function refreshNameColors(){
   NAME_COL=players.map(p=>[p.name,TEAMS[p.team].color])
     .sort((a,b)=>b[0].length-a[0].length);
 }
+
+// THE RESTARTS. Throw-ins, goal kicks, corners and penalties: where the ball goes and who
+// takes it, which is rules rather than drawing. They stayed behind in the first extraction
+// because each calls spawnNote, and a classifier looking for DOM-shaped names counted that as
+// touching the page. It is a hook. Found by a ninety-second headless run, where the first
+// sixty seconds had simply never put the ball out of play.
+function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)+1;
+  if(clockSec-(GKSTAT.lastThrowAt||-99)<6&&Math.hypot(ex-(GKSTAT.lastThrowX||-999),ey-(GKSTAT.lastThrowY||-999))<70){
+    GKSTAT.throwRepeat=(GKSTAT.throwRepeat||0)+1;
+    GKSTAT.loopTrace=GKSTAT.loopTrace||[];
+    if(GKSTAT.loopTrace.length<10) GKSTAT.loopTrace.push({
+      dt:+(clockSec-GKSTAT.lastThrowAt).toFixed(2),
+      toucherTeam:toucher, toucherRole:ball.lastKicker?ball.lastKicker.role:null,
+      kickerName:ball.lastKicker?ball.lastKicker.name:null,
+      wasThrowPass:ball.lastKicker===GKSTAT.lastThrower||null, z:+ball.z.toFixed(1)});
+  }
+  GKSTAT.lastThrower=null;
+  GKSTAT.lastThrowAt=clockSec; GKSTAT.lastThrowX=ex; GKSTAT.lastThrowY=ey;
+  restartHold=Math.max(restartHold,performance.now()+2400);   // staging owns its hold
+  const sx=ex+e.nx*6, sy=ey+e.ny*6;   // he throws FROM the line, not from midfield
+  const cands=players.filter(q=>q.team!==toucher&&q.role!=="K"&&!q.out&&!q.sentOff)
+    .sort((a,b)=>dist(a,{x:sx,y:sy})-dist(b,{x:sx,y:sy}));
+  const thr=cands[0];
+  if(!thr){ ball.x=CX; ball.y=CY; return; }
+  ball.owner=null; ball.x=sx; ball.y=sy;
+  pendingRestart={p:thr, x:sx, y:sy, team:thr.team, cap:performance.now()+2000, readyAt:performance.now()+1100};
+  suppress={team:toucher,until:clockSec+0.8};
+  ENGINE_HOOKS.spawnNote(sx,sy-24,"throw-in!",TEAMS[thr.team].color,TEAMS[thr.team].accent);
+  if(Math.random()<0.4) ENGINE_HOOKS.say(pick([
+    `Out of play — throw-in ${tm(thr.team)}, quickly taken.`,
+    `Into touch. ${thr.name} hurls it back in for ${tm(thr.team)}.`,
+    `${tm(thr.team)} with the throw — no time wasted.`,
+    `Over the line! ${thr.name} takes it quickly.`]));
+  restartHold=performance.now()+2200;   // shortened the moment the taker arrives
+}
+function stageGoalKick(t){
+  const gk=players.find(q=>q.team===t&&q.role==="K"&&!q.out);
+  if(!gk){ ball.x=CX; ball.y=CY; return; }
+  ball.owner=gk; ball.lastTouch=t; ball.lastKicker=gk;
+  ball.x=gk.x; ball.y=gk.y; ball.touchT=0.4;
+  ENGINE_HOOKS.spawnNote(gk.x,gk.y-24,"goal kick",TEAMS[t].color,TEAMS[t].accent);
+  if(Math.random()<0.35) ENGINE_HOOKS.say(pick([
+    `Behind for a goal kick — ${tm(t)} restart.`,
+    `${gk.name} places it for the goal kick. Deep breath.`,
+    `Nothing doing — goal kick ${tm(t)}.`,
+    `All the way through for a goal kick. ${gk.name} resets the board.`]));
+  restartHold=performance.now()+650;
+}
+function stageCorner(ownerT,e,ex,ey){
+  restartHold=Math.max(restartHold,performance.now()+2400);   // staging owns its hold
+  const alive=[0,1,2].filter(x=>x!==ownerT&&!out[x]);
+  const att=alive.find(x=>targets[x]===ownerT)??alive[0];
+  if(att===undefined){ ball.x=CX; ball.y=CY; return; }
+  const vtx=dist({x:e.p1.x,y:e.p1.y},{x:ex,y:ey})<dist({x:e.p2.x,y:e.p2.y},{x:ex,y:ey})?e.p1:e.p2;
+  const taker=players.filter(q=>q.team===att&&q.role!=="K"&&!q.out&&!q.sentOff)
+    .sort((a,b)=>dist(a,vtx)-dist(b,vtx))[0];
+  if(!taker){ stageGoalKick(ownerT); return; }
+  const cx2=vtx.x+e.nx*14, cy2=vtx.y+e.ny*14;
+  ball.owner=null; ball.x=cx2; ball.y=cy2;
+  pendingRestart={p:taker, x:cx2, y:cy2, team:att, cap:performance.now()+2400, readyAt:performance.now()+1250};
+  cornerTaker=taker; cornerGoal=ownerT;
+  restartHold=Math.max(restartHold,performance.now()+2900);   // corners earn a longer ceremony — let the box fill GKSTAT.cornerStage=(GKSTAT.cornerStage||0)+1;
+  ENGINE_HOOKS.spawnNote(taker.x,taker.y-26,"corner!",TEAMS[att].color,TEAMS[att].accent);
+  ENGINE_HOOKS.say(pick([
+    `<b style="color:${TEAMS[att].color}">Corner to ${tm(att)}</b> — ${taker.name} to swing it in...`,
+    `<b style="color:${TEAMS[att].color}">Corner ${tm(att)}!</b> Big bodies forward... ${taker.name} over the flag.`,
+    `<b style="color:${TEAMS[att].color}">Corner to ${tm(att)}</b> — the box fills. ${taker.name} whips it...`,
+    `<b style="color:${TEAMS[att].color}">Corner!</b> ${taker.name} raises an arm... here it comes...`]),true);
+  restartHold=performance.now()+2600;   // shortened once he's over the ball
+}
+function stagePenalty(){
+  const pen=pendingPenalty; pendingPenalty=null;
+  const shooter=pen.shooter, conceder=pen.conceder;
+  if(out[conceder]||shooter.out) return;
+  const e=EDGES[GOAL_EDGE[conceder]], g=goalCenter(conceder);
+  const sx=g.x+e.nx*110, sy=g.y+e.ny*110;
+  ball.owner=shooter; ball.lastTouch=shooter.team; ball.lastKicker=shooter;
+  ball.x=sx; ball.y=sy; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+  ball.touchT=99;   // no dribble touches during the run-up
+  shooter.x=sx+e.nx*16; shooter.y=sy+e.ny*16; shooter.vx=0; shooter.vy=0;
+  const gk=players.find(q=>q.team===conceder&&q.role==="K"&&!q.out);
+  if(gk){ gk.x=g.x+e.nx*12; gk.y=g.y+e.ny*12; gk.vx=0; gk.vy=0; }
+  players.forEach(q=>{ if(q===shooter||q===gk||q.out)return;
+    const d=dist(q,g)||1;
+    if(d<170){ q.x=g.x+(q.x-g.x)/d*178; q.y=g.y+(q.y-g.y)/d*178; }});
+  penaltyShooter=shooter; penaltyGoalTeam=conceder;
+  ENGINE_HOOKS.spawnNote(sx,sy-28,"PENALTY!","#ffd166");
+  ENGINE_HOOKS.say(pick([
+    `${shooter.name} places the ball on the spot... the keeper crouches...`,
+    `${shooter.name} steps up. The stadium holds its breath...`,
+    `Twelve yards between ${shooter.name} and glory. The keeper waits...`,
+    `${shooter.name} takes a long breath and starts the run-up...`]),true);
+  resumeAt=performance.now()+1000;
+}
