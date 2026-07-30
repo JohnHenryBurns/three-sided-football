@@ -1219,6 +1219,52 @@ const PORTED = [
   // THE FLOOR. Nothing else applied — no outlet near, none far, nobody to aim at. The cascade
   // wrote this as a bare `else kick(CX,CY,9)` and the scored list says the same thing by scoring
   // 100 when everything else scores 290 or more. An else IS the lowest score.
+  // ── THE DIVE ──────────────────────────────────────────────────────────────
+  // John: does gkDiveCheck become a keeper action? Yes, and it dissolves the crash rather than
+  // working around it.
+  //
+  // gkDiveCheck(defT, flame) was called BY THE SHOOTER, from outside the keeper's frame, reaching
+  // across to find the keeper and move him. That is why the flip crashed on a stale `owner`: the
+  // shot was reaching for a player through a variable that no longer meant what it did.
+  //
+  // A DIVE IS SOMETHING THE KEEPER DOES. His prerequisite is "a shot is coming at my goal", which
+  // is a fact he can read himself — ball.isShot, moving, and heading his way. Nobody reaches
+  // across anything, and the shooter's frame ends when the shot leaves his foot, as it should.
+  { name:'dive', tier:TIER.PLAYER, ported:true,
+    coach:T => 0,
+    can:p => {
+      if(p.role!=='K' || !onPitch(p) || ball.owner) return false;
+      if(!ball.isShot) return false;
+      if(p.diveUntil && clockSec < p.diveUntil) return false;   // already committed
+      if(p.burst<=0.6) return false;                            // it costs, and he has none
+      const og=goalCenter(p.team);
+      if(dist(ball,og) > 260) return false;
+      // is it actually coming toward his goal?
+      return ((og.x-ball.x)*ball.vx + (og.y-ball.y)*ball.vy) > 0;
+    },
+    // A BURNING SHOT DEMANDS A BURNING DIVE. The cascade expressed that as an if; here it is a
+    // score, so a keeper faced with an ordinary shot dives sometimes and one faced with a flame
+    // shot dives nearly always — the same behaviour, in the vocabulary the list speaks.
+    score:p => ball.flameShot ? 2600 : 330,
+    act:p => {
+      const flame = !!ball.flameShot;
+      p.burst-=0.6; p.diveUntil=clockSec+1.2;
+      GKSTAT.diveBurns=(GKSTAT.diveBurns||0)+1;
+      ENGINE_HOOKS.flamePop(p);
+      if(flame){
+        GKSTAT.duels=(GKSTAT.duels||0)+1;
+        sayLogged(pick([
+          `FIRE MEETS FIRE — both tanks emptied in one heartbeat!`,
+          `${p.name} answers the flame with a flame of ${PRN(p).his} own!`,
+          `A duel! Burning shot, burning dive — somebody's fire dies here!`]),true,"lowvoice");
+      } else if(RNG()<0.4){
+        sayLogged(pick([
+          `${p.name} EXPLODES across the goal!`,
+          `${p.name} throws ${PRN(p).him}self at it!`]),true);
+      }
+      return false;      // he dives AND stays in his frame: a dive is not a touch on the ball
+    } },
+
   { name:'gk-hopeful', tier:TIER.PLAYER, ported:true,
     coach:T => 0,
     can:p => p.role==='K' && ball.owner===p,
