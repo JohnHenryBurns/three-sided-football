@@ -121,7 +121,7 @@ function play(opts){
     // the walk of shame owns the pitch while it runs, exactly as it does on both pages
     if (E.walkPending) { walkOff = E.walkPending; E.walkPending = null; }
     if (walkOff) {
-      const q = walkOff, B = E.benchPos && E.benchPos[q.team];
+      const q = walkOff, B = null;   // no bench in a headless run; he simply goes out
       if (!B) { q.out = true; walkOff = null; }
       else {
         const dx = B.x - q.x, dy = B.y - q.y, bd = Math.hypot(dx, dy) || 1;
