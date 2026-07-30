@@ -157,7 +157,11 @@ scene.add(sun);
 // ── THE PITCH ───────────────────────────────────────────────────────────────
 // Built from the engine's own V and EDGES, so the mesh cannot drift from the shape the ball
 // bounces off. That is the whole argument for a shared engine, in one object.
-{
+//
+// Inside a function, and called from boot(), because at top level a throw here happens BEFORE
+// the guard below and takes the page down with nothing said. The first guarded version had
+// exactly that hole: it caught everything except the part most likely to fail.
+function buildPitch(){
   const shape = new THREE.Shape();
   V.forEach((p, i) => i ? shape.lineTo(p.x, p.y) : shape.moveTo(p.x, p.y));
   shape.closePath();
@@ -247,7 +251,7 @@ const shadowGL = new THREE.Mesh(new THREE.CircleGeometry(9, 18),
 shadowGL.rotation.x = -Math.PI/2; shadowGL.position.y = 0.5;
 scene.add(shadowGL);
 
-function drawGL(){
+let drawGL = function drawGL(){
   if (bodies.length !== players.length) buildBodies();
   players.forEach((p, i) => {
     const b = bodies[i]; if (!b) return;
@@ -279,7 +283,7 @@ function drawGL(){
     placeCam();
   }
   ren.render(scene, cam);
-}
+};
 
 // ── THE CHROME ──────────────────────────────────────────────────────────────
 const scoresEl = document.getElementById('scores');
@@ -365,11 +369,36 @@ cv.addEventListener('touchmove', e => {
 }, { passive: false });
 cv.addEventListener('touchend', () => { pinch = 0; });
 
-applyTeamSelection();
-resetMatch();
-kickoff(0);
-renderScore();
-buildBodies();
-resize();
-requestAnimationFrame(loop);
+// ── BOOT, OUT LOUD ──────────────────────────────────────────────────────────
+// The first version of this ran bare. When it failed the page showed its buttons, an empty
+// pitch and a clock stuck at 0:00 — which says nothing about which line died, and a phone has no
+// console to ask. Any failure now appears where the commentary would be.
+function boot(){
+  if (!window.THREE) throw new Error('three.js did not load');
+  if (typeof ENGINE_HOOKS === 'undefined') throw new Error('engine.js did not load');
+  buildPitch();
+  applyTeamSelection();
+  resetMatch();
+  kickoff(0);
+  renderScore();
+  buildBodies();
+  resize();
+  requestAnimationFrame(loop);
+}
+try { boot(); }
+catch (e) {
+  say('<b style="color:#ff6b6b">Could not start:</b> ' + (e && e.message ? e.message : e));
+  say('<span style="opacity:.7">' + ((e && e.stack) ? String(e.stack).split('\n')[1] || '' : '') + '</span>');
+  console.error(e);
+}
+// and a frame that throws must not take the loop with it — one bad frame is a glitch, a dead
+// loop is a black screen
+let frameFailed = false;
+const rawDraw = drawGL;
+drawGL = function(){
+  try { rawDraw(); }
+  catch (e) {
+    if (!frameFailed) { frameFailed = true; say('<b style="color:#ff6b6b">Draw failed:</b> ' + e.message); console.error(e); }
+  }
+};
 </script>
