@@ -1364,7 +1364,7 @@ function physics(dt){
     if(o.team!==lastPossessTeam){
       if(clockSec-lastPossessComment>6 && lastPossessTeam!==null){
         lastPossessComment=clockSec;
-        sayLogged(pick([
+        sayLogged(o.role==="K" ? keeperLine(o) : pick([
           `${o.name} wins it for ${tm(o.team)}.`,
           `${tm(o.team)} on the ball — ${o.name} carries.`,
           `Turnover! ${o.name} takes charge for ${tm(o.team)}.`,
@@ -1929,6 +1929,27 @@ function styleLines(){
   return L;
 }
 let recentChatter=[];
+// ── THE KEEPER GETS HIS OWN LINES ───────────────────────────────────────────
+// He was getting the generic carrier commentary — "Unai Simón on it, head up, options
+// everywhere", "Unai Simón carries" — which reads as a keeper playing outfield. He is not; he is
+// standing in his own box holding the ball, which is 43 per cent of owned time and perfectly
+// normal for this game. The lines were the problem, not the football.
+//
+// A keeper on the ball is doing one of three things: he has just caught it, he is deciding, or
+// he is about to distribute. None of those is "options everywhere".
+function keeperLine(k){
+  const T=tm(k.team);
+  return pick([
+    `${k.name} has it in his gloves. ${T} take a breath.`,
+    `${k.name} looks up from his six-yard box, weighing the options.`,
+    `${k.name} shepherds it, and nobody is getting near.`,
+    `Safe hands — ${k.name} is in no hurry at all.`,
+    `${k.name} surveys the hex from the edge of his area.`,
+    `${k.name} has the ball and the whole pitch in front of him.`,
+    `All quiet in the ${T} goal. ${k.name} decides when this restarts.`,
+    `${k.name} bounces it once, twice \u2014 the tempo is his now.`]);
+}
+
 function colorCommentary(){
   try{ ambientChatter(); }catch(e5){}
   // style & matchup color (~every 45s)
