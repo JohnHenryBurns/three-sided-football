@@ -59,7 +59,50 @@ sprints and dives, and is already visible as fire. Spending it on a leap costs t
 same 0.6 a dive costs and buys height the same way — which would make an aerial duel
 a resource decision rather than a dice roll.
 
-### The questions worth settling first
+### THE DESIGN (John, settled)
+
+**A jump is a real arc.** Up, over, down — the same physics the ball already obeys.
+A player's effective height is wherever his head actually is at that instant, so
+nothing needs to ask who jumped first or who is taller.
+
+That single decision answers everything the questions below were circling:
+
+- **How much reach?** Whatever your head has reached. No table, no constant.
+- **Who wins a duel?** Whoever is higher at the moment the ball arrives. Timing, not
+  priority.
+- **Commit early?** Yes — and it can cost you. Jump before you know where the ball is
+  going and you may be on the way down when it gets there.
+- **Does a failed jump hurt?** A cooldown before you can jump again, so you land, you
+  recover, and the ball has gone.
+
+**Boost buys height.** The burst mechanic already exists, already costs 0.6 for a
+dive, and is already visible as fire. Spend it on a leap and go higher — which makes
+an aerial duel a resource decision rather than a coin flip, and puts the fire
+somewhere new.
+
+**Nobody knows what anybody else is doing.** Players don't share a plan, don't know
+who else is jumping, and don't know precisely where the ball will land. Two defenders
+can both go and both miss. That's the drama, and it comes free from every player
+deciding alone.
+
+### What this needs before it can be written
+
+**Numbers, and only numbers:**
+
+- launch velocity for a free jump, and for a boosted one
+- gravity for a person — probably not the ball's 0.14, since a body falls differently
+  from a ball and a hang time that feels right matters more than realism
+- the landing cooldown
+- how early the AI is willing to commit, which is the dial that decides whether aerial
+  play reads as skilful or as chaotic
+
+Every one of those is a feel question best answered by watching it, not by arithmetic.
+Build it loose, run a match, read the telemetry: **aerial duels won, jumps that missed,
+boost spent on height.**
+
+### The earlier open questions, now closed
+
+
 
 **How much reach should a jump buy?** A keeper gets 23 diving. If a jumping outfielder
 gets the same, the keeper's positional advantage disappears; if he gets much less,
