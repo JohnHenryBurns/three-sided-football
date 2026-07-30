@@ -937,8 +937,11 @@ const INSTRUCTIONS = [
   // laterally by the usual stable hash so three men make a wall rather than a queue.
   // Only the OFFENDING side builds a wall. The third team has retreated like everyone else, but
   // it is not their goal being shot at and they have no reason to stand in front of it.
+  // EITHER DEFENDING SIDE MAY NEED A WALL, not just the offender — the kick may be aimed at the
+  // third team's goal, and on a hex nobody is told which. A side guards its own goal when it is
+  // the one being aimed at, which is the only thing worth guarding.
   { name:'in the wall', tier:TIER.COACH, base:130,
-    applies:p => !!(freeKick && !freeKick.done && p.team===freeKick.wall && !p.out && !p.sentOff
+    applies:p => !!(freeKick && !freeKick.done && p.team===freeKick.aim && !p.out && !p.sentOff
                     && p.role!=='K'
                     && Math.hypot(p.x-freeKick.x, p.y-freeKick.y)>=64),
     score:p => 130,
@@ -960,7 +963,8 @@ const INSTRUCTIONS = [
                     && !p.out && !p.sentOff && p.role!=='K'),
     score:p => 128,
     act:p => {
-      const tgt=goalCenter(targets[p.team]!==null?targets[p.team]:p.team);
+      // toward the goal the KICK is aimed at, which is not always the side's standing target
+      const tgt=goalCenter(freeKick.aim!==undefined?freeKick.aim:targets[p.team]);
       const base=Math.atan2(tgt.y-freeKick.y, tgt.x-freeKick.x);
       const ang=base + ((p.k1*887)%1-0.5)*1.7;      // fan across the attacking side
       const rad=95 + ((p.k2*673)%1)*85;
@@ -975,8 +979,8 @@ const INSTRUCTIONS = [
   //
   // They do NOT sit in the passing lanes. An informal alliance confers no right to crowd
   // somebody else's free kick, and letting them do it turned a restart into a scrum.
-  { name:'waiting out a free kick', tier:TIER.PLAYER, base:405,
-    applies:p => !!(freeKick && !freeKick.done && p.team!==freeKick.team && p.team!==freeKick.wall
+  { name:'covering its own goal', tier:TIER.PLAYER, base:405,
+    applies:p => !!(freeKick && !freeKick.done && p.team!==freeKick.team && p.team!==freeKick.aim
                     && !p.out && !p.sentOff && p.role!=='K'
                     && Math.hypot(p.x-freeKick.x, p.y-freeKick.y)>=64),
     score:p => 405,
@@ -2263,8 +2267,40 @@ function think(dt){
           // the middle of the pitch.
           suppress={team:o.team, until:clockSec+1.0};
           ball.owner=null; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+          // ── WHICH GOAL? ───────────────────────────────────────────────────
+          // A free kick on a hex is a CHOICE the offended side gets to make: two goals are
+          // available and nothing says it must be the one belonging to whoever fouled you.
+          //
+          // Four things decide it, and they are the four John named:
+          //
+          //   ANGLE      a goal you cannot see is not a target. Distance and how square you
+          //              are to the mouth dominate everything else, because a free kick is
+          //              only worth having if you can actually strike at something.
+          //   ALLIANCE   you do not shoot at a friend. Heavily discounted rather than
+          //              forbidden — alliances here are informal, and a good enough opening
+          //              is a good enough reason.
+          //   SCORE      hit the leader. Being third with two goals to make up is a reason to
+          //              aim somewhere other than the man who fouled you.
+          //   GRUDGE     all else equal, the side who gave the free kick away.
+          //
+          // The offender gets a modest bonus rather than an automatic claim, which is the whole
+          // point: revenge is a preference, not a rule.
+          let aim=null, aimBest=-1e9;
+          for(const g of [0,1,2]){
+            if(g===victim.team || out[g]) continue;
+            const gc=goalCenter(g);
+            const d9=Math.hypot(gc.x-ball.x, gc.y-ball.y);
+            const e9=EDGES[GOAL_EDGE[g]];
+            // how square he is to the mouth: 1 straight on, 0 from the side
+            const face=Math.max(0, -((ball.x-gc.x)*e9.nx + (ball.y-gc.y)*e9.ny)/(d9||1));
+            let sc = 300 - d9*0.5 + face*140;
+            if(allied(victim.team, g)) sc -= 260;          // not at a friend, unless it is open
+            sc += (score[g]-Math.min(score[0],score[1],score[2])) * 18;   // hit the leader
+            if(g===o.team) sc += 55;                        // and a grudge is worth something
+            if(sc>aimBest){ aimBest=sc; aim=g; }
+          }
           freeKick={taker:victim, x:ball.x, y:ball.y, team:victim.team, at:clockSec,
-                    wall:o.team};
+                    wall:o.team, aim:(aim!==null?aim:o.team)};
           TEL.freeKicks++;
           restartHold=Math.max(restartHold, nowMs()+1400);
           addStoppage(0.6);
