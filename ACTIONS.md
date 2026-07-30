@@ -169,6 +169,60 @@ that is a simulation question, which is where John said it belongs.
 **The framework is the deliverable and it works.** The action fires, is counted, is
 tiered, and can be tuned against seeds. That was not possible this morning.
 
+## The transplant, not the scalpel
+
+**John, after I patched around a crash for the third time: "treat it like major surgery
+organ replacement not a scalpel cut at a time."** He is right, and the crash is the
+evidence.
+
+### What went wrong incrementally
+
+Adding *hoof it* and *through ball* crashed `kick()` with a null owner — **not in my new
+code, in the cascade.** Actions run first, an action releases the ball, and everything
+below assumes the owner it saw at the top of the frame still exists.
+
+I guarded the per-player path. **It crashed somewhere else.** I was about to armour
+`kick()` itself, which would have made a primitive tolerate a state that should never
+reach it — hiding the transition rather than finishing it.
+
+**A half-transplanted organ needs finishing, not a splint.**
+
+### The thirteen sites
+
+```
+2223  keeper rolls it short          2438  a shot
+2255  corner delivery                2451  a shot, the other variant
+2280  throw-in                       2490  a pass
+2298  penalty                        2953  free kick
+2365  keeper punts
+2380  clearance under pressure
+2384  nowhere to aim
+2409  a pass
+2410  fallback: hit the middle
+```
+
+Two are already actions (*head it* releases the ball correctly because it runs alone).
+**Thirteen remain, and they must move together** — because the crash is caused by the
+*mixture*, not by any one of them.
+
+### How to do it in one operation
+
+1. **Every one becomes an action** with `can`/`score`/`act`, in a single change. No
+   partial state where some kicks are actions and some are cascade.
+2. **The cascade's kick sites are deleted, not disabled.** Two copies is how they drift,
+   and this time two copies also crashes.
+3. **`runAction` becomes the only thing that releases the ball.** Then "an action ended
+   his frame" is a rule with one enforcement point rather than a guard sprinkled at each
+   call.
+4. **Baseline first, on the six seeds.** The position extraction could claim "behaviour
+   unchanged"; this one cannot, so the baseline is the only way to know what it cost.
+
+### Why it is safe to do at once, despite the size
+
+The seeded harness. **Six identical matches before and after**, and a discard count that
+must not climb. That check did not exist this morning and it is the whole reason a
+transplant is now a reasonable thing to attempt rather than a reckless one.
+
 ## Order
 
 1. find the common shape, or establish that there isn't one
