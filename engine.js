@@ -890,9 +890,14 @@ const INSTRUCTIONS = [
   // may be taken quickly while all of it is still happening. Nobody is frozen, and building it
   // as a freeze would have been wrong.
   //
-  // AND ONLY THE OFFENDING SIDE OWES THE RETREAT. On a hex the third team has no obligation at
-  // all — they may stand exactly where they like, including in the passing lanes. That has no
-  // analogue in the real laws and it is the most interesting thing about a three-sided free kick.
+  // EVERY OPPONENT RETREATS, not just the offender. I had this wrong: in football all opponents
+  // must be 9.15m away, and only the side taking it may be close. On a hex that means BOTH other
+  // teams back off — the third side included.
+  //
+  // ALLIANCES ARE INFORMAL AND CONFER NOTHING HERE. An ally is not entitled to stand over
+  // somebody else's free kick, and letting them sit in the passing lanes turned a restart into a
+  // scrum around the kicker. A free kick is the one moment a side is guaranteed space, and that
+  // guarantee is the whole point of the rule.
 
   // ── THE TAKER ─────────────────────────────────────────────────────────────
   // SCRIPT. He walks to it, stands over it, and gives the play A MOMENT TO FORM — but not
@@ -917,7 +922,7 @@ const INSTRUCTIONS = [
   // REQUIREMENT, and the only rule in football that exists purely to make a restart possible.
   // The offending side and nobody else.
   { name:'retreating from a free kick', tier:TIER.REQUIREMENT, base:880,
-    applies:p => !!(freeKick && !freeKick.done && p.team===freeKick.wall && !p.out && !p.sentOff
+    applies:p => !!(freeKick && !freeKick.done && p.team!==freeKick.team && !p.out && !p.sentOff
                     && Math.hypot(p.x-freeKick.x, p.y-freeKick.y)<64),
     score:p => 880,
     act:p => {
@@ -930,6 +935,8 @@ const INSTRUCTIONS = [
   // COACH. Once he is legal, he stands ON THE LINE between the ball and his own goal, at the
   // required distance — which is what a wall is: bodies in the way of the direct route. Spread
   // laterally by the usual stable hash so three men make a wall rather than a queue.
+  // Only the OFFENDING side builds a wall. The third team has retreated like everyone else, but
+  // it is not their goal being shot at and they have no reason to stand in front of it.
   { name:'in the wall', tier:TIER.COACH, base:130,
     applies:p => !!(freeKick && !freeKick.done && p.team===freeKick.wall && !p.out && !p.sentOff
                     && p.role!=='K'
@@ -961,23 +968,27 @@ const INSTRUCTIONS = [
       return true;
     } },
 
-  // ── THE THIRD SIDE OWES NOTHING ───────────────────────────────────────────
-  // PLAYER, deliberately. They are not the offending team, so no retreat applies — and on a hex
-  // that means they can stand wherever suits them, INCLUDING THE PASSING LANES. They pick a lane
-  // between the ball and one of the taker's men, and sit in it.
+  // ── THE THIRD SIDE KEEPS ITS DISTANCE ─────────────────────────────────────
+  // They have retreated with everybody else — the REQUIREMENT above applies to them too. Beyond
+  // that they simply hold a sensible station and wait for the ball to be live, which is what a
+  // team with no stake in a restart actually does.
   //
-  // No analogue in the real laws. It is the free kick's version of "vultures with patience".
-  { name:'sitting in the lane', tier:TIER.PLAYER, base:405,
+  // They do NOT sit in the passing lanes. An informal alliance confers no right to crowd
+  // somebody else's free kick, and letting them do it turned a restart into a scrum.
+  { name:'waiting out a free kick', tier:TIER.PLAYER, base:405,
     applies:p => !!(freeKick && !freeKick.done && p.team!==freeKick.team && p.team!==freeKick.wall
-                    && !p.out && !p.sentOff && p.role!=='K'),
+                    && !p.out && !p.sentOff && p.role!=='K'
+                    && Math.hypot(p.x-freeKick.x, p.y-freeKick.y)>=64),
     score:p => 405,
     act:p => {
-      const mates=players.filter(q=>q.team===freeKick.team&&q!==freeKick.taker&&!q.out&&!q.sentOff);
-      if(!mates.length) return false;
-      const m=mates[Math.floor(((p.k1*769)%1)*mates.length)%mates.length];
-      steer(p, (freeKick.x+m.x)/2, (freeKick.y+m.y)/2, 2.0);
+      const own=goalCenter(p.team);
+      const ax=CX-own.x, ay=CY-own.y, al=Math.hypot(ax,ay)||1;
+      const px=-ay/al, py=ax/al;
+      const lat=((p.k1*911)%1-0.5)*150;
+      steer(p, own.x+ax*0.6+px*lat, own.y+ay*0.6+py*lat, 1.5);
       return true;
     } },
+
 
   // ── INTO THE BOX FOR A CORNER ─────────────────────────────────────────────
   // EXPLICIT. Named from its steer target: g9 plus 46 along the goal's inward normal, with a
