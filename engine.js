@@ -2170,7 +2170,8 @@ function think(dt){
         gkHolder=owner; gkHoldUntil=clockSec+1.6; GKSTAT.holds++;
         ENGINE_HOOKS.spawnNote(owner.x,owner.y-26,"🧤 secured!",TEAMS[owner.team].color,TEAMS[owner.team].accent);
       }
-      if(clockSec<gkHoldUntil){
+      // A back-pass cannot be held: he distributes at once, which is what the rule forces.
+      if(clockSec<gkHoldUntil && !owner.mustKick){
         // stride off the line, survey the field
         const adv={x:og.x+(CX-og.x)*0.22, y:og.y+(CY-og.y)*0.22};
         steer(owner,adv.x,adv.y,1.1);
@@ -2767,6 +2768,19 @@ function physics(dt){
       ball.allyPass=false;
       if(ball.puntBy!==undefined){ GKSTAT.puntSeen++; if(best.team===ball.puntBy)GKSTAT.puntSame++; ball.puntBy=undefined; }
       if(Math.hypot(ball.x-best.x,ball.y-best.y)>25) telPort('claim: ball snapped to the claimer');
+      // ── HE MAY NOT PICK UP A BACK-PASS ────────────────────────────────────
+      // A keeper cannot handle a ball his own side last played to him — he has to kick it. A real
+      // rule, and it was missing entirely: he could gather anything, including a pass from his own
+      // defender, and stand there holding it.
+      //
+      // Recorded rather than enforced by refusing the claim, because refusing would leave the ball
+      // loose in his six-yard box and produce a scramble that should not exist. He takes it, and
+      // `mustKick` means he cannot HOLD it: the distribution fires immediately.
+      if(best.role==='K' && ball.lastTouch===best.team && ball.lastKicker
+         && ball.lastKicker.team===best.team && ball.lastKicker.role!=='K'){
+        best.mustKick = true;
+        TEL.backPass++;
+      } else if(best.role==='K') best.mustKick = false;
       ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
       if(ball.flameShot&&best.role==="K") ENGINE_HOOKS.spawnNote(best.x,best.y-24,"🔥 extinguished!","#ffd166");
       ball.flameShot=false;
@@ -3184,7 +3198,7 @@ const TEL = {
   claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
-  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0,
+  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
   unattributed:0, unattMax:0, portFrame:-1,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
@@ -3194,16 +3208,16 @@ function telReset(){
     claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
     jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
-    jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, restartVoid:0,
-  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, freeKicks:0,
+    jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0, backPass:0, restartVoid:0,
+  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0, freeKicks:0,
     unattributed:0, unattMax:0, portFrame:-1,
   unattributed:0, unattMax:0, portFrame:-1, deflected:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
-  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0,
+  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
   unattributed:0, unattMax:0, portFrame:-1, woodwork:0, bars:0, posts:0, port:{},
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
-  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0,
+  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
   unattributed:0, unattMax:0, portFrame:-1, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
@@ -3296,6 +3310,7 @@ function buildMatchReport(){
   const p90=x=>Math.round(x*(5400/Math.max(1,secs)));
   md+=`| throw-ins | ${TEL.throwIns} | ${p90(TEL.throwIns)} | ~40 |\n`;
   md+=`| free kicks | ${TEL.freeKicks} | ${p90(TEL.freeKicks)} | ~22 |\n`;
+  md+=`| back-passes (keeper must kick) | ${TEL.backPass} | ${p90(TEL.backPass)} | |\n`;
   md+=`| **restarts voided by the watchdog** | ${TEL.restartVoid} | | should be 0 |\n`;
 
   // ── INSTRUCTIONS ──────────────────────────────────────────────────────────
