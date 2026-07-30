@@ -22,8 +22,15 @@
 -->
 
 <style>
+/* The flat page's palette, verbatim and under its own names — this page had the same colours
+   under different ones (--line for --panel-edge, --dim for --ink-dim) and a different accent,
+   hollerbox's burnt orange instead of the chalk yellow this game uses everywhere else. Two names
+   for one colour is how two pages drift apart. */
 :root{
-  --bg:#0d1410; --panel:#152019; --line:#233529; --ink:#e8efe9; --dim:#8fa596;
+  --bg:#0d1410; --panel:#152019; --panel-edge:#233529;
+  --chalk:rgba(255,255,255,.85); --ink:#e8efe9; --ink-dim:#8fa596;
+  --esp:#e63946; --arg:#6fb7e3; --eng:#f2f2f2;
+  --hot:#ffd166;                       /* the accent this game has always used */
   --sans:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
   --mono:ui-monospace,"SF Mono",Menlo,monospace;
 }
@@ -33,21 +40,21 @@ body{background:var(--bg);color:var(--ink);font-family:var(--sans);
   display:flex;flex-direction:column}
 
 header{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .75rem;
-  padding:.5rem .9rem;border-bottom:1px solid var(--line)}
-h1{font-size:1.1rem;font-weight:600;letter-spacing:-.01em;color:#ff8a4c}
-.sub{font-family:var(--mono);font-size:.72rem;color:var(--dim);letter-spacing:.04em}
+  padding:.5rem .9rem;border-bottom:1px solid var(--panel-edge)}
+h1{font-size:1.1rem;font-weight:600;letter-spacing:-.01em;color:var(--hot)}
+.sub{font-family:var(--mono);font-size:.72rem;color:var(--ink-dim);letter-spacing:.04em}
 .spacer{flex:1}
 
 /* The score. Three teams, so no home-and-away layout to borrow — they sit in a row and the one
    in the lead is marked, which is the only ranking that fits on a phone. */
 .scores{display:flex;gap:.35rem}
 .sc{display:flex;align-items:center;gap:.32rem;padding:.2rem .5rem;border-radius:7px;
-  background:var(--panel);border:1px solid var(--line);font-size:.82rem;white-space:nowrap}
+  background:var(--panel);border:1px solid var(--panel-edge);font-size:.82rem;white-space:nowrap}
 .sc .sw{width:.6rem;height:.6rem;border-radius:2px;flex:0 0 auto}
 .sc b{font-family:var(--mono);font-variant-numeric:tabular-nums}
-.sc.lead{border-color:#ff8a4c}
+.sc.lead{border-color:var(--hot)}
 .sc.out{opacity:.42}
-#clock{font-family:var(--mono);font-size:.9rem;font-variant-numeric:tabular-nums;color:var(--dim)}
+#clock{font-family:var(--mono);font-size:.9rem;font-variant-numeric:tabular-nums;color:var(--ink-dim)}
 
 #stage{position:relative;flex:1;min-height:0}
 #gl{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
@@ -63,12 +70,12 @@ h1{font-size:1.1rem;font-weight:600;letter-spacing:-.01em;color:#ff8a4c}
 #feed .goal{color:#ffd166;font-weight:700;font-size:1rem}
 
 #bar{display:flex;gap:.4rem;align-items:center;padding:.45rem .9rem;
-  border-top:1px solid var(--line)}
+  border-top:1px solid var(--panel-edge)}
 button{font-family:inherit;font-size:.82rem;color:var(--ink);background:var(--panel);
-  border:1px solid var(--line);border-radius:7px;padding:.34rem .66rem;cursor:pointer}
+  border:1px solid var(--panel-edge);border-radius:7px;padding:.34rem .66rem;cursor:pointer}
 button:hover{border-color:var(--ink)}
-button.on{border-color:#ff8a4c;color:#ff8a4c}
-.hint{font-family:var(--mono);font-size:.68rem;color:var(--dim);margin-left:auto}
+button.on{border-color:var(--hot);color:var(--hot)}
+.hint{font-family:var(--mono);font-size:.68rem;color:var(--ink-dim);margin-left:auto}
 @media (max-width:560px){ .hint{display:none} .sub{display:none} }
 
 /* ── THE SCREENS ───────────────────────────────────────────────────────────
@@ -88,7 +95,7 @@ button.on{border-color:#ff8a4c;color:#ff8a4c}
 #celeCard .big{font-size:2.1rem;font-weight:700;letter-spacing:-.01em;color:var(--cele,#ffd166);
   line-height:1.05}
 #celeCard .who{font-size:1.15rem;font-weight:600;margin-top:.25rem}
-#celeCard .sub{font-size:.9rem;color:var(--dim);margin-top:.3rem}
+#celeCard .sub{font-size:.9rem;color:var(--ink-dim);margin-top:.3rem}
 /* The flavour line, in the card's own colour — it is the bit with the joke in it. */
 #celeCard .fire{font-size:.92rem;font-weight:600;color:var(--cele,#ffd166);margin-top:.45rem}
 @media (max-width:560px){ #celeCard .big{font-size:1.5rem} }
@@ -116,23 +123,51 @@ button.on{border-color:#ff8a4c;color:#ff8a4c}
   background:rgba(6,10,8,.93);padding:1rem}
 #setup.on{display:block}
 .setupCard{max-width:26rem;margin:0 auto;padding:1rem 1.2rem 1.4rem;
-  background:var(--panel);border:1px solid var(--line);border-radius:14px}
-.setupCard h2{font-size:1.25rem;color:#ff8a4c;letter-spacing:-.01em}
-.setupCard .tag{font-family:var(--mono);font-size:.72rem;color:var(--dim);
+  background:var(--panel);border:1px solid var(--panel-edge);border-radius:14px}
+.setupCard h2{font-size:1.25rem;color:var(--hot);letter-spacing:-.01em}
+.setupCard .tag{font-family:var(--mono);font-size:.72rem;color:var(--ink-dim);
   letter-spacing:.05em;margin:.15rem 0 .9rem}
 .frow{display:flex;flex-direction:column;gap:.28rem;margin-top:.75rem}
-.frow>label{font-size:.74rem;color:var(--dim);letter-spacing:.07em;text-transform:uppercase}
+.frow>label{font-size:.74rem;color:var(--ink-dim);letter-spacing:.07em;text-transform:uppercase}
 .frow select{width:100%;font-family:inherit;font-size:.95rem;padding:.45rem .5rem;
-  background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:7px}
+  background:var(--bg);color:var(--ink);border:1px solid var(--panel-edge);border-radius:7px}
 .chk{display:flex;justify-content:space-between;align-items:center;margin-top:.6rem;
   font-size:.92rem}
-.chk input{width:1.15rem;height:1.15rem;accent-color:#ff8a4c}
+.chk input{width:1.15rem;height:1.15rem;accent-color:var(--hot)}
 #teamSlots{display:flex;flex-direction:column;gap:.3rem}
 #teamSlots select{width:100%;font-family:inherit;font-size:.92rem;padding:.4rem .5rem;
-  background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:7px}
+  background:var(--bg);color:var(--ink);border:1px solid var(--panel-edge);border-radius:7px}
 #btnStart{width:100%;margin-top:1.1rem;font-size:1.05rem;font-weight:600;padding:.6rem;
-  background:#ff8a4c;color:#1a1005;border:0;border-radius:9px}
+  background:var(--hot);color:#1a1005;border:0;border-radius:9px}
 #btnStart:hover{filter:brightness(1.08)}
+
+/* ── TEAM SELECTORS ────────────────────────────────────────────────────────
+   The flat page's shape: three chips in the team's own colours with a stripe of
+   the accent under each, a die for a random matchup, and a sheet to choose from.
+   A dropdown lists names; these show you the kit, which is what you recognise a
+   side by on the pitch. */
+#teamSlots{display:flex;gap:.4rem;align-items:stretch}
+.slotBtn{flex:1;font-family:var(--sans);font-size:1.05rem;font-weight:700;letter-spacing:.04em;
+  padding:.5rem .2rem;background:var(--bg);border:2px solid var(--panel-edge);border-radius:9px;
+  cursor:pointer}
+.diceBtn{flex:0 0 auto;font-size:1.1rem;padding:.5rem .6rem;background:var(--bg);
+  border:2px solid var(--panel-edge);border-radius:9px;cursor:pointer}
+.diceBtn:hover,.slotBtn:hover{border-color:var(--ink)}
+
+#tp{position:absolute;inset:0;z-index:9;display:none;overflow:auto;
+  background:rgba(6,10,8,.94);padding:1rem}
+#tp.on{display:block}
+#tpCard{max-width:26rem;margin:0 auto;padding:.9rem 1rem 1.1rem;
+  background:var(--panel);border:1px solid var(--panel-edge);border-radius:14px}
+#tpCard .big2{font-size:1.05rem;font-weight:600;margin-bottom:.6rem;color:var(--hot)}
+.tpTeam{display:flex;gap:.6rem;align-items:center;padding:.5rem .6rem;margin-top:.35rem;
+  border:2px solid var(--panel-edge);border-radius:10px;cursor:pointer;background:var(--bg)}
+.tpTeam:hover{border-color:var(--ink)}
+.tpDot{width:2rem;height:2rem;border-radius:6px;flex:0 0 auto}
+.tpBody{display:flex;flex-direction:column;min-width:0}
+.tpName{font-size:1rem;font-weight:600}
+.tpId{font-family:var(--mono);font-size:.66rem;color:var(--ink-dim);letter-spacing:.04em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style>
 
 <header>
@@ -181,6 +216,7 @@ button.on{border-color:#ff8a4c;color:#ff8a4c}
       <button id="btnStart">Kick off</button>
     </div>
   </div>
+  <div id="tp"><div id="tpCard"></div></div>
   <div id="cele"><div id="celeCard"></div><div id="confetti"></div></div>
   <div id="feed"></div>
 </div>
@@ -198,7 +234,7 @@ button.on{border-color:#ff8a4c;color:#ff8a4c}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=9"></script>
+<script src="engine.js?v=10"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -302,11 +338,16 @@ function buildPitch(){
     }
     const bar = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, half*2, 8), postMat);
     bar.position.set(e.mx, HGT, e.my);
-    // ZYX: lay the cylinder down first, THEN swing it to follow the goal line. Under the default
-    // XYZ the y-rotation happens first — on a cylinder still standing upright, where it does
-    // nothing visible — and the bar ends up lying along world X on every edge regardless. It
-    // looks right on the one edge that happens to be axis-aligned, which is how it survived.
-    bar.rotation.order = 'ZYX';
+    // THE DEFAULT ORDER IS THE RIGHT ONE HERE, and I broke it by "fixing" it. A three.js Euler
+    // order names a MATRIX PRODUCT: XYZ is Rx*Ry*Rz, so the LAST letter is applied to a vector
+    // FIRST. XYZ therefore lays the cylinder down (z) and then swings it (y), which is exactly
+    // what a crossbar wants. Setting ZYX did the opposite — swung an upright cylinder, where it
+    // does nothing, then laid it along world X on every edge.
+    //
+    // Checked with the matrices rather than reasoned about: under XYZ the bar is parallel to its
+    // goal line on all three goals, under ZYX on none of them. A cylinder is symmetric, so
+    // parallel is the test and not equal — the axis comes out antiparallel and that is the same
+    // line.
     bar.rotation.z = Math.PI/2;
     bar.rotation.y = -Math.atan2(e.uy, e.ux);
     scene.add(bar);
@@ -936,26 +977,75 @@ const slotsEl = document.getElementById('teamSlots');
 // Three pickers, one per side. Choosing a team that is already out there swaps the two, rather
 // than refusing: refusing means working out which of the other two to change first, and swapping
 // is what you meant.
+const tpEl = document.getElementById('tp'), tpCard = document.getElementById('tpCard');
+
 function renderTeamSlots(){
   slotsEl.innerHTML = '';
   selTeams.forEach((sel, slot) => {
-    const s = document.createElement('select');
-    TEAM_LIBRARY.forEach((T, i) => {
-      const o = document.createElement('option');
-      o.value = i; o.textContent = T.name;
-      if (i === sel) o.selected = true;
-      s.appendChild(o);
-    });
-    s.addEventListener('change', () => {
-      const want = +s.value, other = selTeams.indexOf(want);
-      if (other >= 0 && other !== slot) selTeams[other] = selTeams[slot];
-      selTeams[slot] = want;
-      applyTeamSelection();
-      renderTeamSlots();
-    });
-    slotsEl.appendChild(s);
+    const L = TEAM_LIBRARY[sel];
+    const b = document.createElement('button');
+    b.className = 'slotBtn';
+    b.textContent = L.short;
+    b.style.borderColor = L.color;
+    b.style.color = L.color;
+    b.style.boxShadow = 'inset 0 -3.5px 0 ' + L.accent;   // a stripe of the away colour
+    b.addEventListener('click', () => openTeamPick(slot));
+    slotsEl.appendChild(b);
   });
+  const dice = document.createElement('button');
+  dice.className = 'diceBtn';
+  dice.textContent = '\u{1F3B2}';
+  dice.title = 'Random matchup';
+  dice.addEventListener('click', () => {
+    const pool = [...TEAM_LIBRARY.keys()];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    for (let i = 0; i < 3; i++) selTeams[i] = pool[i];
+    applyTeamSelection(); renderTeamSlots();
+  });
+  slotsEl.appendChild(dice);
 }
+
+// The sheet. Every side, in its own colours, with the identity the engine gives it — which is
+// what you are actually choosing between: a team that presses is a different match from one that
+// sits in, and the name alone does not say so.
+function openTeamPick(slot){
+  const rows = ['<div class="big2">Slot ' + (slot + 1) + ': choose a side</div>',
+    '<div class="tpTeam" data-i="-1" style="border-color:var(--hot)">' +
+      '<div class="tpDot" style="display:flex;align-items:center;justify-content:center;' +
+      'font-size:1.2rem">\u{1F3B2}</div><div class="tpBody">' +
+      '<span class="tpName" style="color:var(--hot)">Surprise me</span>' +
+      '<span class="tpId">a random side</span></div></div>'];
+  TEAM_LIBRARY.forEach((T, i) => {
+    const taken = selTeams.indexOf(i);
+    rows.push('<div class="tpTeam" data-i="' + i + '" style="border-color:' + T.color +
+      (taken >= 0 && taken !== slot ? ';opacity:.55' : '') + '">' +
+      '<div class="tpDot" style="background:' + T.color +
+        ';box-shadow:inset 0 -6px 0 ' + T.accent + '"></div>' +
+      '<div class="tpBody"><span class="tpName" style="color:' + T.color + '">' + T.name + '</span>' +
+      '<span class="tpId">' + T.id.atk + ' \u00b7 ' + T.id.def + ' \u00b7 ' + T.id.agg +
+      (taken >= 0 && taken !== slot ? ' \u00b7 already picked \u2014 tap to swap' : '') +
+      '</span></div></div>');
+  });
+  tpCard.innerHTML = rows.join('');
+  tpCard.querySelectorAll('.tpTeam').forEach(el => el.addEventListener('click', () => {
+    let want = +el.dataset.i;
+    if (want < 0) {                                  // the die, for one slot only
+      const free = [...TEAM_LIBRARY.keys()].filter(i => selTeams.indexOf(i) < 0);
+      want = free.length ? free[Math.floor(Math.random() * free.length)] : selTeams[slot];
+    }
+    const other = selTeams.indexOf(want);
+    if (other >= 0 && other !== slot) selTeams[other] = selTeams[slot];   // swap, do not refuse
+    selTeams[slot] = want;
+    applyTeamSelection();
+    renderTeamSlots();
+    tpEl.classList.remove('on');
+  }));
+  tpEl.classList.add('on');
+}
+tpEl.addEventListener('click', e => { if (e.target === tpEl) tpEl.classList.remove('on'); });
 ENGINE_HOOKS.renderTeamSlots = renderTeamSlots;
 ENGINE_HOOKS.showSetup = () => { running = false; hideCard(); celeUntil = 0; setupEl.classList.add('on'); };
 
