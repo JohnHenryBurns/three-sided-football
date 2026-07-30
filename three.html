@@ -461,7 +461,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=87"></script>
+<script src="engine.js?v=88"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -969,7 +969,17 @@ for (let i = 0; i < TRAIL_N; i++) {
 }
 const trailPts = [];
 let headPop = 0;
-let wasBurning = false;   // so the ball can leave one last mark when it is put out      // the decaying lift off a header, see drawGL
+let wasBurning = false;   // so the ball can leave one last mark when it is put out
+
+/** The man kickoff() will give the ball to, picked the way it picks him — so the ball can be
+ *  returned to where it will actually end up rather than to the spot it passes through. */
+function netTaker(){
+  if (pendingKickoff === null || typeof pendingKickoff === 'undefined') return null;
+  const t = pendingKickoff;
+  return players.find(q => q.team === t && q.role === 'F' && !q.out && !q.sentOff)
+      || players.find(q => q.team === t && q.role !== 'K' && !q.out && !q.sentOff)
+      || null;
+}      // the decaying lift off a header, see drawGL
 
 // ── WHO EACH ONE IS ─────────────────────────────────────────────────────────
 // Names as sprites, which always face the camera. A mesh label would need turning every frame
@@ -2170,8 +2180,19 @@ let drawGL = function drawGL(){
     // points cannot overshoot, whatever the frames do.
     f.t = Math.min(1, (f.t || 0) + 1/96);          // 96 frames, about 1.6 seconds
     const e2 = 1 - Math.pow(1 - f.t, 2);            // fast off the boot, easing as it arrives
-    f.x = f.x0 + (CX - f.x0) * e2;
-    f.y = f.y0 + (CY - f.y0) * e2;
+    // ── RETURNED TO WHERE IT WILL ACTUALLY BE ─────────────────────────────
+    // Not to the centre spot: to the taker. kickoff() puts the ball at CX,CY and then hands it
+    // to him, and a claim moves the ball onto its owner — so the ball ends up at HIS feet, eight
+    // units off the spot. Interpolating to the spot meant the drawn ball jumped those eight
+    // units on the handover frame.
+    //
+    // The camera needed no rule for any of this. It follows the drawn ball, which is correct;
+    // the drawn ball was jumping, which was not. Fixing the observer would have left the jump
+    // there for anything else that watches the ball — the halo, the shadow, the trail.
+    const tk = netTaker();
+    const ex2 = tk ? tk.x : CX, ez2 = tk ? tk.y : CY;
+    f.x = f.x0 + (ex2 - f.x0) * e2;
+    f.y = f.y0 + (ez2 - f.y0) * e2;
     f.z = Math.sin(f.t * Math.PI) * 26;             // 26, not 42: a pass back, not a clearance
     if (f.t >= 1) { f.dead = true; f.z = 0; f.vx = f.vy = 0; }
     // and it is dropped the moment the ball is live again, whoever wins the race
@@ -2797,13 +2818,7 @@ function loop(now){
 
   if (running && !held && !walkOff && now >= resumeAt) {
     if (pendingKickoff !== null && typeof pendingKickoff !== 'undefined') {
-      // THE CAMERA MUST NOT SNAP. kickoff() puts the ball on the centre spot, and a following
-      // camera was already tracking the returning ball — which is at the centre by then anyway.
-      // The jolt came from netFly being dropped on the same frame, so the target jumped from the
-      // drawn ball to the engine's. Held one more frame, they are in the same place and there is
-      // nothing to jump between.
       kickoff(pendingKickoff); pendingKickoff = null; resumeAt = now + 900;
-      if (netFly) { netFly.x = ball.x; netFly.y = ball.y; netFly.z = 0; }
     } else {
       // The 2D page's step, verbatim: dt * speed * 0.75. `speedMult` is a PLAYER speed
       // multiplier and taking it for a clock rate was a guess from its name — it wants a player
