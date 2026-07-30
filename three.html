@@ -453,7 +453,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=55"></script>
+<script src="engine.js?v=56"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -998,8 +998,19 @@ function nameSprite(text, colour, px, stroke){
   g.fillText(text, 13, c.height/2);
   const tex = new THREE.CanvasTexture(c);
   tex.minFilter = THREE.LinearFilter;
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
-  sp.scale.set(c.width * 0.42, c.height * 0.42, 1);
+  // ── A LABEL BELONGS TO THE VIEWER, NOT TO THE PITCH ──────────────────────
+  // A Sprite is in WORLD units by default, so it shrank with distance exactly like the thing it
+  // labels — a 30px name rendered at 11px once the camera was pulled back, which is unreadable
+  // and is the whole complaint. That behaviour is right for a flame and wrong for text.
+  //
+  // sizeAttenuation:false makes it a constant SCREEN size. The scale then reads as a fraction of
+  // the viewport rather than a size in the world, so it is set from the canvas's aspect and one
+  // number that means "how tall on screen".
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: tex, transparent: true, depthTest: false, sizeAttenuation: false }));
+  const H = (size / 30) * 0.055;                 // ~5.5% of the viewport for a 30px label
+  sp.scale.set(H * (c.width / c.height), H, 1);
+  sp.userData.h = H;                             // so callers can scale it without re-deriving
   return sp;
 }
 
@@ -1113,7 +1124,10 @@ function drawPolish(now){
   for (let i = notes3.length - 1; i >= 0; i--) {
     const n = notes3[i], age = (now - n.t0) / 2100;
     if (age >= 1) { scene.remove(n.sp); notes3.splice(i, 1); continue; }
-    n.sp.position.y = n.y0 + 34 * age;
+    // The rise is scaled to the camera's distance for the same reason the text is: 34 world
+    // units is a clear lift when you are close in and about a pixel when you are pulled all the
+    // way back, so a note that looked like it floated up would just sit there and vanish.
+    n.sp.position.y = n.y0 + 34 * age * (rad / 840);
     n.sp.material.opacity = age < 0.45 ? 0.95 : 0.95 * (1 - (age - 0.45)/0.55);
   }
   // pings expand and fade over half a second
@@ -1716,6 +1730,7 @@ function buildBodies(){
     const shown = T2.ours ? p.name : p.name.split(' ').slice(-1)[0];
     const label = nameSprite(shown, '#ffffff', 30, 'rgba(6,10,8,.92)');
     label.position.set(0, H_P + 26, 0);
+    label.material.depthWrite = false;
     g.add(label);
     scene.add(g);
     return { g, ring, flames, pip, label, pal, mo };
