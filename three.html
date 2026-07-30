@@ -70,6 +70,41 @@ button:hover{border-color:var(--ink)}
 button.on{border-color:#ff8a4c;color:#ff8a4c}
 .hint{font-family:var(--mono);font-size:.68rem;color:var(--dim);margin-left:auto}
 @media (max-width:560px){ .hint{display:none} .sub{display:none} }
+
+/* ── THE SCREENS ───────────────────────────────────────────────────────────
+   A goal, a card, extra time, a champion. In the flat page these are four
+   separate bits of markup; they are one component here, because they are the
+   same thing — a coloured card over the pitch with a headline and a line under
+   it — and four copies of one idea is how the nav went wrong earlier today. */
+#cele{position:absolute;inset:0;z-index:6;display:none;
+  align-items:center;justify-content:center;pointer-events:none;
+  background:radial-gradient(ellipse at center,rgba(6,10,8,.35),rgba(6,10,8,.82))}
+#cele.on{display:flex}
+#celeCard{text-align:center;padding:1.1rem 1.6rem;border-radius:14px;
+  background:rgba(10,16,13,.88);border:2px solid var(--cele,#ffd166);
+  box-shadow:0 0 60px -10px var(--cele,#ffd166);max-width:88%;
+  animation:celePop .34s cubic-bezier(.2,1.3,.4,1)}
+@keyframes celePop{from{transform:scale(.72);opacity:0}to{transform:scale(1);opacity:1}}
+#celeCard .big{font-size:2.1rem;font-weight:700;letter-spacing:-.01em;color:var(--cele,#ffd166);
+  line-height:1.05}
+#celeCard .who{font-size:1.15rem;font-weight:600;margin-top:.25rem}
+#celeCard .sub{font-size:.9rem;color:var(--dim);margin-top:.3rem}
+@media (max-width:560px){ #celeCard .big{font-size:1.5rem} }
+
+/* Confetti. Twenty-eight strips is enough to read as celebration and few enough
+   that a phone does not care. */
+#confetti{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.confetti{position:absolute;top:-12%;width:7px;height:13px;border-radius:2px;
+  animation:fall 2.4s linear forwards}
+@keyframes fall{to{transform:translateY(120vh) rotate(760deg);opacity:.15}}
+@media (prefers-reduced-motion:reduce){ .confetti{display:none} #celeCard{animation:none} }
+
+/* A card shown against a team flashes that team's chip, which is where the eye
+   already is when a score changes. */
+.sc.flash{animation:scFlash .7s ease-out}
+@keyframes scFlash{0%{background:#ffd166;color:#14181a}100%{background:var(--panel)}}
+.sc.flash.red{animation-name:scFlashRed}
+@keyframes scFlashRed{0%{background:#e11d2e;color:#fff}100%{background:var(--panel)}}
 </style>
 
 <header>
@@ -82,6 +117,7 @@ button.on{border-color:#ff8a4c;color:#ff8a4c}
 
 <div id="stage">
   <canvas id="gl"></canvas>
+  <div id="cele"><div id="celeCard"></div><div id="confetti"></div></div>
   <div id="feed"></div>
 </div>
 
@@ -89,6 +125,8 @@ button.on{border-color:#ff8a4c;color:#ff8a4c}
   <button id="play">Pause</button>
   <button id="reset">Kick off</button>
   <button id="follow" class="on">Follow ball</button>
+  <button id="speed">1&times;</button>
+  <button id="full">Full</button>
   <span class="hint">drag to orbit · pinch or wheel to zoom</span>
 </div>
 
@@ -96,7 +134,7 @@ button.on{border-color:#ff8a4c;color:#ff8a4c}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=4"></script>
+<script src="engine.js?v=5"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -113,10 +151,7 @@ function say(html, big){
 Object.assign(ENGINE_HOOKS, {
   say,
   renderScore,
-  showNotice: t => say(t),
-  crownChampion: t => say('🏆 ' + (TEAMS[t] ? TEAMS[t].name : '') + ' are champions of the hex', true),
-  eliminateTeam: t => say((TEAMS[t] ? TEAMS[t].name : '') + ' are out'),
-  showCelebration: () => {},        // the goal line in the feed is the celebration here
+
   // spawnNote, spawnPing, flash, flamePop, openCoachMenu, closeCoachMenu, showSetup,
   // renderTeamSlots, resetGoals, drawBoards and clearMarks stay no-ops: this page has no
   // sponsor boards, no coach menu and no SVG marks to clear.
@@ -683,6 +718,72 @@ function fmtClock(s){
   return m + ':' + String(Math.floor(s%60)).padStart(2, '0');
 }
 
+
+// ── THE SCREENS ─────────────────────────────────────────────────────────────
+// One card, four uses: a goal, extra time, a champion, and anything the engine
+// wants held in front of the play. The engine already distinguishes them by which
+// hook it calls, so the page does not need four components to say so.
+const celeEl = document.getElementById('cele');
+const celeCard = document.getElementById('celeCard');
+const confettiBox = document.getElementById('confetti');
+let celeUntil = 0;
+
+function showCard(colour, big, who, sub, ms, confetti){
+  celeCard.style.setProperty('--cele', colour);
+  celeCard.innerHTML =
+    '<div class="big">' + big + '</div>' +
+    (who ? '<div class="who">' + who + '</div>' : '') +
+    (sub ? '<div class="sub">' + sub + '</div>' : '');
+  confettiBox.innerHTML = '';
+  if (confetti) {
+    const pal = [colour, '#ffd166', '#ffffff'];
+    for (let i = 0; i < 28; i++) {
+      const c = document.createElement('span');
+      c.className = 'confetti';
+      c.style.left = (Math.random() * 100) + '%';
+      c.style.background = pal[i % 3];
+      c.style.animationDelay = (Math.random() * 0.5).toFixed(2) + 's';
+      confettiBox.appendChild(c);
+    }
+  }
+  celeEl.classList.add('on');
+  // Infinity for a champion: the match is over and there is nothing to go back to.
+  celeUntil = ms === Infinity ? Infinity : performance.now() + ms;
+}
+function hideCard(){ celeEl.classList.remove('on'); confettiBox.innerHTML = ''; }
+
+ENGINE_HOOKS.showCelebration = (colour, big, who, sub) =>
+  showCard(colour || '#ffd166', big || 'GOAL', who || '', sub || '', 2600, true);
+
+ENGINE_HOOKS.showNotice = (colour, big, who, sub, dur) =>
+  showCard(colour || '#ffd166', big || '', who || '', sub || '', (dur || 2.2) * 1000, false);
+
+ENGINE_HOOKS.crownChampion = (t, how) => {
+  const T = TEAMS[t];
+  showCard(T.color, '\u{1F3C6} CHAMPIONS', T.name,
+           (how || 'Champions of the hex') + ' \u00b7 ' + score.join(' \u2013 '), Infinity, true);
+  say('\u{1F3C6} ' + T.name + ' are champions of the hex', true);
+};
+
+ENGINE_HOOKS.eliminateTeam = t => {
+  const T = TEAMS[t];
+  showCard(T.color, 'ELIMINATED', T.name, 'Down to two', 2000, false);
+  say(T.name + ' are out');
+};
+
+// A card against a team flashes that team's chip, which is where the eye already is when
+// something happens to a score. The flat page flashes a whole scorecard; there is no room for one
+// here, and the chip carries the same information in a tenth of the space.
+ENGINE_HOOKS.flash = t => {
+  const el = scoresEl.children[t];
+  if (!el) return;
+  const red = players.some(p => p.team === t && p.redCard);
+  el.classList.remove('flash', 'red');
+  void el.offsetWidth;
+  el.classList.add('flash');
+  if (red) el.classList.add('red');
+};
+
 // ── THE LOOP ────────────────────────────────────────────────────────────────
 // Deliberately simpler than the 2D page's. That one carries celebration timing, the walk of
 // shame, penalties and coach menus; this one plays football and restarts after a goal. The match
@@ -699,7 +800,13 @@ function loop(now){
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, (now - last)/1000);
   last = now;
-  if (running && now >= resumeAt) {
+  // A card holds the play. Without this a goal celebration sits over a match that carries on
+  // behind it, and the restart happens while nobody is looking at the pitch.
+  if (celeUntil && now >= celeUntil && celeUntil !== Infinity) {
+    hideCard(); celeUntil = 0; resumeAt = now + 500;
+  }
+  const held = celeUntil > 0;
+  if (running && !held && now >= resumeAt) {
     if (pendingKickoff !== null && typeof pendingKickoff !== 'undefined') {
       kickoff(pendingKickoff); pendingKickoff = null; resumeAt = now + 900;
     } else {
@@ -725,8 +832,33 @@ document.getElementById('play').addEventListener('click', e => {
 });
 document.getElementById('reset').addEventListener('click', () => {
   feedEl.innerHTML = '';
+  hideCard(); celeUntil = 0;
   resetMatch(); kickoff(0); renderScore(); buildBodies();
 });
+// Speed. The same five steps the flat page offers, and it multiplies the engine's own `speed`,
+// so a second of match clock and a second of football stay the same length as each other.
+const SPEEDS = [0.5, 1, 1.5, 2, 3];
+document.getElementById('speed').addEventListener('click', e => {
+  const i = (SPEEDS.indexOf(speed) + 1) % SPEEDS.length;
+  speed = SPEEDS[i < 0 ? 1 : i];
+  e.target.innerHTML = speed + '&times;';
+});
+
+// Fullscreen. On the STAGE rather than the document, so the pitch fills the screen and the
+// controls come with it — a fullscreen page that leaves its buttons behind is a trap on a phone,
+// where there is no obvious way back.
+document.getElementById('full').addEventListener('click', async e => {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen();
+    e.target.classList.toggle('on', !!document.fullscreenElement);
+  } catch (err) { /* refused, or unsupported: leave the button as it was */ }
+});
+document.addEventListener('fullscreenchange', () => {
+  document.getElementById('full').classList.toggle('on', !!document.fullscreenElement);
+  resize();                      // the canvas is sized from its box, and the box just changed
+});
+
 document.getElementById('follow').addEventListener('click', e => {
   follow = !follow;
   e.target.classList.toggle('on', follow);
