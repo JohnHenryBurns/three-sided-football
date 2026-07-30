@@ -115,7 +115,10 @@ function play(opts){
   // The gates below are three.html's, in its order, with nothing left out.
   let walkOff = null;
   while (E.phase !== 'over' && guard++ < 400000) {
-    ms += 1000 / 60;                               // the fake clock runs at 60fps of MATCH time
+    // THE FAKE CLOCK RUNS IN REAL-FRAME MILLISECONDS, because that is what resumeAt and
+    // restartHold are measured in — both pages compare them against performance.now(). Advancing
+    // it in MATCH time made every hold 33% too long, since a match second is 0.75 of a real one.
+    ms += 1000 / 60;
     if (hold > 0) { hold--; ev.holdFrames++; continue; }
 
     // the walk of shame owns the pitch while it runs, exactly as it does on both pages
@@ -142,6 +145,11 @@ function play(opts){
     if (E.pendingKickoff !== null && E.pendingKickoff !== undefined) {
       E.kickoff(E.pendingKickoff);
       E.pendingKickoff = null;
+      // AND THE 900ms PAUSE, which both pages set and this did not. After a kick-off the browser
+      // holds play for nearly a second while everyone settles; the harness restarted instantly
+      // and the first second of every passage after a goal was played from a formation that had
+      // not finished forming. That is a small difference repeated twenty times a match.
+      E.resumeAt = ms + 900;
       continue;
     }
     const step = STEP * E.speed;
