@@ -127,6 +127,35 @@ seed 1007   loose 30%   ball held too long
 **Those three seeds are the next piece of work.** Two of the three are the ball being
 held, which is the signature the watchdog does not catch.
 
+## Not everything is an instruction
+
+**John asked whether the back-pass rule is one. I tried it and it should not be.**
+
+```
+mustKick as a flag             6/6 usable, gloves 39%
+as a REQUIREMENT instruction   3/6 usable, gloves 31%
+```
+
+**Instructions steer.** Every one of the 38 ends in a `steer()` — that is what an
+instruction *is* here: a decision about where a player goes. The back-pass rule is not
+about where the keeper goes. It is about **what he may do with the ball once he has it**,
+and dressing it as a steering decision made him walk about instead of clearing.
+
+**The boundary this draws:**
+
+```
+instruction   where a player goes            steer()
+rule          what may happen to the ball    a condition on an action
+correction    what modifies a chosen move    collision, walls
+```
+
+`noChase` genuinely was a missing instruction — it was about movement and I had written
+it as a prohibition. `mustKick` is not. **The lesson from the noChase fix does not
+generalise to every flag**, and I applied it without checking.
+
+**Kept as a flag**, with the tier vocabulary borrowed only for the comment: it is a
+REQUIREMENT in spirit, and a condition in code.
+
 ## Air is not grass — worth doing, not yet safe
 
 **The ball gets ground friction while airborne.** `0.985` per frame is applied to every
