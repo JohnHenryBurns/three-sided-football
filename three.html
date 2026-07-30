@@ -76,7 +76,9 @@ h1{font-size:1.1rem;font-weight:600;letter-spacing:-.01em;color:var(--hot)}
   background:linear-gradient(transparent,rgba(6,10,8,.82))}
 #feed p{font-size:.86rem;line-height:1.35;margin-top:.2rem;text-shadow:0 1px 3px rgba(0,0,0,.8)}
 #feed p:not(:last-child){opacity:.5}
-#feed .goal{color:#ffd166;font-weight:700;font-size:1rem}
+#feed .goal{color:#ffd166;font-weight:700}
+#feed .big{font-weight:600;font-size:.94rem}
+#feed p .goal{color:#ffd166;font-weight:700}
 
 #bar{display:flex;gap:.4rem;align-items:center;padding:.45rem .9rem;
   border-top:1px solid var(--panel-edge)}
@@ -420,7 +422,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=43"></script>
+<script src="engine.js?v=44"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -463,7 +465,14 @@ function say(html, big){
   }
   const p = document.createElement('p');
   p.innerHTML = String(html || '');
-  if (big) p.className = 'goal';
+  // NOT `if (big)`. `big` means announce this urgently — a grudge match forming, an alliance
+  // shifting, a keeper catching fire — and none of those are goals. The engine already wraps the
+  // twenty lines that ARE goals in <span class="goal">, so the markup decides and the page does
+  // not. Colouring every urgent line yellow made most of the feed yellow, which meant the colour
+  // stopped saying anything.
+  //
+  // Urgency is weight, which is a different axis from what-kind-of-event.
+  if (big) p.className = 'big';
   feedEl.appendChild(p);
   while (feedEl.children.length > 5) feedEl.removeChild(feedEl.firstChild);
 }
@@ -492,10 +501,23 @@ const speechOK = 'speechSynthesis' in window;
 let sayAloud = false, capsOn = true, lastSpokeAt = 0;
 const capEl = document.getElementById('caption');
 
+// THE FLAT PAGE'S PIPELINE, and I had ported only its first line. Stripping tags is not enough:
+// what is left is full of emoji, and a screen reader voice says "bullseye" and "yellow square"
+// out loud in the middle of a sentence.
+//
+// The rest of it is hard-won and worth keeping verbatim — stretched spellings like GOOOAL read
+// as "gull" unless collapsed, and "+1" and "20s" are read as characters rather than as words
+// unless spelled out. Emphasis comes from delivery, not from spelling.
 const strip = html => String(html)
   .replace(/<[^>]*>/g, '')
   .replace(/&mdash;|&#8212;/g, '\u2014')
   .replace(/&[a-z]+;/g, ' ')
+  .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, '')   // no more "yellow square"
+  .replace(/G+O+A+L+/gi, 'goal')
+  .replace(/\+1/g, 'plus one').replace(/\u22121/g, 'minus one').replace(/-1\b/g, 'minus one')
+  .replace(/\+(\d+)s\b/g, 'plus $1 seconds')
+  .replace(/(\d+)s\b/g, '$1 seconds')
+  .replace(/\s*\u2014\s*/g, ', ')          // eat the spaces too, or it says "CARD , Romero"
   .replace(/\s+/g, ' ')
   .trim();
 
