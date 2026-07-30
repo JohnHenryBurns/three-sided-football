@@ -355,6 +355,14 @@ function drawPolish(now){
 
 // ── THE PLAYERS ─────────────────────────────────────────────────────────────
 const R_P = 11, H_P = 34;
+// How light a colour is, for deciding whether a number on it should be dark or pale. index.html
+// has its own copy; this page cannot see it, because it lives in the front end rather than the
+// engine. Duplicated deliberately — four lines is cheaper than moving a colour helper into a
+// file about the rules of football.
+const lum = hex => {
+  const n = parseInt(String(hex).replace('#',''), 16);
+  return (0.2126*((n>>16)&255) + 0.7152*((n>>8)&255) + 0.0722*(n&255)) / 255;
+};
 let bodies = [];
 function buildBodies(){
   bodies.forEach(b => scene.remove(b.g));
@@ -386,6 +394,16 @@ function buildBodies(){
       pupil.position.set(R_P + 1.2, H_P * 0.74, side * 4.2);
       g.add(pupil);
     }
+    // A SMILE. Half a torus, opening downward, which is the cheapest curve in three.js that
+    // reads as a mouth — a flat arc would vanish edge-on and a sphere would read as a nose.
+    // It sits below the eyes and slightly proud of the body so the cylinder does not clip it.
+    const smile = new THREE.Mesh(
+      new THREE.TorusGeometry(4.4, 0.9, 6, 14, Math.PI),
+      new THREE.MeshBasicMaterial({ color: 0x14181a }));
+    smile.position.set(R_P - 0.6, H_P * 0.56, 0);
+    smile.rotation.y = Math.PI/2;      // face the front
+    smile.rotation.z = Math.PI;        // corners up, not down
+    g.add(smile);
     // stamina, as a ring on the grass. The 2D page shortened an arc; from a raised camera an arc
     // is unreadable, so the value lives in colour, opacity and radius instead.
     const ring = new THREE.Mesh(new THREE.RingGeometry(R_P + 3, R_P + 7, 24),
@@ -402,6 +420,28 @@ function buildBodies(){
     // The name, riding above the head. Surnames only: full names are too wide to read at this
     // scale and the commentary already says who somebody is — the label's job is to let you
     // follow ONE player across a crowded pitch, and a surname does that.
+    // THE NUMBER, ON THE BACK. Drawn onto a plane rather than a sprite: a sprite always faces
+    // the camera, which is right for a name floating above a head and wrong for a number on a
+    // shirt — the whole point of a squad number is that you read it when a player is running
+    // away from you, and it should disappear when they turn round.
+    const num = shirtOf(p.name);
+    if (num) {
+      const c = document.createElement('canvas');
+      c.width = 64; c.height = 64;
+      const x = c.getContext('2d');
+      x.font = '700 46px "Barlow Condensed", "Arial Narrow", sans-serif';
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillStyle = lum(TEAMS[p.team].color) > 0.62 ? '#14181a' : '#f6f8f6';
+      x.fillText(String(num), 32, 34);
+      const tex = new THREE.CanvasTexture(c);
+      tex.minFilter = THREE.LinearFilter;
+      const back = new THREE.Mesh(
+        new THREE.PlaneGeometry(15, 15),
+        new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+      back.position.set(-R_P - 0.4, H_P * 0.66, 0);
+      back.rotation.y = -Math.PI/2;
+      g.add(back);
+    }
     const label = nameSprite(p.name.split(' ').slice(-1)[0], TEAMS[p.team].accent);
     label.position.set(0, H_P + 26, 0);
     label.scale.multiplyScalar(0.55);
