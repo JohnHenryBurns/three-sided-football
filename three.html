@@ -105,6 +105,32 @@ button.on{border-color:#ff8a4c;color:#ff8a4c}
 @keyframes scFlash{0%{background:#ffd166;color:#14181a}100%{background:var(--panel)}}
 .sc.flash.red{animation-name:scFlashRed}
 @keyframes scFlashRed{0%{background:#e11d2e;color:#fff}100%{background:var(--panel)}}
+
+/* ── THE MATCH MENU ────────────────────────────────────────────────────────
+   Same options as the flat page, minus the voice engine — this page has no
+   announcer, so offering a choice of throat would be a control that does
+   nothing, which is worse than not having it. */
+#setup{position:absolute;inset:0;z-index:8;display:none;overflow:auto;
+  background:rgba(6,10,8,.93);padding:1rem}
+#setup.on{display:block}
+.setupCard{max-width:26rem;margin:0 auto;padding:1rem 1.2rem 1.4rem;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px}
+.setupCard h2{font-size:1.25rem;color:#ff8a4c;letter-spacing:-.01em}
+.setupCard .tag{font-family:var(--mono);font-size:.72rem;color:var(--dim);
+  letter-spacing:.05em;margin:.15rem 0 .9rem}
+.frow{display:flex;flex-direction:column;gap:.28rem;margin-top:.75rem}
+.frow>label{font-size:.74rem;color:var(--dim);letter-spacing:.07em;text-transform:uppercase}
+.frow select{width:100%;font-family:inherit;font-size:.95rem;padding:.45rem .5rem;
+  background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:7px}
+.chk{display:flex;justify-content:space-between;align-items:center;margin-top:.6rem;
+  font-size:.92rem}
+.chk input{width:1.15rem;height:1.15rem;accent-color:#ff8a4c}
+#teamSlots{display:flex;flex-direction:column;gap:.3rem}
+#teamSlots select{width:100%;font-family:inherit;font-size:.92rem;padding:.4rem .5rem;
+  background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:7px}
+#btnStart{width:100%;margin-top:1.1rem;font-size:1.05rem;font-weight:600;padding:.6rem;
+  background:#ff8a4c;color:#1a1005;border:0;border-radius:9px}
+#btnStart:hover{filter:brightness(1.08)}
 </style>
 
 <header>
@@ -117,6 +143,42 @@ button.on{border-color:#ff8a4c;color:#ff8a4c}
 
 <div id="stage">
   <canvas id="gl"></canvas>
+  <div id="setup" class="on">
+    <div class="setupCard">
+      <h2>Three-Sided Football</h2>
+      <p class="tag">One ball. Three goals. Two enemies each.</p>
+
+      <div class="frow"><label for="setRules">Scoring</label>
+        <select id="setRules">
+          <option value="points" selected>&plusmn;1 points &mdash; scorer +1, conceder &minus;1</option>
+          <option value="conceded">Classic &mdash; fewest conceded wins</option>
+        </select></div>
+
+      <div class="frow"><label for="setLen">Match length</label>
+        <select id="setLen">
+          <option value="60" selected>1 minute &mdash; blitz</option>
+          <option value="180">3 minutes</option>
+          <option value="300">5 minutes</option>
+          <option value="600">10 minutes</option>
+        </select></div>
+
+      <div class="frow"><label for="setRef">Referee</label>
+        <select id="setRef">
+          <option value="0">Off &mdash; let them play</option>
+          <option value="1" selected>Balanced</option>
+          <option value="1.8">Aggressive</option>
+          <option value="3.5">MAYHEM</option>
+        </select></div>
+
+      <div class="frow"><label>Teams</label><div id="teamSlots"></div></div>
+
+      <div class="chk"><label for="setMom">Underdog fire</label><input id="setMom" type="checkbox" checked></div>
+      <div class="chk"><label for="setZone" title="Attackers can't enter the penalty area before the ball">Enforce offsides</label><input id="setZone" type="checkbox"></div>
+      <div class="chk"><label for="setOob" title="Throw-ins, goal kicks, corners, keeper parries">Out of bounds</label><input id="setOob" type="checkbox" checked></div>
+
+      <button id="btnStart">Kick off</button>
+    </div>
+  </div>
   <div id="cele"><div id="celeCard"></div><div id="confetti"></div></div>
   <div id="feed"></div>
 </div>
@@ -134,7 +196,7 @@ button.on{border-color:#ff8a4c;color:#ff8a4c}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=7"></script>
+<script src="engine.js?v=8"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -848,6 +910,63 @@ ENGINE_HOOKS.flash = t => {
   if (red) el.classList.add('red');
 };
 
+
+// ── THE MATCH MENU ──────────────────────────────────────────────────────────
+// Shown on load and whenever the match is reset, because those are the two moments you might
+// want a different match — and a settings panel you have to go looking for is one nobody changes.
+const setupEl = document.getElementById('setup');
+const slotsEl = document.getElementById('teamSlots');
+
+// Three pickers, one per side. Choosing a team that is already out there swaps the two, rather
+// than refusing: refusing means working out which of the other two to change first, and swapping
+// is what you meant.
+function renderTeamSlots(){
+  slotsEl.innerHTML = '';
+  selTeams.forEach((sel, slot) => {
+    const s = document.createElement('select');
+    TEAM_LIBRARY.forEach((T, i) => {
+      const o = document.createElement('option');
+      o.value = i; o.textContent = T.name;
+      if (i === sel) o.selected = true;
+      s.appendChild(o);
+    });
+    s.addEventListener('change', () => {
+      const want = +s.value, other = selTeams.indexOf(want);
+      if (other >= 0 && other !== slot) selTeams[other] = selTeams[slot];
+      selTeams[slot] = want;
+      applyTeamSelection();
+      renderTeamSlots();
+    });
+    slotsEl.appendChild(s);
+  });
+}
+ENGINE_HOOKS.renderTeamSlots = renderTeamSlots;
+ENGINE_HOOKS.showSetup = () => { running = false; hideCard(); celeUntil = 0; setupEl.classList.add('on'); };
+
+function startMatch(){
+  // Read every control into the engine, then build. The engine owns all of these — the page is
+  // only collecting answers.
+  scoreMode  = document.getElementById('setRules').value;
+  matchLen   = parseInt(document.getElementById('setLen').value, 10);
+  foulMult   = parseFloat(document.getElementById('setRef').value);
+  momentumOn = document.getElementById('setMom').checked;
+  zoneRule   = document.getElementById('setZone').checked;
+  oobRule    = document.getElementById('setOob').checked;
+
+  setupEl.classList.remove('on');
+  feedEl.innerHTML = '';
+  hideCard(); celeUntil = 0;
+  applyTeamSelection();
+  resetMatch();
+  kickoff(0);
+  renderScore();
+  buildBodies();          // the kits change with the teams, so the bodies are rebuilt
+  running = true;
+  document.getElementById('play').textContent = 'Pause';
+  if (oobRule) say('Touchlines in play \u2014 throw-ins, goal kicks, and corners.');
+}
+document.getElementById('btnStart').addEventListener('click', startMatch);
+
 // ── THE LOOP ────────────────────────────────────────────────────────────────
 // Deliberately simpler than the 2D page's. That one carries celebration timing, the walk of
 // shame, penalties and coach menus; this one plays football and restarts after a goal. The match
@@ -894,10 +1013,13 @@ document.getElementById('play').addEventListener('click', e => {
   running = !running;
   e.target.textContent = running ? 'Pause' : 'Play';
 });
+// Reset opens the menu rather than restarting the same match: a reset is the moment you might
+// want different teams or a different length, and the flat page treats it the same way.
 document.getElementById('reset').addEventListener('click', () => {
-  feedEl.innerHTML = '';
+  running = false;
   hideCard(); celeUntil = 0;
-  resetMatch(); kickoff(0); renderScore(); buildBodies();
+  renderTeamSlots();
+  setupEl.classList.add('on');
 });
 // Speed. The same five steps the flat page offers, and it multiplies the engine's own `speed`,
 // so a second of match clock and a second of football stay the same length as each other.
@@ -969,7 +1091,11 @@ function boot(){
   kickoff(0);
   renderScore();
   buildBodies();
+  renderTeamSlots();
   resize();
+  // The match is built but held: the menu is up and `running` is false, so the first frame draws
+  // a pitch with players standing on it behind the card, which is a better backdrop than black.
+  running = false;
   requestAnimationFrame(loop);
 }
 try { boot(); }
