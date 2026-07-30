@@ -408,6 +408,21 @@ from your man on the line to the goal*, which is goal-side marking.
 The cascade copies were **deleted rather than left in place**. Two copies of a decision
 is how they drift apart.
 
+### On the popping number
+
+**John does not see flickering in the app**, and the browser says 9.9 switches per
+player per second.
+
+Both can be true. **A switch between two instructions that steer a player to the same
+place is invisible** — *intercepting* and the cascade's chase both send him at the
+ball, so alternating between them looks like one continuous run. The number counts
+identity changes; the eye counts movement changes.
+
+So the metric may be measuring something real and unimportant, which is exactly what
+the "199 keeper claims" turned out to be. **Do not tune against it until a switch is
+shown to change where somebody goes.** The useful version would compare the steer
+*target* before and after a switch, not the name.
+
 ### Where this leads
 
 The list makes things possible that a cascade could not express:
