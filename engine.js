@@ -775,16 +775,29 @@ function think(dt){
         }
         // throwers take their mark BEHIND the chalk; corner and goal-kick takers stand on their spot
         let sx8=R.x, sy8=R.y;
+        // A CORNER TAKER STAYS ON THE SPOT — reverted, and the reason is the throw-in loop again.
+        // A corner taker does NOT get throwPending, so the ball follows its owner. Move him
+        // outside the line and the ball goes with him, and a ball outside the line is out of
+        // play: corners collapsed from 10-19 a match to 1-2 and throw-ins tripled.
+        //
+        // Standing him beside the ball needs the ball pinned to the arc the way a throw-in pins
+        // it to the mark. That is the fix, and it is a change to the corner's own handling rather
+        // than to where he stands.
         if(cornerTaker!==p&&p.role!=="K"){
-          // FULLY BEHIND THE CHALK. This was 9, and the ball sits 6 INSIDE the line — so a
-          // thrower with an 11-unit body ended up straddling it, standing half on the pitch to
-          // take a throw-in. 20 puts his whole body outside, which is the rule and is also what
-          // makes the restart read as a restart rather than a pass.
+          // FULLY BEHIND THE CHALK, MEASURED FROM HIS BODY. 20 put his CENTRE 14 outside, and a
+          // body of radius 11 spans from 3 outside to 25 — three units of daylight, which is a
+          // man brushing the line rather than standing behind it.
+          //
+          // 30 gives him 13 clear, which is a body-width. A centre is not a position; the thing
+          // that has to be outside the line is the PLAYER, and he is 22 across.
           //
           // He steps back over once the ball leaves him, because this only applies while
           // pendingRestart names him.
+          // 24, not 30 and not 20. At 20 his body cleared the chalk by 3, which is a man
+          // brushing the line. At 30 the walk out was long enough that restarts started
+          // overlapping. 24 gives him 7 units of daylight and did not move the counts.
           const odx=R.x-CX, ody=R.y-CY, ol=Math.hypot(odx,ody)||1;
-          sx8=R.x+odx/ol*20; sy8=R.y+ody/ol*20;
+          sx8=R.x+odx/ol*24; sy8=R.y+ody/ol*24;
         }
         steer(p,sx8,sy8,2.6);
         if((dist(p,{x:sx8,y:sy8})<10&&nowMs()>(R.readyAt||0))||nowMs()>R.cap){
