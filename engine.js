@@ -2304,6 +2304,7 @@ function buildMatchReport(){
   md+=`| measure | this match | per 90 | real football |\n|---|---|---|---|\n`;
   const p90=x=>Math.round(x*(5400/Math.max(1,secs)));
   md+=`| throw-ins | ${TEL.throwIns} | ${p90(TEL.throwIns)} | ~40 |\n`;
+  md+=`| free kicks | ${TEL.freeKicks} | ${p90(TEL.freeKicks)} | ~22 |\n`;
   md+=`| ball behind a goal line | ${TEL.behindGoal} | ${p90(TEL.behindGoal)} | |\n`;
   md+=`| \u2014 last touched by the DEFENDING side (corner) | ${TEL.behindOwn} | ${p90(TEL.behindOwn)} | ~10 |\n`;
   md+=`| \u2014 last touched by an attacker (goal kick) | ${TEL.behindOther} | ${p90(TEL.behindOther)} | ~8 |\n`;
