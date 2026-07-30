@@ -461,7 +461,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=76"></script>
+<script src="engine.js?v=77"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1621,7 +1621,10 @@ function buildFireLight(){
 }
 
 // ── THE PLAYERS ─────────────────────────────────────────────────────────────
-const R_P = 11, H_P = 34;
+// H_P comes from the ENGINE. It is drawn here and TESTED there — a keeper's reach, the header
+// band, the "too high to control" threshold all use it — and a number both sides need is a
+// number neither should own privately. Same reasoning as GOAL_H.
+const R_P = 11, H_P = (typeof H_HEAD !== 'undefined') ? H_HEAD : 34;
 // How light a colour is, for deciding whether a number on it should be dark or pale. index.html
 // has its own copy; this page cannot see it, because it lives in the front end rather than the
 // engine. Duplicated deliberately — four lines is cheaper than moving a colour helper into a
@@ -1981,6 +1984,14 @@ let drawGL = function drawGL(){
       //
       // The tilt is applied about the axis perpendicular to the lean, in the group's own frame,
       // so it works whichever way he is facing.
+      // A KEEPER UNDER A HIGH BALL GOES UP. The engine gives him 23 of reach for it — the same
+      // as a dive — so he should look like he is earning it. This is the jump built for headers,
+      // asked for explicitly rather than waiting on proximity, because a keeper commits to a
+      // cross before it arrives.
+      if (p.role === 'K' && !p.out && (ball.z || 0) > H_P && (ball.z || 0) < GOAL_H + 14 &&
+          Math.hypot(p.x - ball.x, p.y - ball.y) < 40) {
+        p._jump = Math.max(p._jump || 0, 14);
+      }
       if (p.role === 'K' && p.diveUntil && clockSec < p.diveUntil) {
         const left = (p.diveUntil - clockSec) / 1.2;         // 1 at the moment of the dive
         const bx = ball.x - p.x, bz = ball.y - p.y;
