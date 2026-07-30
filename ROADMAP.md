@@ -371,6 +371,35 @@ denying a throw               autonomous, 750
 just restarted — offering     autonomous, 700
 ```
 
+**Ten of fifty-three.** PR #132 added three more, two of them named from their
+*condition* rather than their target:
+
+```
+the bus — dropping in   autonomous, 520   TT.bunker>0.5 && role M
+holding the counter     autonomous, 510   TT.bunker>0.5 && role F
+intercepting            autonomous, 480   ball.x + ball.vx*6 — six frames AHEAD
+```
+
+**The bus pair matters more than its size.** `TT.bunker` is a coach setting that
+changes *which instruction applies* rather than tweaking a number — so the coach menu
+was already reaching into the cascade before this list existed. The list makes that
+legible rather than buried, and it is the model for everything John wants next.
+
+**`intercepting` is the first instruction with a real `score()`.** It falls off with
+distance, so the nearest man wants it most and the others go and do something else —
+which a cascade could not express, because a branch fires or it doesn't.
+
+### Unresolved: the steer that moves somebody else
+
+`steer(owner, adv.x, adv.y, 1.1)` in the keeper block steers the ball's **owner**,
+not the player being considered. Everything else in `think()` steers `p`.
+
+I flagged this as an asymmetry, then checked three times and got contradictory
+answers about which scope it is in — `p`'s loop opens 29,000 characters earlier, and
+whether it is still in scope there needs reading the nesting properly rather than
+grepping offsets. **Left alone deliberately.** It works, and converting a block I do
+not understand is how a working thing becomes a broken one.
+
 **Seven of fifty-three**, and the four added in PR #131 were named from their steer
 targets exactly as planned — `steer(p, g9.x+e9.nx*46+e9.ux*lat, ...)` is *get in the
 box and spread across its width*, and `steer(p, mk.x+gx/gl*15, ...)` is *fifteen units
