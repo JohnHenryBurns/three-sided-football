@@ -695,6 +695,23 @@ function think(dt){
     if(pendingRestart){
       const R=pendingRestart;
       if(p===R.p){
+        // ── FETCH FIRST, THEN TAKE IT ─────────────────────────────────────
+        // A fetching restart has the ball lying where it went out rather than sitting on the
+        // spot. He goes and GETS it, carries it to the mark, and only then takes the throw. Play
+        // is not held for any of this — everyone else is still playing.
+        if(R.fetch && ball.fetch && !R.got){
+          const bd9=dist(p,ball);
+          if(bd9>13){
+            steer(p, ball.x, ball.y, 2.6);         // jog out to it
+            return;
+          }
+          R.got=true;                              // picked up
+          ENGINE_HOOKS.spawnNote(ball.x, ball.y-22, "\u{1F450} fetched", TEAMS[p.team].color);
+        }
+        if(R.fetch && R.got){
+          // carrying it back to the mark, ball in hand
+          ball.x=p.x; ball.y=p.y; ball.z=0; ball.vx=0; ball.vy=0;
+        }
         // throwers take their mark BEHIND the chalk; corner and goal-kick takers stand on their spot
         let sx8=R.x, sy8=R.y;
         if(cornerTaker!==p&&p.role!=="K"){
@@ -712,6 +729,7 @@ function think(dt){
         if((dist(p,{x:sx8,y:sy8})<10&&nowMs()>(R.readyAt||0))||nowMs()>R.cap){
           p.x=sx8; p.y=sy8; p.vx=0; p.vy=0;
           ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.touchT=0.4;
+          ball.fetch=null;
           restartHold=nowMs()+(cornerTaker===p?500:260);
           if(cornerTaker!==p){ throwPending=p; GKSTAT.lastThrower=p; }   // a throw must find a teammate
           pendingRestart=null;
@@ -2675,8 +2693,23 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
     .sort((a,b)=>dist(a,{x:sx,y:sy})-dist(b,{x:sx,y:sy}));
   const thr=cands[0];
   if(!thr){ telPort('throw-in: nobody to take it'); ball.x=CX; ball.y=CY; return; }
-  telPort('throw-in'); ball.owner=null; ball.x=sx; ball.y=sy;
-  pendingRestart={p:thr, x:sx, y:sy, team:thr.team, cap:nowMs()+2000, readyAt:nowMs()+1100};
+  // ── THE BALL STAYS WHERE IT WENT OUT ──────────────────────────────────────
+  // It used to be lifted to the throw spot the instant the ball crossed the line — from wherever
+  // it had run to, which is fifteen jumps of up to three hundred units a match and the single
+  // largest source of the ball teleporting.
+  //
+  // Now somebody fetches it. The ball sits exactly where it stopped, the nearest man walks over,
+  // and PLAY CONTINUES AROUND HIM — no hold, no freeze, no waiting for a whistle. That is what a
+  // throw-in looks like: the game breathes while one player jogs to the touchline.
+  //
+  // The hold, if there is one, is however long it takes him to get there. No cap and no cheating
+  // the speed: if that turns out to be too much standing about we will see it in the dead-time
+  // number and can decide then.
+  ball.owner=null;
+  ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;      // it stops, it does not move
+  ball.fetch={ by:thr, sx, sy, team:thr.team, at:clockSec };
+  pendingRestart={p:thr, x:sx, y:sy, team:thr.team, fetch:true,
+                  cap:nowMs()+20000, readyAt:nowMs()};
   suppress={team:toucher,until:clockSec+0.8};
   ENGINE_HOOKS.spawnNote(sx,sy-24,"throw-in!",TEAMS[thr.team].color,TEAMS[thr.team].accent);
   if(Math.random()<0.4) sayLogged(pick([
