@@ -1752,13 +1752,13 @@ const TEL = {
   frames:0, loose:0, deadFrames:0, aerial:0,
   throwIns:0, corners:0, goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0,
   poss:[0,0,0], jumps:0, bigJumps:0, maxJump:0, lastX:null, lastY:null,
-  claims:0, gkClaims:0, rapid:0, gkRapid:0,
+  claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
 function telReset(){
   Object.assign(TEL, { frames:0, loose:0, deadFrames:0, aerial:0, throwIns:0, corners:0,
     goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0, poss:[0,0,0], jumps:0,
-    claims:0, gkClaims:0, rapid:0, gkRapid:0,
+    claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
 }
@@ -1809,7 +1809,9 @@ function buildMatchReport(){
   md+=`| measure | this match | per 90 | real football |\n|---|---|---|---|\n`;
   const p90=x=>Math.round(x*(5400/Math.max(1,secs)));
   md+=`| throw-ins | ${TEL.throwIns} | ${p90(TEL.throwIns)} | ~40 |\n`;
-  md+=`| corners | ${TEL.corners} | ${p90(TEL.corners)} | ~10 |\n`;
+  md+=`| ball behind a goal line | ${TEL.behindGoal} | ${p90(TEL.behindGoal)} | |\n`;
+  md+=`| \u2014 last touched by the DEFENDING side (corner) | ${TEL.behindOwn} | ${p90(TEL.behindOwn)} | ~10 |\n`;
+  md+=`| \u2014 last touched by an attacker (goal kick) | ${TEL.behindOther} | ${p90(TEL.behindOther)} | ~8 |\n`;
   md+=`| possession changes | ${TEL.claims} | ${p90(TEL.claims)} | ~250 |\n`;
   md+=`| of those, to a keeper | ${TEL.gkClaims} | ${p90(TEL.gkClaims)} | ~8 |\n`;
   md+=`| **scrambles** (re-claim <0.45s, same spot) | ${TEL.rapid} | ${p90(TEL.rapid)} | rare |\n`;
@@ -2332,7 +2334,9 @@ function outOfBounds(k,e){
   addStoppage(0.8);
   if(e.goal){
     const ownerT=GOAL_EDGE.indexOf(k);
-    if(toucher===ownerT && !out[ownerT]) stageCorner(ownerT,e,ex,ey);
+    TEL.behindGoal++;
+    if(toucher===ownerT) TEL.behindOwn++; else TEL.behindOther++;
+    if(toucher===ownerT && !out[ownerT]) { TEL.corners++; stageCorner(ownerT,e,ex,ey); }
     else if(!out[ownerT]) stageGoalKick(ownerT);
     else stageThrowIn(toucher,e,ex,ey);
   } else stageThrowIn(toucher,e,ex,ey);
