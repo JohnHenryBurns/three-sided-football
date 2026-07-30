@@ -692,18 +692,32 @@ function kick(tx,ty,power,isShot){
 // job() is also where an instruction change is OBSERVABLE, so it is where the measuring goes. I
 // built a commitment system to stop players popping between instructions and had no way to count
 // popping, which is the same fault as tuning a flame you cannot see the colour of.
+// job() IS CALLED MORE THAN ONCE A FRAME. The list declines a player, job(p,'cascade') fires, and
+// then a later cascade branch calls job() again with what he is actually doing — two calls, one
+// frame. Counting every call made the switch rate 9.9 a second while the debug overlay, which
+// shows the LAST call, sat perfectly stable. John saw the stability and I saw the number and we
+// were both right.
+//
+// So the counting compares against the job he had at the END OF THE LAST FRAME, not against
+// whatever was set a microsecond ago. Intra-frame reconsideration is not indecision — it is the
+// cascade arriving at an answer.
 function job(p, what){
-  if(p.job!==what){
-    if(p.job){                                   // he held the last one for a while
-      TEL.jobSwitch++;
-      TEL.jobHeld += Math.max(0, clockSec-(p.jobAt||clockSec));
-      TEL.jobHeldN++;
-      if(clockSec-(p.jobAt||clockSec) < 0.25) TEL.jobPop++;   // held under a quarter second
-    }
-    p.jobAt = clockSec;
-  }
   TEL.jobFrames[what] = (TEL.jobFrames[what]||0) + 1;
   p.job = what;
+}
+
+/** Called once per player per frame, after think() has settled on something. */
+function jobSettled(p){
+  if(p.jobPrev !== p.job){
+    if(p.jobPrev){
+      TEL.jobSwitch++;
+      const held = Math.max(0, clockSec-(p.jobAt||clockSec));
+      TEL.jobHeld += held; TEL.jobHeldN++;
+      if(held < 0.25) TEL.jobPop++;
+    }
+    p.jobAt = clockSec;
+    p.jobPrev = p.job;
+  }
 }
 
 // ── THE INSTRUCTION LIST ────────────────────────────────────────────────────
@@ -942,6 +956,9 @@ function think(dt){
     players.forEach(p=>{ if(p.team===t&&(p.role!=="K"||FL[t]===0)&&!p.out&&!p.sentOff){const d=dist(p,ball); if(d<bd){bd=d;best=p;}}});
     chaser[t]=best;
   }
+  // settle last frame's job before this frame's decisions overwrite it
+  players.forEach(p=>{ if(!p.out&&!p.sentOff) jobSettled(p); });
+
   players.forEach(p=>{
     if(p.out||p.sentOff||targets[p.team]===null)return;
 
