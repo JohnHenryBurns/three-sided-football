@@ -462,7 +462,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=129"></script>
+<script src="engine.js?v=130"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -970,6 +970,80 @@ for (let i = 0; i < TRAIL_N; i++) {
 }
 const trailPts = [];
 let headPop = 0;
+// ── THE TEAM BADGE ──────────────────────────────────────────────────────────
+// The flat page draws each side's motif as SVG about 13 units across — the bulldog's eyes are
+// r:1.1, which is a pixel and a half on a phone. Drawn to a 128px canvas instead, the same shapes
+// get roughly ten times the detail and cost one texture per side for the whole match.
+//
+// Same geometry as the flat page, scaled up: 13 units becomes 128 pixels, so every radius is
+// multiplied by 9.85 and the drawing is otherwise identical. That matters — a badge that is
+// nearly the flat page's is worse than one that is exactly it.
+const _badgeCache = {};
+function badgeTexture(t) {
+  const T = TEAMS[t], key = T.name;
+  if (_badgeCache[key]) return _badgeCache[key];
+  const S = 128, K = S / 13 * 0.72;          // flat-page units -> pixels, with a little margin
+  const cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const x = cv.getContext('2d');
+  const m = T.motif || { t: 'disc', c: [T.accent] };
+  const c = m.c || [T.accent];
+  const P = (u) => S / 2 + u * K;            // a flat-page coordinate, in pixels
+  const R = (u) => u * K;
+
+  x.fillStyle = T.color;                     // the shirt, as the ground
+  x.beginPath(); x.arc(S/2, S/2, R(7.4), 0, 7); x.fill();
+
+  const dot = (cx, cy, r, col) => { x.fillStyle = col; x.beginPath(); x.arc(P(cx), P(cy), R(r), 0, 7); x.fill(); };
+  const box = (bx, by, w, h, col) => { x.fillStyle = col; x.fillRect(P(bx), P(by), R(w), R(h)); };
+
+  switch (m.t) {
+    case 'bulldog':
+      dot(-4.6, -4.4, 2.4, c[0]); dot(4.6, -4.4, 2.4, c[0]);   // ears
+      dot(0, 0, 6.6, c[0]);                                     // the noble head
+      dot(-2.3, -1.4, 1.1, '#1b1e24'); dot(2.3, -1.4, 1.1, '#1b1e24');
+      box(-3.2, 1, 6.4, 3.8, '#e8e8e8');                        // jowls
+      dot(0, 1.8, 1.2, '#1b1e24');                              // nose
+      break;
+    case 'banana':
+      x.strokeStyle = c[0] || '#f6d743'; x.lineWidth = R(3.4); x.lineCap = 'round';
+      x.beginPath(); x.arc(P(0), P(3.2), R(5.6), Math.PI * 1.15, Math.PI * 1.85); x.stroke();
+      x.strokeStyle = '#6b4a12'; x.lineWidth = R(1.7);
+      x.beginPath(); x.moveTo(P(-5.2), P(-0.8)); x.lineTo(P(-6.1), P(-1.7)); x.stroke();
+      dot(5.2, -0.8, 0.7, '#3a2a10');
+      break;
+    case 'sparkle':
+      for (let i = 0; i < 6; i++) {
+        const a = i / 6 * Math.PI * 2;
+        dot(Math.cos(a) * 4.4, Math.sin(a) * 4.4, 1.5, c[i % c.length] || '#fff');
+      }
+      dot(0, 0, 2.4, '#fff');
+      break;
+    case 'sun':   dot(0, 0, 4.2, c[0]);
+                  for (let i = 0; i < 12; i++) { const a = i/12*Math.PI*2;
+                    dot(Math.cos(a)*6.2, Math.sin(a)*6.2, 1.0, c[0]); } break;
+    case 'cross': box(-7.4, -1.5, 14.8, 3, c[0]); box(-1.5, -7.4, 3, 14.8, c[0]); break;
+    case 'diamond': x.fillStyle = c[0]; x.beginPath();
+                  x.moveTo(P(0),P(-6.4)); x.lineTo(P(6.4),P(0)); x.lineTo(P(0),P(6.4)); x.lineTo(P(-6.4),P(0));
+                  x.closePath(); x.fill(); break;
+    case 'disc':  dot(0, 0, 4.6, c[0]); break;
+    case 'stars': for (let i = 0; i < 5; i++) { const a = i/5*Math.PI*2 - Math.PI/2;
+                    dot(Math.cos(a)*4.2, Math.sin(a)*4.2, 1.4, c[0]); } break;
+    case 'vsplit': box(-7.4, -7.4, 7.4, 14.8, c[0]); break;
+    case 'hband': box(-7.4, -1.8, 14.8, 3.6, c[0]); break;
+    case 'hbands2': box(-7.4, -4.4, 14.8, 2.8, c[0]); box(-7.4, 1.6, 14.8, 2.8, c[0]); break;
+    case 'hbands3': for (let i = 0; i < 3; i++) box(-7.4, -6 + i*4.2, 14.8, 2.4, c[i % c.length] || c[0]); break;
+    case 'vbands': for (let i = 0; i < 3; i++) box(-6.6 + i*4.4, -7.4, 2.6, 14.8, c[i % c.length] || c[0]); break;
+    default:      dot(0, 0, 4.6, c[0] || T.accent);
+  }
+  x.strokeStyle = 'rgba(0,0,0,.55)'; x.lineWidth = R(0.7);
+  x.beginPath(); x.arc(S/2, S/2, R(7.4), 0, 7); x.stroke();
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.anisotropy = 8;                        // it is seen at an angle from every camera
+  _badgeCache[key] = tex;
+  return tex;
+}
+
 let wasBurning = false;   // so the ball can leave one last mark when it is put out
 
 /** The man kickoff() will give the ball to, picked the way it picks him — so the ball can be
@@ -1875,6 +1949,15 @@ function buildBodies(){
     // What this player is being told to do, right now. The engine names each branch of think()
     // as it is taken; this draws the name. Off by default and rebuilt on demand, because it is
     // a development tool rather than a feature.
+    // THE BADGE, above his head and below the name. Sprite, so it faces every camera without
+    // anybody having to turn it — a badge you can only read from one side is decoration.
+    const badge = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: badgeTexture(p.team), transparent: true, depthWrite: false }));
+    badge.scale.set(15, 15, 1);
+    badge.position.set(0, H_P + 15, 0);
+    badge.renderOrder = 9;                  // under the labels, over the world
+    g.add(badge);
+
     const jobLabel = nameSprite('', '#7ee787', 22, 'rgba(6,10,8,.92)');
     jobLabel.position.set(0, H_P + 40, 0);
     jobLabel.visible = false;
@@ -1883,7 +1966,7 @@ function buildBodies(){
     label.material.depthWrite = false;
     g.add(label);
     scene.add(g);
-    return { g, ring, flames, pip, label, pal, mo, stars, ribbons, jobLabel, jobText:'' };
+    return { g, ring, flames, pip, label, pal, mo, stars, ribbons, jobLabel, jobText:'', badge };
   });
 }
 
