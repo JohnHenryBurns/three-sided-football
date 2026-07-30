@@ -478,6 +478,7 @@ function kickoff(toTeam){
   telPort('kickoff'); ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
   ball.touchT=0; ball.strayer=null; ball.strayF=0; ball.z=0; ball.zv=0;
   cornerTaker=null; cornerGoal=null; restartHold=0; pendingRestart=null; throwPending=null;
+  freeKick=null;
   const fwd=players.find(p=>p.team===toTeam&&p.role==="F"&&!p.out&&!p.sentOff)
     ||players.find(p=>p.team===toTeam&&p.role!=="K"&&!p.out&&!p.sentOff)
     ||players.find(p=>p.team===toTeam&&p.role==="K"&&!p.out);
@@ -626,7 +627,17 @@ function steer(p,tx,ty,maxV){
   p.vy=p.vy*p.k1+(dy/d)*sp*p.k2;
   const v=Math.hypot(p.vx,p.vy); if(v>maxV){p.vx*=maxV/v;p.vy*=maxV/v;}
 }
+/** Has the offending side backed off the required ten yards? */
+function wallClear(fk){
+  for(const q of players){
+    if(q.team!==fk.wall||q.out||q.sentOff) continue;
+    if(Math.hypot(q.x-fk.x, q.y-fk.y)<62) return false;
+  }
+  return true;
+}
+
 function kick(tx,ty,power,isShot){
+  freeKick=null;                         // struck: the free kick is over
   // A CORNER TAKER DOES NOT CHASE HIS OWN CORNER either — same reasoning as the throw. He is
   // forty yards from where it lands and has no business arriving before it.
   if(cornerPending===ball.owner && ball.owner){ ball.owner.noChase=clockSec+1.8; }
@@ -973,6 +984,29 @@ function think(dt){
       //
       // The 0.55 is how eager he is. Lower reads as chaotic, higher as psychic; this is the dial
       // between the two and wants watching rather than solving.
+      // ── A FREE KICK IS BEING SET UP ───────────────────────────────────────
+      // The taker walks to the ball. His side offers itself. THE OFFENDING SIDE RETREATS — ten
+      // yards, which is the only rule in football that exists purely to make a restart possible.
+      if(freeKick && !freeKick.done){
+        if(p===freeKick.taker){
+          const fd9=dist(p,{x:freeKick.x,y:freeKick.y});
+          if(fd9>12){ steer(p, freeKick.x, freeKick.y, 2.4); return; }
+          p.vx=0; p.vy=0;
+          ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.touchT=0.4;
+          // he waits for the wall, but not forever: 2.5 seconds and he takes it regardless,
+          // which is also what a quick free kick is
+          if(clockSec-freeKick.at>2.5 || wallClear(freeKick)){
+            freeKick.done=true;
+            p.noChase=clockSec+1.0;
+          }
+          return;
+        }
+        if(p.team===freeKick.wall){
+          const dx9=p.x-freeKick.x, dy9=p.y-freeKick.y, dl9=Math.hypot(dx9,dy9)||1;
+          if(dl9<64){ steer(p, freeKick.x+dx9/dl9*70, freeKick.y+dy9/dl9*70, 2.4); return; }
+        }
+      }
+
       // A MAN WHO HAS JUST RESTARTED PLAY DOES NOT CHASE IT. He offers himself instead — back
       // onto the pitch, at passing distance, facing the ball. Without this the taker and the ball
       // travel together and the restart looks like a dribble.
@@ -1412,7 +1446,22 @@ function think(dt){
           pendingPenalty={shooter:victim, conceder:o.team};
           addStoppage(4);
         } else {
+          // ── AND IT IS A FREE KICK ─────────────────────────────────────────
+          // Outside the box a foul did nothing but suppress the offender for a second. The
+          // commentary said "Free kick" and no free kick happened — play simply carried on with
+          // the victim still running.
+          //
+          // Now it is a real restart, using the same pin every other one uses: the ball is dead
+          // where the foul happened, the victim stands over it, and the offending side has to
+          // back off before he takes it. A free kick that nobody retreats from is a throw-in in
+          // the middle of the pitch.
           suppress={team:o.team, until:clockSec+1.0};
+          ball.owner=null; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+          freeKick={taker:victim, x:ball.x, y:ball.y, team:victim.team, at:clockSec,
+                    wall:o.team};
+          TEL.freeKicks++;
+          restartHold=Math.max(restartHold, nowMs()+1400);
+          addStoppage(0.6);
         }
         const penTag=inBox?` <b style="color:#ffd166">AND IT'S A PENALTY!</b>`:"";
         if(card==="red"||card==="second"){
@@ -1581,6 +1630,10 @@ function physics(dt){
     if(throwPending===ball.owner){ ball.vx=0; ball.vy=0; return; }   // the ball waits ON THE CHALK
     if(cornerPending===ball.owner){ ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
       if(cornerSpot){ ball.x=cornerSpot.x; ball.y=cornerSpot.y; }    // pinned to the corner itself
+      return; }
+    // A free kick pins the same way. The ball is dead on the spot until he strikes it.
+    if(freeKick && freeKick.taker===ball.owner){
+      ball.x=freeKick.x; ball.y=freeKick.y; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
       return; }
     const o=ball.owner, v=Math.hypot(o.vx,o.vy);
     stats.poss[o.team]+=S;
@@ -1981,6 +2034,7 @@ function __probe(){ return {GK:GKSTAT, scored:scored?scored.slice():[0,0,0], clo
 const gkHolding=()=>ball.owner&&ball.owner===gkHolder&&clockSec<gkHoldUntil;
 let camFocusP=null, camFocusUntil=0, walkOff=null, walkPending=null;
 let cornerPending=null, cornerSpot=null;   // the corner's own pin, see physics()
+let freeKick=null;                         // and the free kick's, see below
 function addStoppage(sec){ stoppageLen=Math.min(Math.min(65,matchLen*0.30), stoppageLen+sec); }
 const YELLOW_OFFENSES=[
   "cynically confiscated {V}'s shirt as a souvenir",
@@ -2134,7 +2188,7 @@ const TEL = {
   poss:[0,0,0], jumps:0, bigJumps:0, maxJump:0, lastX:null, lastY:null,
   claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
-  jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0,
+  jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   unattributed:0, unattMax:0, portFrame:-1,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
@@ -2143,13 +2197,13 @@ function telReset(){
     goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0, poss:[0,0,0], jumps:0,
     claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
-    jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0,
+    jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0, freeKicks:0,
     unattributed:0, unattMax:0, portFrame:-1,
   unattributed:0, unattMax:0, portFrame:-1, deflected:0,
-  jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0,
+  jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   unattributed:0, unattMax:0, portFrame:-1, woodwork:0, bars:0, posts:0, port:{},
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
-  jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0,
+  jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   unattributed:0, unattMax:0, portFrame:-1, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
