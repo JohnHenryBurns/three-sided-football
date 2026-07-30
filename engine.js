@@ -869,6 +869,11 @@ const INSTRUCTIONS = [
     } },
 ];
 
+// I TRIED MAKING THE CASCADE A COMPETITOR with a base score, on the reasoning that a man on it
+// carried no commitment. It made things twice as bad — 30.8 switches per player per second
+// against 11.4 — because every instruction's base outranks any floor you can give it, so the
+// cascade won only when nothing applied, exactly as before, and the extra comparison added
+// nothing but churn. Reverted.
 /** Score every instruction that applies, favour the one he is on, run the winner. */
 function runInstruction(p){
   let best=null, bestScore=-1e9;
@@ -879,7 +884,7 @@ function runInstruction(p){
     if(p.job===I.name) sc+=COMMIT;               // and he sticks with what he is doing
     if(sc>bestScore){ bestScore=sc; best=I; }
   }
-  if(!best) return false;
+  if(!best) return false;                        // the cascade won, fairly
   job(p, best.name);
   return best.act(p)!==false;
 }
@@ -910,6 +915,22 @@ function think(dt){
   }
   players.forEach(p=>{
     if(p.out||p.sentOff||targets[p.team]===null)return;
+
+    // ── AND IT GOES BACK BEHIND THE SIXTEEN ───────────────────────────────────
+    // Moving it to the top was the right experiment and the answer was chaos. Normalised per
+    // player per second — which is the only way these numbers compare — switching went 1.2 -> 11.4
+    // -> 30.8, and thirty a second is one every other frame. That is not indecision, it is noise.
+    //
+    // WHY: the sixteen branches ahead of it were doing stabilising work I had not credited them
+    // with. want-detection carries real hysteresis — sprintMin, deniedLatch — and by jumping the
+    // queue the list was taking players out of a system that already knew how to hold a decision
+    // and putting them in one that did not.
+    //
+    // So the list stays behind them until its instructions have hysteresis of their own. COMMIT
+    // is not hysteresis: it favours the current choice by a constant, where want-detection
+    // enforces a MINIMUM TIME before reconsidering. That difference is the whole thing, and it is
+    // the next piece to build rather than a number to tune.
+
     if(pendingRestart){
       const R=pendingRestart;
 
@@ -1148,22 +1169,14 @@ function think(dt){
       //
       // The 0.55 is how eager he is. Lower reads as chaotic, higher as psychic; this is the dial
       // between the two and wants watching rather than solving.
-      // ── THE INSTRUCTION LIST GETS FIRST REFUSAL ───────────────────────────
-      // Three of fifty-three so far. If any applies to him it decides; if none does he falls
-      // through to the cascade below, unchanged. Both systems run side by side until the list is
-      // long enough to delete the fallback, and ?jobs shows which one is driving each player.
-      if(runInstruction(p)) return;
-      // NOTHING IN THE LIST APPLIED, so the cascade has him — and he should say so. Leaving the
-      // last instruction on him made the overlay lie (a man showing "intercepting" who finished
-      // doing that ten seconds ago) and made the dwell figure meaningless: it counted all the
-      // time he spent on the cascade as time spent on his last instruction. 10.9 seconds average
-      // was that bug, not stickiness.
-      TEL.jobFallback++;
-      job(p, 'cascade');
 
       // ── A FREE KICK IS BEING SET UP ───────────────────────────────────────
       // The taker walks to the ball. His side offers itself. THE OFFENDING SIDE RETREATS — ten
       // yards, which is the only rule in football that exists purely to make a restart possible.
+      if(runInstruction(p)) return;
+      TEL.jobFallback++;
+      job(p, 'cascade');
+
       if(freeKick && !freeKick.done){
         if(p===freeKick.taker){ job(p,'standing over a free kick');
           const fd9=dist(p,{x:freeKick.x,y:freeKick.y});
@@ -2498,8 +2511,16 @@ function buildMatchReport(){
   md+=`\n| | |\n|---|---|\n`;
   md+=`| player-frames on an instruction | ${jTot} |\n`;
   md+=`| player-frames on the old cascade | ${TEL.jobFallback} |\n`;
+  // PER PLAYER PER SECOND. A raw total is not comparable between runs of different lengths or
+  // with different numbers of men on the pitch, and I quoted three of them at each other before
+  // noticing. A human changes their mind twice a second at the very most; anything near a
+  // per-frame rate is noise rather than indecision.
+  const alive=players.filter(q=>!q.out).length||1;
+  const perPS=TEL.jobSwitch/Math.max(1,secs)/alive;
   md+=`| switches | ${TEL.jobSwitch} |\n`;
-  md+=`| **held under 0.25s (popping)** | ${TEL.jobPop} | \n`;
+  md+=`| **switches per player per second** | ${perPS.toFixed(1)} | **should be under ~2** |\n`;
+  md+=`| \u2014 that is one every | ${(60/Math.max(0.01,perPS)).toFixed(1)} frames |\n`;
+  md+=`| held under 0.25s (popping) | ${TEL.jobPop} (${TEL.jobSwitch?Math.round(100*TEL.jobPop/TEL.jobSwitch):0}%) |\n`;
   md+=`| average time on an instruction | ${(TEL.jobHeld/Math.max(1,TEL.jobHeldN)).toFixed(2)}s |\n`;
   md+=`| ball behind a goal line | ${TEL.behindGoal} | ${p90(TEL.behindGoal)} | |\n`;
   md+=`| \u2014 last touched by the DEFENDING side (corner) | ${TEL.behindOwn} | ${p90(TEL.behindOwn)} | ~10 |\n`;
