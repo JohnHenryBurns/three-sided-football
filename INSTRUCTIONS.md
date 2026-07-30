@@ -104,6 +104,22 @@ it. Same split.
 **What is now engine-owned:** who fetches after a goal, who takes the kick-off, where
 everybody stands during both a goal restart and a sending-off.
 
+## The harness has no seed, and nothing here is measurable without one
+
+**This is the blocker.** `Math.random()` is unseeded, so no run is reproducible: the same
+config gives 23 goals once and 15 the next time. Which means:
+
+- a degenerate match **cannot be investigated**, because it cannot be run again
+- a fix **cannot be shown to work**, because before and after are different matches
+- the discard rate moves between 1-in-10 and 5-in-15 with nothing changed
+
+I cleared five pieces of leaked per-match state and the discard rate went **up**. That
+is not evidence the fix was wrong; it is evidence that **fifteen matches of an unseeded
+sim cannot distinguish a real change from noise.**
+
+**Before any tournament: seed the RNG.** A seeded harness turns every one of the open
+questions below from an argument into a measurement.
+
 ## The degenerate match
 
 **Roughly one in ten, and it is not a fixed code path.** Instrumenting it consumes
