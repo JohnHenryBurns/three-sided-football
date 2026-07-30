@@ -410,7 +410,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=37"></script>
+<script src="engine.js?v=38"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1202,21 +1202,29 @@ function buildEmbers(){
 /** Spawn one ember behind a burning player. */
 function emit(p, pal, hard){
   const e = embers[emberNext = (emberNext + 1) % EMBERS];
+  // FIRE RISES AND CLINGS. The first version spawned at hip height and fired straight backwards
+  // — a horizontal jet leaving a body at exactly the height and angle that reads as flatulence,
+  // which is what it looked like and there is no arguing with that.
+  //
+  // Now it wraps the player and goes UP. Spawned in a ring around the whole body rather than a
+  // patch behind it, biased to the rear so it still trails, and the dominant velocity is
+  // vertical. A flame that leaves faster sideways than upwards is an exhaust.
   const hl = Math.hypot(p.hx, p.hy) || 1;
-  const bx = -p.hx/hl, bz = -p.hy/hl;                 // straight out the back
-  const spread = 7;
+  const bx = -p.hx/hl, bz = -p.hy/hl;                 // backwards, for the bias
+  const a = Math.random() * Math.PI * 2;
+  const r = R_P * (0.35 + Math.random() * 0.7);
   e.sp.position.set(
-    p.x + bx * (R_P + 3) + (Math.random()-0.5) * spread,
-    H_P * (0.30 + Math.random() * 0.45),
-    p.y + bz * (R_P + 3) + (Math.random()-0.5) * spread);
-  // Thrown backwards off the runner and drifting up: the horizontal part is what makes it a
-  // TRAIL rather than a bonfire, and the upward part is what makes it fire rather than dust.
-  e.vx = bx * (0.9 + Math.random()*1.5) + (Math.random()-0.5)*0.5;
-  e.vz = bz * (0.9 + Math.random()*1.5) + (Math.random()-0.5)*0.5;
-  e.vy = 0.55 + Math.random() * 0.95;
+    p.x + Math.cos(a) * r + bx * 5,
+    H_P * (0.10 + Math.random() * 0.85),              // the whole body, feet to head
+    p.y + Math.sin(a) * r + bz * 5);
+  // Up hard, out gently. The small backward component is what still makes it a trail on a
+  // sprinter and nothing at all on someone standing still.
+  e.vx = bx * (0.35 + Math.random()*0.5) + (Math.random()-0.5)*0.35;
+  e.vz = bz * (0.35 + Math.random()*0.5) + (Math.random()-0.5)*0.35;
+  e.vy = 1.5 + Math.random() * 1.5;
   e.life = 0;
-  e.max = 0.42 + Math.random() * 0.5;
-  e.size = (hard ? 13 : 9) + Math.random() * 7;
+  e.max = 0.34 + Math.random() * 0.36;   // brief: a flame, not a cloud
+  e.size = (hard ? 9 : 6.5) + Math.random() * 4.5;
   e.pal = pal;
   e.sp.visible = true;
 }
@@ -1234,7 +1242,7 @@ function stepEmbers(dt){
     e.sp.position.x += e.vx;
     e.sp.position.z += e.vz;
     e.sp.position.y += e.vy;
-    e.vy *= 0.965;                      // rises, slows, hangs
+    e.vy *= 0.94;                       // rises, slows, hangs
     e.vx *= 0.93; e.vz *= 0.93;
     // through the palette, hot to cool
     const n = e.pal.length, f = t * (n - 1);
@@ -1242,7 +1250,7 @@ function stepEmbers(dt){
     _c1.set(e.pal[i]); _c2.set(e.pal[i + 1]);
     e.sp.material.color.copy(_c1).lerp(_c2, f - i);
     // grows as it cools and fades from the tail, which is how smoke leaves a flame
-    const s = e.size * (0.55 + t * 1.5);
+    const s = e.size * (0.6 + t * 0.9);
     e.sp.scale.set(s, s, 1);
     e.sp.material.opacity = t < 0.18 ? t / 0.18 : Math.pow(1 - (t - 0.18)/0.82, 1.6);
   }
