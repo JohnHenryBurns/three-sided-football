@@ -111,6 +111,19 @@ button.on{border-color:var(--hot);color:var(--hot)}
    sub, because it is a sentence rather than a stat. */
 #celeCard .flav{font-size:.94rem;line-height:1.32;margin-top:.5rem;
   padding-top:.5rem;border-top:1px solid var(--panel-edge)}
+/* Full time. Tabular figures so the columns line up, and the champion's row lifted — you should
+   be able to find who won without reading the headline again. */
+.ftwrap{margin-top:.7rem;padding-top:.6rem;border-top:1px solid var(--panel-edge)}
+table.ft{width:100%;border-collapse:collapse;font-size:.84rem;
+  font-variant-numeric:tabular-nums}
+table.ft th{font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-dim);font-weight:600;padding:.16rem .3rem;text-align:right}
+table.ft th:first-child{text-align:left}
+table.ft td{padding:.2rem .3rem;text-align:right;border-top:1px solid rgba(255,255,255,.06)}
+table.ft td:first-child{text-align:left;white-space:nowrap}
+table.ft tr.won td{color:var(--cele,#ffd166);font-weight:600}
+table.ft .sw{display:inline-block;width:.55rem;height:.55rem;border-radius:2px;
+  margin-right:.3rem;vertical-align:baseline}
 @media (max-width:560px){ #celeCard .big{font-size:1.5rem} }
 
 /* Confetti. Twenty-eight strips is enough to read as celebration and few enough
@@ -353,7 +366,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=25"></script>
+<script src="engine.js?v=26"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -455,7 +468,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) shutU
 // ── THE SCENE ───────────────────────────────────────────────────────────────
 const cv = document.getElementById('gl');
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x0d1410, 900, 2600);
+scene.fog = new THREE.Fog(0x0d1410, 1400, 3400);   // pushed back for the bigger ground
 const cam = new THREE.PerspectiveCamera(40, 1, 1, 4000);
 const ren = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
 ren.setPixelRatio(Math.min(2, devicePixelRatio || 1));
@@ -832,7 +845,7 @@ function buildGround(){
   {
     const out = new THREE.Shape();
     V.forEach((p, i) => {
-      const x = CX + (p.x - CX) * 1.34, y = CY + (p.y - CY) * 1.34;
+      const x = CX + (p.x - CX) * 1.72, y = CY + (p.y - CY) * 1.72;
       i ? out.lineTo(x, y) : out.moveTo(x, y);
     });
     out.closePath();
@@ -886,24 +899,54 @@ function buildGround(){
   // ── THE STANDS ───────────────────────────────────────────────────────────
   // Three tiers of raked seating on each edge, rising away from the pitch. Boxes rather than a
   // ramp because a rake made of steps reads as seating at a glance and a smooth slope does not.
-  const TIERS = 3;
+  // BIGGER, AND CLOSED AT THE CORNERS. Five tiers rather than three, rising to nearly three
+  // times the old height — the stands were a low wall you looked over rather than a bowl you sat
+  // in, and a ground's scale is most of what makes it feel like a place.
+  //
+  // The gaps mattered more. Stands built per-edge leave a triangular hole at every hex corner,
+  // and from a low camera you saw straight through the ground into black. Real stadiums close
+  // those; so does this now, with a wedge at each of the six vertices.
+  const TIERS = 5;
+  const tierAt = t => ({ depth: 30 + t * 34, h: 26 + t * 34 });
   EDGES.forEach(e => {
     for (let t = 0; t < TIERS; t++) {
-      const depth = 34 + t * 30, h = 16 + t * 22;
+      const { depth, h } = tierAt(t);
       const tier = new THREE.Mesh(
-        new THREE.BoxGeometry(e.len * 1.12, h, 28),
+        new THREE.BoxGeometry(e.len * 1.30, h, 32),
         new THREE.MeshLambertMaterial({ color: t % 2 ? 0x232c33 : 0x2b353d }));
       tier.position.set(e.mx - e.nx * (depth + 58), h/2, e.my - e.ny * (depth + 58));
       tier.rotation.y = -Math.atan2(e.uy, e.ux);
       scene.add(tier);
-      // a crowd: a band of speckled colour along the front of each tier, which at this distance
-      // is what a crowd IS. Individual figures would cost thousands of meshes to say the same.
       const crowd = new THREE.Mesh(
-        new THREE.PlaneGeometry(e.len * 1.12, 15),
+        new THREE.PlaneGeometry(e.len * 1.30, 22),
         new THREE.MeshBasicMaterial({ map: crowdTexture(), side: THREE.DoubleSide }));
-      crowd.position.set(e.mx - e.nx * (depth + 44), h - 4, e.my - e.ny * (depth + 44));
-      crowd.rotation.order = 'YXZ';        // see the boards above
+      crowd.position.set(e.mx - e.nx * (depth + 42), h - 7, e.my - e.ny * (depth + 42));
+      crowd.rotation.order = 'YXZ';
       crowd.rotation.y = -Math.atan2(e.uy, e.ux);
+      crowd.rotation.x = -0.34;
+      scene.add(crowd);
+    }
+  });
+
+  // The corners. A vertex of the hex is where two edges meet at 120 degrees, so the hole between
+  // their stands is a wedge — filled with a column of the same tiers, turned to bisect the two.
+  V.forEach(v => {
+    const bx = v.x - CX, by = v.y - CY, bl = Math.hypot(bx, by);
+    const ox = bx/bl, oy = by/bl;                 // outward, along the corner's own bisector
+    for (let t = 0; t < TIERS; t++) {
+      const { depth, h } = tierAt(t);
+      const wedge = new THREE.Mesh(
+        new THREE.BoxGeometry(96, h, 32),
+        new THREE.MeshLambertMaterial({ color: t % 2 ? 0x1f272d : 0x27313a }));
+      wedge.position.set(v.x + ox * (depth + 30), h/2, v.y + oy * (depth + 30));
+      wedge.rotation.y = -Math.atan2(oy, ox) + Math.PI/2;
+      scene.add(wedge);
+      const crowd = new THREE.Mesh(
+        new THREE.PlaneGeometry(96, 22),
+        new THREE.MeshBasicMaterial({ map: crowdTexture(), side: THREE.DoubleSide }));
+      crowd.position.set(v.x + ox * (depth + 14), h - 7, v.y + oy * (depth + 14));
+      crowd.rotation.order = 'YXZ';
+      crowd.rotation.y = -Math.atan2(oy, ox) + Math.PI/2;
       crowd.rotation.x = -0.34;
       scene.add(crowd);
     }
@@ -1362,10 +1405,33 @@ ENGINE_HOOKS.showCelebration = (colour, big, who, sub, fire) =>
 ENGINE_HOOKS.showNotice = (colour, big, who, sub, dur) =>
   showCard(colour || '#ffd166', big || '', who || '', sub || '', dur || 2200, false);
 
+// ── FULL TIME ───────────────────────────────────────────────────────────────
+// The same table the flat page's report builds, from the same numbers: points, goals, saves,
+// tackles, possession. Read straight off `stats` rather than counted here — a scoreboard that
+// keeps its own tally is a scoreboard that will one day disagree with the match.
+//
+// Sorted by the engine's own rankCmp, so the order on this card is the order that decided the
+// title rather than a second opinion about it.
 ENGINE_HOOKS.crownChampion = (t, how) => {
   const T = TEAMS[t];
-  showCard(T.color, '\u{1F3C6} CHAMPIONS', T.name,
-           (how || 'Champions of the hex') + ' \u00b7 ' + score.join(' \u2013 '), Infinity, true);
+  const tot = stats.poss.reduce((a, b) => a + b, 0) || 1;
+  const row = m =>
+    '<tr' + (m === t ? ' class="won"' : '') + '>' +
+    '<td><span class="sw" style="background:' + TEAMS[m].color + '"></span>' + TEAMS[m].short + '</td>' +
+    '<td><b>' + (score[m] > 0 ? '+' : '') + score[m] + '</b></td>' +
+    '<td>' + scored[m] + '</td>' +
+    '<td>' + stats.saves[m] + '</td>' +
+    '<td>' + stats.tackles[m] + '</td>' +
+    '<td>' + Math.round(100 * stats.poss[m] / tot) + '%</td></tr>';
+  const table =
+    '<table class="ft"><thead><tr><th>Team</th><th>Pts</th><th>G</th><th>Sv</th><th>Tk</th>' +
+    '<th>Poss</th></tr></thead><tbody>' +
+    [0, 1, 2].sort(rankCmp).map(row).join('') + '</tbody></table>';
+  showCard(T.color, '\u{1F3C6} CHAMPIONS', T.name, how || 'Champions of the hex', Infinity, true);
+  const d = document.createElement('div');
+  d.className = 'ftwrap';
+  d.innerHTML = table;
+  celeCard.appendChild(d);
   say('\u{1F3C6} ' + T.name + ' are champions of the hex', true);
 };
 
