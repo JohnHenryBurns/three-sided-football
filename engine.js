@@ -333,6 +333,45 @@ const GOAL_EDGE=[0,2,4], GOAL_HALF=0.21, GOAL_H=54;
 // A player's height, which the renderer draws and the rules test against. Same reasoning as
 // GOAL_H: a number both sides need is a number neither side should own privately.
 const H_HEAD=34;
+
+// ── THE JUMP ────────────────────────────────────────────────────────────────
+// A real arc: up, over, down. A player's effective height is wherever his head actually is, so
+// nothing has to ask who jumped first or who is taller — whoever is higher when the ball arrives
+// wins it, and that is timing rather than priority.
+//
+// GRAVITY 0.22 AGAINST THE BALL'S 0.14, deliberately. A body comes down faster than a football,
+// and that difference is the whole contest: the ball hangs 1.1 seconds and you hang 0.33, so
+// going early is a real risk and going late is a miss.
+const JUMP_G   = 0.22;
+const JUMP_ZV  = 2.2;    // free:    apex 11, head reaches 45
+const JUMP_BZV = 3.0;    // boosted: apex 20, head reaches 54 — which is the crossbar
+const JUMP_CD  = 0.55;   // seconds on the floor after landing, so missing costs you
+
+/** Send a player up. Costs burst if he pays for the extra, and refuses if he is still recovering. */
+function tryJump(p, boost){
+  if(p.jz>0 || clockSec<(p.jumpCd||0) || p.out || p.sentOff) return false;
+  const pay = boost && p.burst>0.6;
+  if(pay) p.burst-=0.6;
+  p.jzv = pay ? JUMP_BZV : JUMP_ZV;
+  p.jz  = 0.01;
+  TEL.jumps++; if(pay) TEL.jumpsBoosted++;
+  return true;
+}
+
+/** Age every jump. Called once a frame from physics, before anybody reaches for the ball. */
+function stepJumps(S){
+  players.forEach(p=>{
+    if(p.jz<=0) return;
+    p.jz += p.jzv*S;
+    p.jzv -= JUMP_G*S;
+    if(p.jz<=0){                                   // landed
+      p.jz=0; p.jzv=0;
+      p.jumpCd = clockSec + JUMP_CD;
+      if(!p._gotIt) TEL.jumpsMissed++;              // went up, came down, no ball
+      p._gotIt = false;
+    }
+  });
+}
 const goalCenter=t=>{const e=EDGES[GOAL_EDGE[t]];return {x:e.mx,y:e.my};};
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
@@ -809,6 +848,16 @@ function think(dt){
           if(!nearer) want="emerg";                             // last man: close him down NOW
         }
       }
+      // GOING FOR A HEADER. He commits on what he can see — a ball above head height, coming
+      // down, and close — and he does NOT know where it will land, who else is going, or whether
+      // he has timed it. Two defenders can both jump and both miss, which is the drama and comes
+      // free from each of them deciding alone.
+      //
+      // The 0.55 is how eager he is. Lower reads as chaotic, higher as psychic; this is the dial
+      // between the two and wants watching rather than solving.
+      if(!ball.owner && ball.z>H_HEAD*0.8 && ball.zv<0 && bd7<34 && p.jz<=0 && Math.random()<0.55){
+        tryJump(p, ball.z>H_HEAD*1.3 && p.burst>0.7);
+      }
       if(!want&&!ball.owner&&ball.z>34&&Math.hypot(ball.vx,ball.vy)>3.5&&bd7<260){
         let mateNearer=false;                                   // true punts only — one chaser per team
         players.forEach(q=>{ if(q.team===p.team&&q!==p&&!q.out&&!q.sentOff&&dist(q,ball)<bd7) mateNearer=true; });
@@ -1279,6 +1328,7 @@ function think(dt){
 // ---------- Physics ----------
 function physics(dt){
   const S=dt*60;
+  stepJumps(S);          // heads move before anybody reaches with one
   players.forEach(p=>{
     if(p.out)return;
     const pv=Math.hypot(p.vx,p.vy);
@@ -1464,9 +1514,13 @@ function physics(dt){
       // are the same act of commitment aimed at different parts of the goal. He is not diving
       // AND jumping: whichever the ball asks for.
       const airborne = p.role==="K" && ball.z>H_HEAD && ball.z<GOAL_H+14;
-      const reach=p.role==="K"
+      // WHATEVER HIS HEAD HAS REACHED. A jumping player's reach grows with his own height, which
+      // is the whole design: no table of bonuses, just where he is.
+      const lift=p.jz||0;
+      const reach=(p.role==="K"
         ? ((p.diveUntil&&clockSec<p.diveUntil)||airborne ? 23 : 17)
-        : 13;
+        : 13) + lift*0.8;
+      if(lift>0 && d<reach) p._gotIt=true;          // so a landing knows it was not wasted
       if(d<reach&&d<bd){bd=d;best=p;}});
     if(best){
       const wasShot=ball.isShot, spd=Math.hypot(ball.vx,ball.vy), kicker=ball.lastKicker;
@@ -1858,14 +1912,18 @@ const TEL = {
   poss:[0,0,0], jumps:0, bigJumps:0, maxJump:0, lastX:null, lastY:null,
   claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
+  jumps:0, jumpsBoosted:0, jumpsMissed:0,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
 function telReset(){
   Object.assign(TEL, { frames:0, loose:0, deadFrames:0, aerial:0, throwIns:0, corners:0,
     goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0, poss:[0,0,0], jumps:0,
     claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
-    zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0, woodwork:0, bars:0, posts:0, port:{},
-  zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0, behindGoal:0, behindOwn:0, behindOther:0,
+    zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
+    jumps:0, jumpsBoosted:0, jumpsMissed:0,
+  jumps:0, jumpsBoosted:0, jumpsMissed:0, woodwork:0, bars:0, posts:0, port:{},
+  zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
+  jumps:0, jumpsBoosted:0, jumpsMissed:0, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
 }
@@ -1948,6 +2006,9 @@ function buildMatchReport(){
   md+=`| \u2014 above the crossbar (50-100) | ${Math.round(100*TEL.zHigh/f)}% | | |\n`;
   md+=`| \u2014 over 100 | ${Math.round(100*TEL.zSky/f)}% | | rare |\n`;
   md+=`| highest the ball got | ${Math.round(TEL.zMax)} | | crossbar is ${GOAL_H} |\n`;
+  md+=`| **jumps** | ${TEL.jumps} | ${p90(TEL.jumps)} | |\n`;
+  md+=`| \u2014 boosted (burst spent for height) | ${TEL.jumpsBoosted} | | |\n`;
+  md+=`| \u2014 came down with nothing | ${TEL.jumpsMissed} | | some, or it is too easy |\n`;
   md+=`| **woodwork** | ${TEL.woodwork} | ${p90(TEL.woodwork)} | ~2 |\n`;
   md+=`| \u2014 crossbar | ${TEL.bars} | | |\n`;
   md+=`| \u2014 post | ${TEL.posts} | | |\n`;
