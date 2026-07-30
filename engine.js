@@ -172,6 +172,13 @@ function resetMatch(){
 
 "use strict";
 // ---------- Teams & rosters (2026 WC squads) ----------
+// `ours` marks the three invented sides — the ones made of family rather than nations. It is a
+// real flag rather than "the last three in the library", because position is not a fact about a
+// team and reordering the list should not change how anybody is named.
+//
+// What it means in practice: a nation's player is known by his SURNAME (Messi, Kane), and one of
+// ours is known by her GIVEN name (Jupiter, Solana, Maximus). A label showing "Burns" three times
+// tells you nothing at all.
 const TEAM_LIBRARY=[
   {name:"Spain", short:"ESP", color:"#e63946", accent:"#f7c948",
    roster:["Unai Simón","Laporte","Cucurella","Rodri","Lamine Yamal"],
@@ -233,17 +240,17 @@ const TEAM_LIBRARY=[
    third:"#d22d3d", motif:{t:"stars",c:["#f0f0f0","#d22d3d"]},
    nudge:{direct:.65}, id:{atk:"Balanced",def:"Gegenpress",agg:"Firm"}, star:"Pulisic",
    blurb:"Grit, lungs, and a nation that just learned the rules."},
-  {name:"91 Bulldogs", short:"91B", color:"#1e5bc6", accent:"#f7c948",
+  {name:"91 Bulldogs", ours:true, short:"91B", color:"#1e5bc6", accent:"#f7c948",
    roster:["Bo Niboaur","Lincoln Gingrich","Cole Storm","Easton George","Jupiter Burns"],
    third:"#8a8d93", motif:{t:"bulldog",c:["#9aa0a8"]},
    id:{atk:"Swashbuckle",def:"Gegenpress",agg:"Clean"}, star:"Jupiter Burns",
    blurb:"Whiskey Hill Road's finest. Young legs, zero fear, show-and-tell on Monday."},
-  {name:"Banana Wizards", short:"BAN", color:"#f5c518", accent:"#141414",
+  {name:"Banana Wizards", ours:true, short:"BAN", color:"#f5c518", accent:"#141414",
    roster:["Amos Baldwin","Smith Ellars","Ezra Baldwin","Owen Gingrich","Maximus Burns"],
    third:"#a67c00", motif:{t:"banana",c:["#141414"]},
    id:{atk:"TikiTaka",def:"Balanced",agg:"Clean"}, star:"Maximus Burns",
    blurb:"Two sets of twins and a wizard up front. The commentary box boggles; the banana abides."},
-  {name:"Sparkle Princesses", short:"SPK", color:"#f26bb5", accent:"#ffd166",
+  {name:"Sparkle Princesses", ours:true, short:"SPK", color:"#f26bb5", accent:"#ffd166",
    roster:["Margo Tillo","Marg Niboaur","Reese Waite","Sloan Ellars","Solana Burns"],
    third:"#b58ae0", motif:{t:"sparkle",c:["#6b2d8f"]},
    id:{atk:"Swashbuckle",def:"Balanced",agg:"Nasty"}, star:"Solana Burns", she:true,

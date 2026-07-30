@@ -453,7 +453,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=53"></script>
+<script src="engine.js?v=54"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1633,10 +1633,18 @@ function buildBodies(){
       back.position.y = H_P * 0.66;
       g.add(back);
     }
-    // WHITE WITH A BLACK EDGE, at the same size as an on-pitch note. It was the team's accent
-    // at half scale, which meant the one name on screen was smaller and less legible than the
-    // annotations around it — and on some sides it was a dark colour on dark grass.
-    const label = nameSprite(p.name.split(' ').slice(-1)[0], '#ffffff', 30, 'rgba(6,10,8,.92)');
+    // WHITE WITH A BLACK EDGE, at the same size as an on-pitch note.
+    //
+    // AND A NATION'S PLAYER GETS HIS SURNAME WHILE ONE OF OURS GETS HER WHOLE NAME. That is how
+    // each is actually known: nobody says "Lionel", and nobody calls Jupiter "Burns". On the
+    // Banana Wizards the surname is worse than useless — two of the five are Baldwins, so the
+    // label named neither of them.
+    //
+    // The flat page shows the full name for everybody and gets away with it because its labels
+    // sit in a bigger frame; here the surname is the default and `ours` is the exception.
+    const T2 = TEAMS[p.team];
+    const shown = T2.ours ? p.name : p.name.split(' ').slice(-1)[0];
+    const label = nameSprite(shown, '#ffffff', 30, 'rgba(6,10,8,.92)');
     label.position.set(0, H_P + 26, 0);
     g.add(label);
     scene.add(g);
