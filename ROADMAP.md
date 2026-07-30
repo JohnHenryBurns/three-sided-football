@@ -35,7 +35,57 @@ The geometry is already there and exact: posts are cylinders at a known radius,
 the bar is a known height, and the ball has a real z. This is a physics test against
 shapes that exist, not new shapes.
 
-## 3. Jumping should count
+## 3. Jumping should count — FOR DISCUSSION
+
+**Where it stands:** the keeper's jump is real, the outfielders' is not.
+
+- keeper — engine (PR #104). A high ball he's under gives him reach **23** instead of
+  17, the same as a dive. `z 34–68`, which is exactly the band a shot passes through
+  to reach a bar at 54.
+- everyone else — renderer only. `_jump` appears **zero times** in `engine.js`, and an
+  outfielder's reach is a flat **13** whether he's on the ground or at full stretch.
+
+So a player visibly leaps for a cross and it changes nothing about who gets it.
+
+### What it could become
+
+**Jumps target headers.** Rather than jumping *because* the ball is near, a player
+decides to *go for it* — which makes the jump a choice with a cost, and a failed one
+leaves him on the ground while the ball runs on. That's the difference between an
+animation and a duel.
+
+**Boost gives extra oomph.** The burst mechanic already exists, is already spent on
+sprints and dives, and is already visible as fire. Spending it on a leap costs the
+same 0.6 a dive costs and buys height the same way — which would make an aerial duel
+a resource decision rather than a dice roll.
+
+### The questions worth settling first
+
+**How much reach should a jump buy?** A keeper gets 23 diving. If a jumping outfielder
+gets the same, the keeper's positional advantage disappears; if he gets much less,
+jumping isn't worth the commitment. There's a number here that makes contested crosses
+interesting and it isn't obvious what it is.
+
+**Who wins a two-player aerial duel?** Today the nearest player takes the ball. If both
+jump, is it whoever jumped earlier, whoever spent more burst, whoever is taller — or is
+a coin-flip actually the right answer for a game with cylinder people?
+
+**Does the AI need to decide to jump before the ball arrives?** Real defenders commit to
+a cross early. A player who leaps at the last instant always wins, which would make the
+whole thing an accuracy check rather than a reading-the-game one.
+
+**And should a failed jump hurt?** Landing takes time. A player who goes up and misses
+should be out of the play for a moment, or there's no reason not to jump at everything.
+
+### What's already true and useful
+
+The band is derived, not chosen: `H_HEAD` is 34, "too high to control" is 34, and the
+header window sits above it. Punts now reach 76 and the bar is at 54. Those numbers
+already agree — whatever gets built here has real geometry to sit on.
+
+## 3b. Original note
+
+
 
 Jumping is currently **render-only** (PR #99). A player leaves the ground for a ball
 between 21 and 64, capped at 16, which puts his head at 50.
