@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Three-Sided Football · 3D</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<!--
+  A SECOND FRONT END, NOT A SECOND GAME.
+
+  This page owns nothing about football. It loads engine.js, hands it the seventeen things it asks
+  for, and draws whatever comes back. The rules, the AI, the commentary text and the ball's
+  physics are all over there, and a fix to any of them lands here for free.
+
+  The first attempt at 3D was a copy of index.html with its renderer swapped — 93 per cent
+  duplicate, and every rule change would have needed making twice. That is what engine.js exists
+  to prevent, and this is what it buys: a few hundred lines instead of three and a half thousand.
+
+  It is deliberately NOT a port of the 2D page's chrome. Coach menus, team pickers, sponsor
+  boards, the walk of shame — none of that is here. A camera you can move is worth more in three
+  dimensions than a settings panel, and the flat page still exists for everything else.
+-->
+
+<style>
+:root{
+  --bg:#0d1410; --panel:#152019; --line:#233529; --ink:#e8efe9; --dim:#8fa596;
+  --sans:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);
+  display:flex;flex-direction:column}
+
+header{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .75rem;
+  padding:.5rem .9rem;border-bottom:1px solid var(--line)}
+h1{font-size:1.1rem;font-weight:600;letter-spacing:-.01em;color:#ff8a4c}
+.sub{font-family:var(--mono);font-size:.72rem;color:var(--dim);letter-spacing:.04em}
+.spacer{flex:1}
+
+/* The score. Three teams, so no home-and-away layout to borrow — they sit in a row and the one
+   in the lead is marked, which is the only ranking that fits on a phone. */
+.scores{display:flex;gap:.35rem}
+.sc{display:flex;align-items:center;gap:.32rem;padding:.2rem .5rem;border-radius:7px;
+  background:var(--panel);border:1px solid var(--line);font-size:.82rem;white-space:nowrap}
+.sc .sw{width:.6rem;height:.6rem;border-radius:2px;flex:0 0 auto}
+.sc b{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.sc.lead{border-color:#ff8a4c}
+.sc.out{opacity:.42}
+#clock{font-family:var(--mono);font-size:.9rem;font-variant-numeric:tabular-nums;color:var(--dim)}
+
+#stage{position:relative;flex:1;min-height:0}
+#gl{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+
+/* Commentary, over the pitch rather than beside it — the pitch is the interesting part and a
+   side panel would take a third of a phone to show four lines of text. */
+#feed{position:absolute;left:0;right:0;bottom:0;padding:.5rem .8rem 0;
+  pointer-events:none;display:flex;flex-direction:column;justify-content:flex-end;
+  max-height:42%;overflow:hidden;
+  background:linear-gradient(transparent,rgba(6,10,8,.82))}
+#feed p{font-size:.86rem;line-height:1.35;margin-top:.2rem;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+#feed p:not(:last-child){opacity:.5}
+#feed .goal{color:#ffd166;font-weight:700;font-size:1rem}
+
+#bar{display:flex;gap:.4rem;align-items:center;padding:.45rem .9rem;
+  border-top:1px solid var(--line)}
+button{font-family:inherit;font-size:.82rem;color:var(--ink);background:var(--panel);
+  border:1px solid var(--line);border-radius:7px;padding:.34rem .66rem;cursor:pointer}
+button:hover{border-color:var(--ink)}
+button.on{border-color:#ff8a4c;color:#ff8a4c}
+.hint{font-family:var(--mono);font-size:.68rem;color:var(--dim);margin-left:auto}
+@media (max-width:560px){ .hint{display:none} .sub{display:none} }
+</style>
+
+<header>
+  <h1>Three-Sided Football</h1>
+  <span class="sub">3D · experimental</span>
+  <span class="spacer"></span>
+  <div class="scores" id="scores"></div>
+  <span id="clock">0:00</span>
+</header>
+
+<div id="stage">
+  <canvas id="gl"></canvas>
+  <div id="feed"></div>
+</div>
+
+<div id="bar">
+  <button id="play">Pause</button>
+  <button id="reset">Kick off</button>
+  <button id="follow" class="on">Follow ball</button>
+  <span class="hint">drag to orbit · pinch or wheel to zoom</span>
+</div>
+
+<script src="engine.js"></script>
+<script>
+// ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
+// Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
+// pickers, sponsor boards — and those stay no-ops rather than being invented. A hook that does
+// nothing is a decision; a hook that is missing is a crash.
+const feedEl = document.getElementById('feed');
+function say(html, big){
+  const p = document.createElement('p');
+  p.innerHTML = String(html || '');
+  if (big) p.className = 'goal';
+  feedEl.appendChild(p);
+  while (feedEl.children.length > 5) feedEl.removeChild(feedEl.firstChild);
+}
+Object.assign(ENGINE_HOOKS, {
+  say,
+  renderScore,
+  showNotice: t => say(t),
+  crownChampion: t => say('🏆 ' + (TEAMS[t] ? TEAMS[t].name : '') + ' are champions of the hex', true),
+  eliminateTeam: t => say((TEAMS[t] ? TEAMS[t].name : '') + ' are out'),
+  showCelebration: () => {},        // the goal line in the feed is the celebration here
+  // spawnNote, spawnPing, flash, flamePop, openCoachMenu, closeCoachMenu, showSetup,
+  // renderTeamSlots, resetGoals, drawBoards and clearMarks stay no-ops: this page has no
+  // sponsor boards, no coach menu and no SVG marks to clear.
+});
+
+// ── THE SCENE ───────────────────────────────────────────────────────────────
+const cv = document.getElementById('gl');
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x0d1410, 900, 2600);
+const cam = new THREE.PerspectiveCamera(40, 1, 1, 4000);
+const ren = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+ren.setPixelRatio(Math.min(2, devicePixelRatio || 1));
+ren.setClearColor(0x0d1410, 1);
+
+// A raised three-quarter orbit. Three-sided football has no attacking direction, so there is no
+// end to sit behind — every camera convention borrowed from two-goal football picks a side, and
+// picking a side here is picking a team. 30 degrees is low enough that players have height and
+// the ball's arc reads against the grass rather than only against its shadow.
+let az = -Math.PI/2, el = 0.52, rad = 1250, follow = true;
+const look = new THREE.Vector3(CX, 0, CY);
+function placeCam(){
+  cam.position.set(look.x + rad*Math.cos(el)*Math.cos(az),
+                   look.y + rad*Math.sin(el),
+                   look.z + rad*Math.cos(el)*Math.sin(az));
+  cam.lookAt(look);
+}
+function resize(){
+  const r = cv.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  ren.setSize(r.width, r.height, false);
+  cam.aspect = r.width / r.height;
+  cam.updateProjectionMatrix();
+  placeCam();
+}
+new ResizeObserver(resize).observe(cv);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.66));
+const sun = new THREE.DirectionalLight(0xffffff, 0.75);
+sun.position.set(400, 1000, -300);
+scene.add(sun);
+
+// ── THE PITCH ───────────────────────────────────────────────────────────────
+// Built from the engine's own V and EDGES, so the mesh cannot drift from the shape the ball
+// bounces off. That is the whole argument for a shared engine, in one object.
+{
+  const shape = new THREE.Shape();
+  V.forEach((p, i) => i ? shape.lineTo(p.x, p.y) : shape.moveTo(p.x, p.y));
+  shape.closePath();
+  const grass = new THREE.Mesh(new THREE.ShapeGeometry(shape),
+    new THREE.MeshLambertMaterial({ color: 0x1e5a2c }));
+  grass.rotation.x = -Math.PI/2;
+  scene.add(grass);
+
+  const lineMat = new THREE.LineBasicMaterial({ color: 0xdfe8df, transparent: true, opacity: 0.5 });
+  scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(
+    V.concat([V[0]]).map(p => new THREE.Vector3(p.x, 0.7, p.y))), lineMat));
+  const circ = [];
+  for (let k = 0; k <= 64; k++) {
+    const a = k/64 * Math.PI*2;
+    circ.push(new THREE.Vector3(CX + 92*Math.cos(a), 0.7, CY + 92*Math.sin(a)));
+  }
+  scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(circ), lineMat));
+
+  // three goals, on the three goal edges the engine nominates
+  const postMat = new THREE.MeshLambertMaterial({ color: 0xf2f4f2 });
+  GOAL_EDGE.forEach((gi, t) => {
+    const e = EDGES[gi], half = e.len * GOAL_HALF, HGT = 54;
+    for (const s of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, HGT, 8), postMat);
+      post.position.set(e.mx + e.ux*half*s, HGT/2, e.my + e.uy*half*s);
+      scene.add(post);
+    }
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, half*2, 8), postMat);
+    bar.position.set(e.mx, HGT, e.my);
+    bar.rotation.z = Math.PI/2;
+    bar.rotation.y = -Math.atan2(e.uy, e.ux);
+    scene.add(bar);
+    // the net, in the defending team's colour — which is what tells you WHOSE goal it is, and
+    // three-sided football needs that far more than two-goal football does
+    const net = new THREE.Mesh(new THREE.PlaneGeometry(half*2, HGT),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(TEAMS[t].color),
+        transparent: true, opacity: 0.13, side: THREE.DoubleSide }));
+    net.position.set(e.mx - e.nx*10, HGT/2, e.my - e.ny*10);
+    net.rotation.y = -Math.atan2(e.uy, e.ux);
+    scene.add(net);
+  });
+}
+
+// ── THE PLAYERS ─────────────────────────────────────────────────────────────
+const R_P = 11, H_P = 34;
+let bodies = [];
+function buildBodies(){
+  bodies.forEach(b => scene.remove(b.g));
+  bodies = players.map(p => {
+    const g = new THREE.Group();
+    const col = new THREE.Color(TEAMS[p.team].color);
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(R_P, R_P*0.9, H_P, 14),
+      new THREE.MeshLambertMaterial({ color: col }));
+    body.position.y = H_P/2; g.add(body);
+    if (p.role === 'K') {                                   // the keeper wears the accent
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(R_P*1.07, R_P*1.07, 7, 14),
+        new THREE.MeshLambertMaterial({ color: new THREE.Color(TEAMS[p.team].accent) }));
+      band.position.y = H_P - 6; g.add(band);
+    }
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(5, 12, 8),
+      new THREE.MeshLambertMaterial({ color: new THREE.Color(TEAMS[p.team].accent) }));
+    nose.rotation.z = -Math.PI/2;
+    nose.position.set(R_P + 4, H_P*0.62, 0); g.add(nose);
+    // stamina, as a ring on the grass. The 2D page shortened an arc; from a raised camera an arc
+    // is unreadable, so the value lives in colour, opacity and radius instead.
+    const ring = new THREE.Mesh(new THREE.RingGeometry(R_P + 3, R_P + 7, 24),
+      new THREE.MeshBasicMaterial({ color: 0x7ec97e, side: THREE.DoubleSide, transparent: true }));
+    ring.rotation.x = -Math.PI/2; ring.position.y = 0.9; g.add(ring);
+    // the burst, spent
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(6, 22, 6),
+      new THREE.MeshBasicMaterial({ color: 0xff8a1e, transparent: true, opacity: 0 }));
+    flame.rotation.z = Math.PI/2;
+    flame.position.set(-R_P - 9, H_P*0.42, 0); g.add(flame);
+    const pip = new THREE.Mesh(new THREE.BoxGeometry(7, 10, 1.5),
+      new THREE.MeshBasicMaterial({ color: 0xffd166 }));
+    pip.position.set(0, H_P + 13, 0); pip.visible = false; g.add(pip);
+    scene.add(g);
+    return { g, ring, flame, pip };
+  });
+}
+
+const ballGL = new THREE.Mesh(new THREE.SphereGeometry(9, 18, 12),
+  new THREE.MeshLambertMaterial({ color: 0xffffff }));
+scene.add(ballGL);
+const shadowGL = new THREE.Mesh(new THREE.CircleGeometry(9, 18),
+  new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.34 }));
+shadowGL.rotation.x = -Math.PI/2; shadowGL.position.y = 0.5;
+scene.add(shadowGL);
+
+function drawGL(){
+  if (bodies.length !== players.length) buildBodies();
+  players.forEach((p, i) => {
+    const b = bodies[i]; if (!b) return;
+    if (p.out && !p.benched) { b.g.visible = false; return; }
+    b.g.visible = true;
+    b.g.position.set(p.x, 0, p.y);
+    b.g.rotation.y = -Math.atan2(p.hy, p.hx);
+    const s = Math.max(0, Math.min(1, p.stamina));
+    b.ring.material.color.setRGB(1 - s*0.55, 0.32 + s*0.46, 0.3 + s*0.18);
+    b.ring.material.opacity = 0.22 + s*0.6;
+    b.ring.scale.setScalar(0.7 + s*0.3);
+    const burning = p.sprint != null && p.burst < 0.98;
+    b.flame.visible = burning;
+    b.flame.material.opacity = burning ? 0.5 + 0.35*Math.sin(performance.now()/55) : 0;
+    b.pip.visible = !!(p.redCard || p.yellows > 0);
+    if (b.pip.visible) b.pip.material.color.set(p.redCard ? 0xe11d2e : 0xffd166);
+  });
+  const z = Math.max(0, ball.z || 0);
+  ballGL.position.set(ball.x, 9 + z, ball.y);
+  shadowGL.position.set(ball.x, 0.5, ball.y);
+  const k = 1 / (1 + z*0.012);
+  shadowGL.scale.setScalar(k);
+  shadowGL.material.opacity = 0.34 * k;
+  // the camera drifts toward the ball rather than snapping to it: a camera that tracks exactly
+  // makes the ball look still and the world look shaky, which is the opposite of what is happening
+  if (follow) {
+    look.x += (ball.x - look.x) * 0.035;
+    look.z += (ball.y - look.z) * 0.035;
+    placeCam();
+  }
+  ren.render(scene, cam);
+}
+
+// ── THE CHROME ──────────────────────────────────────────────────────────────
+const scoresEl = document.getElementById('scores');
+function renderScore(){
+  const best = Math.max(...score);
+  scoresEl.innerHTML = TEAMS.map((T, t) =>
+    '<span class="sc' + (score[t] === best && best > 0 ? ' lead' : '') + (out[t] ? ' out' : '') + '">' +
+    '<span class="sw" style="background:' + T.color + '"></span>' + T.short +
+    ' <b>' + score[t] + '</b></span>').join('');
+}
+function fmtClock(s){
+  const m = Math.floor(s/60);
+  return m + ':' + String(Math.floor(s%60)).padStart(2, '0');
+}
+
+// ── THE LOOP ────────────────────────────────────────────────────────────────
+// Deliberately simpler than the 2D page's. That one carries celebration timing, the walk of
+// shame, penalties and coach menus; this one plays football and restarts after a goal. The match
+// flow it omits is flow the engine does not require — which is worth knowing, because it means
+// that flow is presentation and could move here later rather than being duplicated.
+let last = performance.now(), running = true, resumeAt = 0;
+function loop(now){
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, (now - last)/1000);
+  last = now;
+  if (running && now >= resumeAt) {
+    if (pendingKickoff !== null && typeof pendingKickoff !== 'undefined') {
+      kickoff(pendingKickoff); pendingKickoff = null; resumeAt = now + 900;
+    } else {
+      // The 2D page's step, verbatim: dt * speed * 0.75. `speedMult` is a PLAYER speed
+      // multiplier and taking it for a clock rate was a guess from its name — it wants a player
+      // and returns how fast that one runs. The clock and the simulation take the same step, so
+      // the match clock and the football agree about how long a second is.
+      const step = dt * speed * 0.75;
+      clockSec += step;
+      retargetTimer += step;
+      if (retargetTimer > 6) { retargetTimer = 0; computeTargets(); }
+      think(step); physics(step); colorCommentary();
+      if (clockSec >= matchLen + stoppageLen) resolveFullTime();
+    }
+  }
+  document.getElementById('clock').textContent = fmtClock(clockSec);
+  drawGL();
+}
+
+document.getElementById('play').addEventListener('click', e => {
+  running = !running;
+  e.target.textContent = running ? 'Pause' : 'Play';
+});
+document.getElementById('reset').addEventListener('click', () => {
+  feedEl.innerHTML = '';
+  resetMatch(); kickoff(0); renderScore(); buildBodies();
+});
+document.getElementById('follow').addEventListener('click', e => {
+  follow = !follow;
+  e.target.classList.toggle('on', follow);
+  if (!follow) { look.set(CX, 0, CY); placeCam(); }
+});
+
+// drag to orbit, wheel or pinch to pull back
+let drag = null, pinch = 0;
+cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); });
+cv.addEventListener('pointerup',   () => { drag = null; });
+cv.addEventListener('pointermove', e => {
+  if (!drag) return;
+  az += (e.clientX - drag.x) * 0.006;
+  el = Math.max(0.16, Math.min(1.42, el + (e.clientY - drag.y) * 0.005));
+  drag = { x: e.clientX, y: e.clientY };
+  placeCam();
+});
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  rad = Math.max(420, Math.min(2400, rad + e.deltaY * 0.9));
+  placeCam();
+}, { passive: false });
+cv.addEventListener('touchmove', e => {
+  if (e.touches.length !== 2) return;
+  e.preventDefault();
+  const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                       e.touches[0].clientY - e.touches[1].clientY);
+  if (pinch) { rad = Math.max(420, Math.min(2400, rad * (pinch/d))); placeCam(); }
+  pinch = d;
+}, { passive: false });
+cv.addEventListener('touchend', () => { pinch = 0; });
+
+applyTeamSelection();
+resetMatch();
+kickoff(0);
+renderScore();
+buildBodies();
+resize();
+requestAnimationFrame(loop);
+</script>
