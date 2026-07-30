@@ -194,13 +194,13 @@ function resetMatch(){
   ENGINE_HOOKS.drawBoards();   // fresh sponsors every match, drawn by whoever is drawing
   suppress=null; pendingPenalty=null; penaltyShooter=null; penaltyGoalTeam=null;
   stoppageAnnounced=false;
-  stoppageLen=Math.min(55,matchLen*0.2)*(0.85+Math.random()*0.3);
+  stoppageLen=Math.min(55,matchLen*0.2)*(0.85+RNG()*0.3);
   notes.forEach(n=>n.e.remove()); notes=[];
   ENGINE_HOOKS.clearMarks();   // the page throws away its own pings and notes
   boostUntil=[0,0,0]; lastPossessTeam=null; lastPossessComment=-99; lastFatigueComment=0; lastColorComment=0;
   for(let t=0;t<3;t++) formation(t).forEach((f,i)=>players.push(
     {team:t,role:f.role,name:TEAMS[t].roster[i],x:f.x,y:f.y,vx:0,vy:0,stamina:1,burst:1,sprint:null,deniedLatch:false,sprintMin:0,sprintCd:0,
-     k1:0.64+Math.random()*0.10, k2:0.82+Math.random()*0.16,  // unique spring constants
+     k1:0.64+RNG()*0.10, k2:0.82+RNG()*0.16,  // unique spring constants
      hx:0,hy:0, goals:0,tackles:0,saves:0, yellows:0,sentOff:false,
      // jz MUST START AT ZERO. Left undefined, `p.jz > 0` and `p.jz <= 0` are BOTH false — so
      // tryJump's guard never blocked and the caller's gate never opened. The jump was counted
@@ -209,7 +209,7 @@ function resetMatch(){
   ball={x:CX,y:CY,vx:0,vy:0,owner:null,lastTouch:null,lastKicker:null,isShot:false,noClaim:null,noClaimF:0,
     touchT:0,strayer:null,strayF:0,z:0,zv:0};
   computeTargets();
-  const first=Math.floor(Math.random()*3);
+  const first=Math.floor(RNG()*3);
   kickoff(first);
   sayLogged(`We're underway at ${matchStadium}! ${tm(0)}, ${tm(1)} and ${tm(2)} — one ball, two enemies each. ${tm(first)} get us started.`,true);
   ENGINE_HOOKS.renderScore();
@@ -451,7 +451,7 @@ function formation(t){
   ];
 }
 function tm(t){return `<span class="tm" style="color:${TEAMS[t].color}">${TEAMS[t].name}</span>`;}
-function pick(a){return a[Math.floor(Math.random()*a.length)];}
+function pick(a){return a[Math.floor(RNG()*a.length)];}
 
 // The centre circle, which nothing used to respect. In two-goal football only the side kicking
 // off may stand inside it; the same rule here just has two sets of opponents to hold back rather
@@ -570,7 +570,7 @@ const FLAME3=["#ff3d00","#ff8c00","#ffd166"];
 const RAINBOW=["#ff5aa7","#ff9f1c","#ffe14d","#5ad66f","#5ab9ff","#b58ae0"];
 function firePal(t9){ return TEAMS[t9]&&TEAMS[t9].she?RAINBOW:FLAME3; }
 function superSay(p2){
-  if(Math.random()>0.6)return;
+  if(RNG()>0.6)return;
   sayLogged(pick([
     `${p2.name} loads one with John Wick focus — absolute commitment!`,
     `FLAME SHOT! ${p2.name} puts the whole tank behind it!`,
@@ -583,7 +583,7 @@ function superSay(p2){
 function gkDiveCheck(defT,flame){
   const gk=players.find(q2=>q2.team===defT&&q2.role==="K"&&!q2.out&&!q2.sentOff);
   if(!gk)return;
-  if(gk.burst>0.6&&(flame||Math.random()<0.12)){
+  if(gk.burst>0.6&&(flame||RNG()<0.12)){
     gk.burst-=0.6; gk.diveUntil=clockSec+1.2;
     GKSTAT.diveBurns=(GKSTAT.diveBurns||0)+1;
     ENGINE_HOOKS.flamePop(gk);
@@ -593,7 +593,7 @@ function gkDiveCheck(defT,flame){
         `FIRE MEETS FIRE — both tanks emptied in one heartbeat!`,
         `${gk.name} answers the flame with a flame of ${PRN(gk).his} own!`,
         `A duel! Burning shot, burning dive — somebody's fire dies here!`]),true,"lowvoice");
-    } else if(Math.random()<0.4){
+    } else if(RNG()<0.4){
       sayLogged(pick([
         `${gk.name} EXPLODES across the goal!`,
         `A flame dive — ${gk.name} pays for it from the tank!`]),true,"lowvoice");
@@ -725,6 +725,27 @@ function kick(tx,ty,power,isShot){
 // that cannot see the world it is deciding about is not much of an instruction. The same question,
 // asked where anything can ask it.
 function holdingPlay(){ return nowMs() < restartHold; }
+
+// ── A SEEDED RANDOM, SO A MATCH CAN BE RUN TWICE ────────────────────────────
+// RNG() is unseeded, so no run is reproducible: the same configuration gave 23 goals and
+// then 15. Which means a degenerate match cannot be investigated because it cannot be repeated,
+// and no calibration result can be distinguished from noise.
+//
+// mulberry32 — small, fast, and good enough for a football match. RNG() replaces every
+// RNG() in the engine, and seeding is opt-in: unseeded it delegates to Math.random and
+// the browser behaves exactly as before, because a real match SHOULD be unpredictable.
+//
+// The harness seeds it. That is the whole point: reproducible where it matters, random where it
+// does not.
+let __rngState = null;
+function seedRNG(n){ __rngState = (n>>>0) || 1; }
+function RNG(){
+  if(__rngState===null) return Math.random();
+  __rngState |= 0; __rngState = (__rngState + 0x6D2B79F5) | 0;
+  let t = Math.imul(__rngState ^ (__rngState >>> 15), 1 | __rngState);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
 
 // ── IS HE STILL PLAYING? ────────────────────────────────────────────────────
 // `out` and `sentOff` are not the same thing and the difference has a window in it: a man given a
@@ -1500,7 +1521,7 @@ const INSTRUCTIONS = [
     score:p => 415,
     act:p => {
       if(!p.sprint&&p.burst>0.25){
-        p.sprint={why:'sweep',blaze:Math.random()<0.12};
+        p.sprint={why:'sweep',blaze:RNG()<0.12};
         GKSTAT.b_sweep=(GKSTAT.b_sweep||0)+1;
         if(p.sprint.blaze) blazeCall(p);
       }
@@ -1923,7 +1944,7 @@ function think(dt){
         p.hx=bx8/bl8; p.hy=by8/bl8;                 // watching where it went
         return;
       }
-      if(!ball.owner && ball.z>H_HEAD*0.8 && ball.zv<0 && bd7<34 && p.jz<=0 && Math.random()<0.55){ job(p,'going for the header');
+      if(!ball.owner && ball.z>H_HEAD*0.8 && ball.zv<0 && bd7<34 && p.jz<=0 && RNG()<0.55){ job(p,'going for the header');
         tryJump(p, ball.z>H_HEAD*1.3 && p.burst>0.7);
       }
       if(!want&&!ball.owner&&ball.z>34&&Math.hypot(ball.vx,ball.vy)>3.5&&bd7<260){ job(p,'running onto the landing');
@@ -1933,7 +1954,7 @@ function think(dt){
       }
       if(want&&!p.sprint&&clockSec>p.sprintCd){
         if(p.burst>0.65){
-          p.sprint={why:want,blaze:Math.random()<0.12}; p.sprintMin=clockSec+0.5;   // commit — and 1-in-8 lights the FULL fire
+          p.sprint={why:want,blaze:RNG()<0.12}; p.sprintMin=clockSec+0.5;   // commit — and 1-in-8 lights the FULL fire
           if(p.sprint.blaze) blazeCall(p);
           GKSTAT.bursts=(GKSTAT.bursts||0)+1; GKSTAT["b_"+want]=(GKSTAT["b_"+want]||0)+1;
           p.deniedLatch=false;
@@ -1967,7 +1988,7 @@ function think(dt){
           players.forEach(q=>{ if(q.team!==p.team&&!q.out&&!q.sentOff&&q.role!=="K")
             oppNear=Math.min(oppNear,dist(q,ball)); });
           if(dist(p,ball)<oppNear-18||oppNear>120){
-            if(!p.sprint&&p.burst>0.25){ p.sprint={why:"sweep",blaze:Math.random()<0.12}; GKSTAT.b_sweep=(GKSTAT.b_sweep||0)+1;
+            if(!p.sprint&&p.burst>0.25){ p.sprint={why:"sweep",blaze:RNG()<0.12}; GKSTAT.b_sweep=(GKSTAT.b_sweep||0)+1;
               if(p.sprint.blaze) blazeCall(p); }
             GKSTAT.sweepSec+=dt; steer(p,ball.x,ball.y,1.5); return; }
         }
@@ -2039,7 +2060,7 @@ function think(dt){
         let open3=1e9;                              // the loft sails OVER the lane — score the landing, not the path
         players.forEach(o2=>{ if(o2.team===owner.team||o2.out||o2.sentOff||o2.role==="K")return;
           open3=Math.min(open3,dist(o2,m)); });
-        const sc=Math.min(open3,110)*0.9-d*0.25+Math.random()*20;
+        const sc=Math.min(open3,110)*0.9-d*0.25+RNG()*20;
         if(sc>bs){bs=sc;pickM=m;}
       });
       if(!pickM&&mates.length) pickM=mates.sort((a,b)=>dist(a,owner)-dist(b,owner))[0];
@@ -2089,7 +2110,7 @@ function think(dt){
         const al=Math.hypot(away.x,away.y)||1;
         // straight out from his own goal, with a bit of lateral so three clearances in a row do
         // not land on the same blade of grass
-        const spread=(Math.random()-0.5)*0.5;
+        const spread=(RNG()-0.5)*0.5;
         const cx2=owner.x+(away.x/al)*300 + (-away.y/al)*300*spread;
         const cy2=owner.y+(away.y/al)*300 + ( away.x/al)*300*spread;
         kick(cx2, cy2, 11.5, false);
@@ -2112,17 +2133,17 @@ function think(dt){
         if(q.team===cornerGoal&&dg<110)GKSTAT.cornerDef=(GKSTAT.cornerDef||0)+1;
         if(q.team!==owner.team&&q.team!==cornerGoal&&allied(q.team,owner.team)&&dg<170)GKSTAT.cornerAllyIn=(GKSTAT.cornerAllyIn||0)+1; });
       const nearSign=Math.sign((owner.x-g.x)*e2.ux+(owner.y-g.y)*e2.uy)||1;
-      const farPost=Math.random()<0.45;
+      const farPost=RNG()<0.45;
       const off2=farPost
-        ? -nearSign*e2.len*GOAL_HALF*(0.5+Math.random()*0.25)   // whipped to the FAR stick
-        : (Math.random()*2-1)*e2.len*GOAL_HALF*0.7;
+        ? -nearSign*e2.len*GOAL_HALF*(0.5+RNG()*0.25)   // whipped to the FAR stick
+        : (RNG()*2-1)*e2.len*GOAL_HALF*0.7;
       const txc=g.x+e2.ux*off2+e2.nx*44, tyc=g.y+e2.uy*off2+e2.ny*44;
       kick(txc,tyc,6.8,false);
       // A corner should clear the defenders it is aimed over: 3.6 peaks at 46, above every
       // head on the pitch, where 2.8 peaked at 28 and arrived at chest height.
       ball.zv=3.6;                       // it swings in high, whatever the distance
       if(farPost){ GKSTAT.farPost=(GKSTAT.farPost||0)+1;
-        if(Math.random()<0.6) sayLogged(pick([
+        if(RNG()<0.6) sayLogged(pick([
           `Coach Eric's voice carries clear across the pitch: FAR POST! FAR POST!`,
           `You can hear Coach Eric from here — "FAR POST!" — and the ball obeys.`,
           `Far post, just like Coach Eric drills it at 91 Bulldogs practice.`]),true,"lowvoice");
@@ -2133,7 +2154,7 @@ function think(dt){
     if(penaltyShooter===owner){
       penaltyShooter=null;
       const e=EDGES[GOAL_EDGE[penaltyGoalTeam]], g=goalCenter(penaltyGoalTeam);
-      const off2=(Math.random()*2-1)*e.len*GOAL_HALF*1.0;
+      const off2=(RNG()*2-1)*e.len*GOAL_HALF*1.0;
       stats.shots[owner.team]++;
       kick(g.x+e.ux*off2, g.y+e.uy*off2, 10.8, true);
       gkDiveCheck(penaltyGoalTeam,false);
@@ -2179,7 +2200,7 @@ function think(dt){
       const crowded=wolves>=2;
       // CROWDED MEANS GO LONG. Two or more opponents inside 95 and the short roll is off the
       // table: he finds the deepest man he can, and if there is nobody deep he clears it.
-      const wantPunt=far&&((fd>255&&(nd2>140||Math.random()<0.11)) || (crowded&&fd>150));
+      const wantPunt=far&&((fd>255&&(nd2>140||RNG()<0.11)) || (crowded&&fd>150));
       if(wantPunt){
         const dTo=dist(owner,far);
         const pw=Math.min(13.5, 5.5+dTo*0.014);   // drop it TO the man, not past him
@@ -2199,7 +2220,7 @@ function think(dt){
       } else if(near&&nd2<180){
         GKSTAT.rolls++; if(fwdRoll)GKSTAT.rollsFwd++;
         kick(near.x+near.vx*8, near.y+near.vy*8, Math.min(6.5,nd2*0.04+3.5), false);
-        if(Math.random()<0.35) sayLogged(pick([
+        if(RNG()<0.35) sayLogged(pick([
           `${owner.name} rolls it out calmly. Playing from the back.`,
           `${owner.name}, unhurried, feeds it short. Composure.`]),false);
       } else kick(CX,CY,9);
@@ -2210,7 +2231,7 @@ function think(dt){
       let blockers=0;
       players.forEach(q=>{ if(q.team!==owner.team&&!q.out&&!q.sentOff&&q.role!=="K"&&dist(q,owner)<180
         &&((q.x-owner.x)*(tg7.x-owner.x)+(q.y-owner.y)*(tg7.y-owner.y))>0) blockers++; });
-      if(blockers===0&&dist(owner,tg7)<520){ owner.sprint={why:"break",blaze:Math.random()<0.12}; GKSTAT.b_break=(GKSTAT.b_break||0)+1;
+      if(blockers===0&&dist(owner,tg7)<520){ owner.sprint={why:"break",blaze:RNG()<0.12}; GKSTAT.b_break=(GKSTAT.b_break||0)+1;
         if(owner.sprint.blaze) blazeCall(owner); }
     }
     if(owner.sprint&&owner.sprint.why==="break"&&ball.owner!==owner&&clockSec>owner.sprintMin){ owner.sprint=null; owner.sprintCd=clockSec+0.8; }
@@ -2223,7 +2244,7 @@ function think(dt){
       let wd=1e9,we=null;
       for(const e2 of EDGES){const d2=(owner.x-e2.p1.x)*e2.nx+(owner.y-e2.p1.y)*e2.ny;if(d2<wd){wd=d2;we=e2;}}
       const mouth=we&&we.goal&&Math.abs((owner.x-we.mx)*we.ux+(owner.y-we.my)*we.uy)<we.len*GOAL_HALF*1.3;
-      if(wd<34&&pressure<58&&!mouth&&Math.random()<0.22*dt*60){
+      if(wd<34&&pressure<58&&!mouth&&RNG()<0.22*dt*60){
         let best=null,bs=1e9;
         players.forEach(m=>{if(m.team===owner.team&&m!==owner&&!m.out&&!m.sentOff&&m.role!=="K"){
           const dc=dist(m,{x:CX,y:CY}); if(dc<bs){bs=dc;best=m;}}});
@@ -2245,16 +2266,16 @@ function think(dt){
             if(tt>0.12&&tt<0.85){const lx=owner.x+(tgt.x-owner.x)*tt,ly=owner.y+(tgt.y-owner.y)*tt;
               if(o.role!=="K"&&Math.hypot(o.x-lx,o.y-ly)<26)laneClear=false;}
           });
-          if(laneClear&&Math.random()<0.016*(0.4+1.2*RK)*dt*60){
+          if(laneClear&&RNG()<0.016*(0.4+1.2*RK)*dt*60){
             const scL=(0.6+0.8*RK)*(0.75+dGoal*0.0035);   // range punishes accuracy
-            const offL=(Math.random()*2-1)*hw2*scL;
+            const offL=(RNG()*2-1)*hw2*scL;
             ENGINE_HOOKS.spawnNote(owner.x,owner.y-24,"from distance!",TEAMS[owner.team].accent);
-            if(Math.random()<0.4) sayLogged(pick([
+            if(RNG()<0.4) sayLogged(pick([
               `${owner.name} sees the lane and LETS FLY from range!`,
               `${owner.name} has a go from distance — dip and swerve!`,
               `No hesitation — ${owner.name} rips one from ${Math.round(dGoal/8)} yards!`,
               `${owner.name} says why not, and unloads!`]),true);
-            const SSL=owner.burst>0.7&&Math.random()<0.5;
+            const SSL=owner.burst>0.7&&RNG()<0.5;
             if(SSL){ owner.burst-=0.6; GKSTAT.superShots=(GKSTAT.superShots||0)+1; }
             kick(tgt.x+e.ux*offL*(SSL?0.75:1), tgt.y+e.uy*offL*(SSL?0.75:1), SSL?13.2:11.2, true);
             if(SSL){ ball.flameShot=true; ball.flameShe=!!(TEAMS[owner.team]&&TEAMS[owner.team].she); superSay(owner); }
@@ -2263,19 +2284,19 @@ function think(dt){
           }
         }
       }
-      if(dGoal<(150+50*RK) && Math.random()<0.025*(0.5+1.0*RK)*dt*60){
+      if(dGoal<(150+50*RK) && RNG()<0.025*(0.5+1.0*RK)*dt*60){
         let sc=0.6+0.8*RK;                                   // patience = precision
         if(T(targets[owner.team]).bunker>0.5) sc*=1.35;      // packed boxes deflect
-        const off=(Math.random()*2-1)*e.len*GOAL_HALF*sc;
-        const SS=owner.burst>0.7&&Math.random()<0.4;
+        const off=(RNG()*2-1)*e.len*GOAL_HALF*sc;
+        const SS=owner.burst>0.7&&RNG()<0.4;
         if(SS){ owner.burst-=0.6; GKSTAT.superShots=(GKSTAT.superShots||0)+1; }
-        kick(tgt.x+e.ux*off*(SS?0.75:1), tgt.y+e.uy*off*(SS?0.75:1), (9.5+Math.random()*1.5)*(SS?1.3:1), true);
+        kick(tgt.x+e.ux*off*(SS?0.75:1), tgt.y+e.uy*off*(SS?0.75:1), (9.5+RNG()*1.5)*(SS?1.3:1), true);
         if(SS){ ball.flameShot=true; ball.flameShe=!!(TEAMS[owner.team]&&TEAMS[owner.team].she); superSay(owner); }
         gkDiveCheck(targets[owner.team], SS);
         return;
       }
     }
-    if(pressure<48 && Math.random()<(0.05+0.10*T(owner.team).tempo)*dt*60){
+    if(pressure<48 && RNG()<(0.05+0.10*T(owner.team).tempo)*dt*60){
       let best=null,bs=-1e9;
       const matesLeft=FL[owner.team]-(owner.role!=="K"?1:0);
       let allyPen=null;   // computed once: identical for every allied candidate
@@ -2303,7 +2324,7 @@ function think(dt){
           if(t>0.1&&t<0.9){const lx=owner.x+(m.x-owner.x)*t, ly=owner.y+(m.y-owner.y)*t;
             if(Math.hypot(o.x-lx,o.y-ly)<(30-12*T(owner.team).risk)+5*(T(o.team).press-0.5)*2) laneOk=false;}
         });
-        let s=gain*(0.6+0.8*T(owner.team).direct)+(laneOk?0:-500)+Math.random()*30;
+        let s=gain*(0.6+0.8*T(owner.team).direct)+(laneOk?0:-500)+RNG()*30;
         if(allyOk&&allyPen!==null) s-=allyPen;   // scoreboard-priced treason, computed once above
         if(s>bs){bs=s;best=m;}
       });
@@ -2321,11 +2342,11 @@ function think(dt){
       const inBox=dist(owner,goalCenter(o.team))<110;
       const fc=(holdActive?0:0.0022)*foulMult*AGG_PRESETS[teamAGG[o.team]].f
         *(0.4+1.2*T(o.team).press*(coalAlly[o.team]?0.7:1))*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
-      if(Math.random()<fc*dt*60){
+      if(RNG()<fc*dt*60){
         const victim=owner;
         ENGINE_HOOKS.spawnNote(victim.x,victim.y-24,"FOUL!","#ffd166");
         addStoppage(1.2);
-        const r=Math.random();
+        const r=RNG();
         const redP=0.035*(0.5+0.5*foulMult);   // stricter referees reach for red
         const yelP=0.20*(0.6+0.4*foulMult);
         let card=null;
@@ -2444,7 +2465,7 @@ function think(dt){
             `${victim.name} is brought down in the box!`,
             `${o.name} ${off} — the referee points to the spot.`, 4600);
           sayLogged(`<b style="color:${TEAMS[victim.team].color}">PENALTY to ${tm(victim.team)}!</b>`,true);
-        } else if(Math.random()<0.5){
+        } else if(RNG()<0.5){
           sayLogged(pick([
             `Free kick — ${o.name} ${off}.`,
             `The whistle goes. ${o.name} ${off}.`,
@@ -2461,7 +2482,7 @@ function think(dt){
       tc*=(1.35-0.5*owner.stamina);          // gassed carriers are easier to rob
       if(momentumOn&&clockSec<boostUntil[o.team]) tc*=1.3;
       if(owner.role==="K"&&gkHolding())return;
-      if(dist(o,owner)<26 && Math.random()<tc*dt*60){   // MUST stay > body radius 23
+      if(dist(o,owner)<26 && RNG()<tc*dt*60){   // MUST stay > body radius 23
         const victim=owner;
         ball.owner=o; ball.lastTouch=o.team; ball.lastKicker=o; ball.isShot=false;
         if(o.role==="K"){
@@ -2472,7 +2493,7 @@ function think(dt){
           ENGINE_HOOKS.spawnNote(o.x,o.y-20,"tackle!",TEAMS[o.team].color,TEAMS[o.team].accent);
         }
         stam(o,+0.10); stam(victim,-0.12);
-        if(o.role!=="K" && Math.random()<0.28) sayLogged(pick([
+        if(o.role!=="K" && RNG()<0.28) sayLogged(pick([
           `${o.name} muscles ${victim.name} off the ball!`,
           `Crunching challenge — ${o.name} strips it from ${victim.name}.`,
           `${o.name} picks ${victim.name}'s pocket!`,
@@ -2654,11 +2675,11 @@ function physics(dt){
         if(near.length>=2&&teams.size>=2){
           // header duel — highest man wins
           let win=null,wt=0;
-          near.forEach(p=>{const w=(1/(dist(p,ball)+8))*(0.6+0.8*Math.random()); if(w>wt){wt=w;win=p;}});
+          near.forEach(p=>{const w=(1/(dist(p,ball)+8))*(0.6+0.8*RNG()); if(w>wt){wt=w;win=p;}});
           const tgt2=goalCenter(targets[win.team]??win.team);
           ball.lastTouch=win.team; ball.lastKicker=win;
           ENGINE_HOOKS.spawnNote(ball.x,ball.y-24,"header!",TEAMS[win.team].color,TEAMS[win.team].accent);
-          if(Math.random()<0.4) sayLogged(pick([
+          if(RNG()<0.4) sayLogged(pick([
             `${win.name} rises highest!`,
             `Up goes ${win.name} — wins it in the air!`,
             `${win.name} climbs above the crowd!`,
@@ -2670,7 +2691,7 @@ function physics(dt){
             `${win.name} rises like something off the mesa — no earthly explanation for that hang time.`]));
           if(targets[win.team]!==null&&dist(ball,tgt2)<160&&win.role!=="K"){
             const e2=EDGES[GOAL_EDGE[targets[win.team]]];
-            const off2=(Math.random()*2-1)*e2.len*GOAL_HALF*1.35;
+            const off2=(RNG()*2-1)*e2.len*GOAL_HALF*1.35;
             const ddx=tgt2.x+e2.ux*off2-ball.x, ddy=tgt2.y+e2.uy*off2-ball.y, dl2=Math.hypot(ddx,ddy)||1;
             ball.vx=ddx/dl2*8.5; ball.vy=ddy/dl2*8.5; ball.isShot=true;
             stats.shots[win.team]++;
@@ -2715,7 +2736,7 @@ function physics(dt){
       const wasShot=ball.isShot, spd=Math.hypot(ball.vx,ball.vy), kicker=ball.lastKicker;
       const strayer=(ball.strayF>0)?ball.strayer:null;
       if(ball.allyPass&&ball.lastKicker&&best.team!==ball.lastKicker.team&&allied(ball.lastKicker.team,best.team)
-        &&Math.random()<0.5){
+        &&RNG()<0.5){
         sayLogged(pick([
           `The alliance is real — ${ball.lastKicker.name} slips it to ${best.name}!`,
           `Enemy of my enemy: ${ball.lastKicker.name} finds ${best.name} across battle lines!`,
@@ -2760,7 +2781,7 @@ function physics(dt){
           }
           kick(kx9, ky9, 7.6, false);
           ball.clearT=clockSec+0.4;                            // the escape guarantee: no claims, no headers, just OUT
-          if(Math.random()<0.18) sayLogged(pick([
+          if(RNG()<0.18) sayLogged(pick([
             `${best.name} wants none of that scramble — hoofed clear!`,
             `No dwelling from ${best.name}. First time, out of the furnace.`,
             `${best.name} clears ${PRN(best).his} lines. Tidy is for open field.`]),false);
@@ -2782,7 +2803,7 @@ function physics(dt){
         // a save: keeper glory, shooter deflation
         stats.saves[best.team]++; best.saves++;
         stam(best,+0.12); stam(kicker,-0.05);
-        if(spd>8.5 && Math.random()<0.4){
+        if(spd>8.5 && RNG()<0.4){
           // parried! pushed wide, not held
           const e2=EDGES[GOAL_EDGE[best.team]];
           const hw3=e2.len*GOAL_HALF;
@@ -2795,7 +2816,7 @@ function physics(dt){
           ball.vx=dx3/dl3*spd*0.68; ball.vy=dy3/dl3*spd*0.68;
           ball.noClaim=best; ball.noClaimF=10; ball.isShot=false;
           ENGINE_HOOKS.spawnNote(best.x,best.y-22,"tipped wide!","#ffd166");
-          if(Math.random()<0.6) sayLogged(pick([
+          if(RNG()<0.6) sayLogged(pick([
             `${best.name} can only parry it away!`,
             `Strong hands from ${best.name} — pushed wide, still live!`,
             `${best.name} tips it around... danger not cleared!`,
@@ -2806,7 +2827,7 @@ function physics(dt){
           return;
         }
         ENGINE_HOOKS.spawnNote(best.x,best.y-20,"SAVE!","#ffd166");
-        if(Math.random()<0.5) sayLogged(pick([
+        if(RNG()<0.5) sayLogged(pick([
           `<span class="goal">SAVE!</span> ${best.name} denies ${kicker.name}!`,
           `What a stop by ${best.name} — ${kicker.name} can't believe it!`,
           `${kicker.name} lets fly... ${best.name} gets a strong hand to it!`,
@@ -2820,7 +2841,7 @@ function physics(dt){
         if(best.team===kicker.team){
           // completed pass: small lift for both
           stam(kicker,+0.05); stam(best,+0.03);
-          if(Math.random()<0.22) ENGINE_HOOKS.spawnNote(best.x,best.y-20,"pass ✓",TEAMS[best.team].color,TEAMS[best.team].accent);
+          if(RNG()<0.22) ENGINE_HOOKS.spawnNote(best.x,best.y-20,"pass ✓",TEAMS[best.team].color,TEAMS[best.team].accent);
         } else if(!wasShot){
           // interception: passer punished, thief energized
           stam(kicker,-0.08); stam(best,+0.06);
@@ -3070,7 +3091,7 @@ function goalScored(concederTeam){
     sayLogged(`Golden goal! ${tm(survivors[0])} against ${tm(survivors[1])} — next goal takes the title!`,true);
     computeTargets();
     ENGINE_HOOKS.flash(concederTeam);
-    pendingKickoff=survivors[Math.floor(Math.random()*2)];
+    pendingKickoff=survivors[Math.floor(RNG()*2)];
     return;
   }
 
@@ -3363,7 +3384,7 @@ function resolveFullTime(){
       `Golden concession — CONCEDE AND YOU'RE OUT`,"");
   }
   computeTargets();
-  kickoff(leaders[Math.floor(Math.random()*leaders.length)]);
+  kickoff(leaders[Math.floor(RNG()*leaders.length)]);
 }
 
 // ---------- Color commentary ----------
@@ -3426,7 +3447,7 @@ function keeperLine(k){
 function colorCommentary(){
   try{ ambientChatter(); }catch(e5){}
   // style & matchup color (~every 45s)
-  if(clockSec-lastStyleAt>45&&Math.random()<0.4){
+  if(clockSec-lastStyleAt>45&&RNG()<0.4){
     const ls=styleLines();
     if(ls.length){ lastStyleAt=clockSec; sayLogged(pick(ls)); }
   }
@@ -3606,8 +3627,8 @@ function ambientChatter(){
       `Fine margins from here to the whistle.`);
   if(phase==="overtime") cand.push(`Sudden death on a hexagon. Cruelty as entertainment.`,
     `Nobody breathes in overtime. Not even the announcer.`);
-  if(matchBoards.length&&Math.random()<0.25)
-    cand.push(`Tonight's match brought to you in part by ${matchBoards[Math.floor(Math.random()*matchBoards.length)].toLowerCase()}.`);
+  if(matchBoards.length&&RNG()<0.25)
+    cand.push(`Tonight's match brought to you in part by ${matchBoards[Math.floor(RNG()*matchBoards.length)].toLowerCase()}.`);
   // ---- state-aware storytelling (batch 2) ----
   {
     // hat-trick watch & man of the moment
@@ -3930,7 +3951,7 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
                   cap:nowMs()+20000, readyAt:nowMs()};
   suppress={team:toucher,until:clockSec+0.8};
   ENGINE_HOOKS.spawnNote(sx,sy-24,"throw-in!",TEAMS[thr.team].color,TEAMS[thr.team].accent);
-  if(Math.random()<0.4) sayLogged(pick([
+  if(RNG()<0.4) sayLogged(pick([
     `Out of play — throw-in ${tm(thr.team)}, quickly taken.`,
     `Into touch. ${thr.name} hurls it back in for ${tm(thr.team)}.`,
     `${tm(thr.team)} with the throw — no time wasted.`,
@@ -3946,7 +3967,7 @@ function stageGoalKick(t){
   // the keeper, which from the far corner is most of the width of the pitch.
   telPort('goal kick'); ball.x=gk.x; ball.y=gk.y; ball.touchT=0.4;
   ENGINE_HOOKS.spawnNote(gk.x,gk.y-24,"goal kick",TEAMS[t].color,TEAMS[t].accent);
-  if(Math.random()<0.35) sayLogged(pick([
+  if(RNG()<0.35) sayLogged(pick([
     `Behind for a goal kick — ${tm(t)} restart.`,
     `${gk.name} places it for the goal kick. Deep breath.`,
     `Nothing doing — goal kick ${tm(t)}.`,

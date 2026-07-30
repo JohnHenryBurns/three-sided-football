@@ -42,7 +42,7 @@ function play(opts){
              get pendingKickoff(){return pendingKickoff}, set pendingKickoff(v){pendingKickoff=v},
              get resumeAt(){return resumeAt}, set resumeAt(v){resumeAt=v},
              get walkPending(){return walkPending}, set walkPending(v){walkPending=v},
-             get benchPos(){return benchPos}, dist };`)();
+             seedRNG, dist };`)();
 
   // ── THE CLOCK ─────────────────────────────────────────────────────────────
   // Milliseconds of MATCH time, advanced by the loop. Everything the engine waits on now waits
@@ -79,6 +79,14 @@ function play(opts){
   };
 
   for (let i = 0; i < 3; i++) E.selTeams[i] = o.teams[i];
+  // SEEDED, so this match can be run again. Derived from the configuration, so the same request
+  // always produces the same match — which is what makes a before-and-after comparison mean
+  // anything, and what makes a degenerate match investigable instead of a ghost.
+  if (typeof E.seedRNG === 'function') {
+    const sd = (o.seed !== undefined) ? o.seed
+             : (o.teams[0]*7919 + o.teams[1]*104729 + o.teams[2]*1299709 + (o.first||0)*31 + (o.minutes||5)*17);
+    E.seedRNG(sd);
+  }
   E.applyTeamSelection();
   E.resetMatch();
   E.matchLen = o.minutes * 60;
