@@ -371,6 +371,12 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
 .cmFoot{grid-template-columns:1fr 1fr;margin-top:.9rem}
 .cmDesc{font-size:.7rem;color:var(--ink-dim);margin-top:.3rem;min-height:2.6em;line-height:1.3}
 #hud .sc{pointer-events:auto;cursor:pointer}
+
+/* The same link the flat page carries, in the same place: under Kick off, quiet, and only on the
+   setup screen — where somebody is reading rather than watching. */
+.ghlink{display:block;text-align:center;margin-top:.7rem;font-size:.72rem;
+  color:var(--ink-dim);text-decoration:none;letter-spacing:.02em}
+.ghlink:hover{color:var(--hot)}
 </style>
 
 <header>
@@ -426,6 +432,8 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
       </div>
 
       <button id="btnStart">Kick off</button>
+      <a class="ghlink" href="https://github.com/JohnHenryBurns/three-sided-football"
+         target="_blank" rel="noopener">⚙ view on GitHub</a>
     </div>
   </div>
   <div id="tp"><div id="tpCard"></div></div>
@@ -453,7 +461,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=66"></script>
+<script src="engine.js?v=67"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2800,6 +2808,12 @@ const CAMS = [
     what:'the whole hex at once',  az:-Math.PI/2, rad:1177, el:0.62, follow:false },
   { id:'over',    glyph:'\u{1F53D}', name:'Overhead',
     what:'shape, space and the three thirds', az:-Math.PI/2, rad:1009, el:1.42, follow:false },
+  // STRAIGHT DOWN AND CHASING. Overhead shows you the shape of the game; Follow shows you where
+  // the game is; until now you had to choose. On a hex with three goals the shape IS the story,
+  // so keeping it overhead while the ball moves is the one combination this pitch most wants —
+  // and it is the only camera from which you can see all three thirds and the ball at once.
+  { id:'tac',     glyph:'\u{1F3AF}', name:'Overhead follow',
+    what:'straight down, chasing the ball', az:-Math.PI/2, rad:660, el:1.42, follow:true },
   { id:'low',     glyph:'\u{1F3DF}', name:'Pitchside',
     what:'low \u2014 height and pace',           az:-Math.PI/2, rad:605,  el:0.16, follow:true },
   { id:'goal',    glyph:'\u{1F945}', name:'Behind the goal',
