@@ -461,7 +461,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=86"></script>
+<script src="engine.js?v=87"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2112,6 +2112,33 @@ let drawGL = function drawGL(){
   //
   // He walks. Same shape as the walk of shame: a hold-time behaviour that moves one named player
   // while the simulation is paused, opposite direction.
+  // ── EVERYBODY WALKS, NOT JUST THE TAKER ───────────────────────────────────
+  // kickoff() puts all fifteen players into formation at once, so they teleported into shape the
+  // instant it ran. The taker walking out was one man moving properly among fourteen who
+  // materialised, which reads worse than all fifteen materialising together.
+  //
+  // They drift toward their formation spots during the hold instead, so by the time kickoff()
+  // runs they are already close to where it wants them and the snap is a few units rather than
+  // half a pitch.
+  if (netFly && netFly.returning && pendingKickoff !== null && typeof pendingKickoff !== 'undefined'
+      && typeof formation === 'function') {
+    for (let t = 0; t < 3; t++) {
+      if (out[t]) continue;
+      const spots = formation(t);
+      const mine = players.filter(q => q.team === t && !q.out && !q.sentOff);
+      mine.forEach((q, i) => {
+        const f = spots[i % spots.length];
+        if (!f) return;
+        const dx = f.x - q.x, dz = f.y - q.y, d = Math.hypot(dx, dz);
+        if (d < 2) return;
+        const st = Math.min(d, 2.0);
+        q.x += dx/d * st; q.y += dz/d * st;
+        q.hx = dx/d; q.hy = dz/d;
+        q.vx = 0; q.vy = 0;
+      });
+    }
+  }
+
   if (netFly && netFly.returning && pendingKickoff !== null && typeof pendingKickoff !== 'undefined') {
     // The same player kickoff() will choose, picked the same way, so the man who walks out is the
     // man who takes it rather than a stand-in who gets replaced.
@@ -2770,7 +2797,13 @@ function loop(now){
 
   if (running && !held && !walkOff && now >= resumeAt) {
     if (pendingKickoff !== null && typeof pendingKickoff !== 'undefined') {
+      // THE CAMERA MUST NOT SNAP. kickoff() puts the ball on the centre spot, and a following
+      // camera was already tracking the returning ball — which is at the centre by then anyway.
+      // The jolt came from netFly being dropped on the same frame, so the target jumped from the
+      // drawn ball to the engine's. Held one more frame, they are in the same place and there is
+      // nothing to jump between.
       kickoff(pendingKickoff); pendingKickoff = null; resumeAt = now + 900;
+      if (netFly) { netFly.x = ball.x; netFly.y = ball.y; netFly.z = 0; }
     } else {
       // The 2D page's step, verbatim: dt * speed * 0.75. `speedMult` is a PLAYER speed
       // multiplier and taking it for a clock rate was a guess from its name — it wants a player

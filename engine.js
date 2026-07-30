@@ -699,7 +699,7 @@ function think(dt){
         // A fetching restart has the ball lying where it went out rather than sitting on the
         // spot. He goes and GETS it, carries it to the mark, and only then takes the throw. Play
         // is not held for any of this — everyone else is still playing.
-        if(R.fetch && ball.fetch && !R.got){
+        if(false && R.fetch && ball.fetch && !R.got){   // fetch is off; see stageThrowIn
           const bd9=dist(p,ball);
           if(bd9>13){
             steer(p, ball.x, ball.y, 2.6);         // jog out to it
@@ -708,7 +708,7 @@ function think(dt){
           R.got=true;                              // picked up
           ENGINE_HOOKS.spawnNote(ball.x, ball.y-22, "\u{1F450} fetched", TEAMS[p.team].color);
         }
-        if(R.fetch && R.got){
+        if(false && R.fetch && R.got){
           // carrying it back to the mark, ball in hand
           ball.x=p.x; ball.y=p.y; ball.z=0; ball.vx=0; ball.vy=0;
         }
@@ -2713,11 +2713,18 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
   // The hold, if there is one, is however long it takes him to get there. No cap and no cheating
   // the speed: if that turns out to be too much standing about we will see it in the dead-time
   // number and can decide then.
-  ball.owner=null;
-  ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;      // it stops, it does not move
-  ball.fetch={ by:thr, sx, sy, team:thr.team, at:clockSec };
-  pendingRestart={p:thr, x:sx, y:sy, team:thr.team, fetch:true,
-                  cap:nowMs()+20000, readyAt:nowMs()};
+  // REVERTED TO PLACING THE BALL. The fetch version looped: the thrower stands 20 units OUTSIDE
+  // the line, the ball rode him there, and a ball outside the line is a ball out of play — so it
+  // went out again the moment he picked it up, and again, and again.
+  //
+  // The guard against re-staging did not help because each throw genuinely DID put the ball out;
+  // it was not a double-count, it was a real loop.
+  //
+  // A teleport is worse than a fetch and far better than a game that cannot restart. The idea is
+  // right and it needs the thrower and the ball to end up on opposite sides of the line, which is
+  // the part I did not think through.
+  telPort('throw-in'); ball.owner=null; ball.x=sx; ball.y=sy;
+  pendingRestart={p:thr, x:sx, y:sy, team:thr.team, cap:nowMs()+2000, readyAt:nowMs()+1100};
   suppress={team:toucher,until:clockSec+0.8};
   ENGINE_HOOKS.spawnNote(sx,sy-24,"throw-in!",TEAMS[thr.team].color,TEAMS[thr.team].accent);
   if(Math.random()<0.4) sayLogged(pick([
