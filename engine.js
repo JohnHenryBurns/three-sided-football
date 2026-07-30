@@ -627,6 +627,7 @@ function steer(p,tx,ty,maxV){
   const v=Math.hypot(p.vx,p.vy); if(v>maxV){p.vx*=maxV/v;p.vy*=maxV/v;}
 }
 function kick(tx,ty,power,isShot){
+  cornerPending=null; cornerSpot=null;   // struck: the pin is released
   const o=ball.owner;
   ball.allyPass=false;
   if(oobRule&&!isShot){
@@ -803,9 +804,10 @@ function think(dt){
         if((dist(p,{x:sx8,y:sy8})<10&&nowMs()>(R.readyAt||0))||nowMs()>R.cap){
           p.x=sx8; p.y=sy8; p.vx=0; p.vy=0;
           ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.touchT=0.4;
-          ball.fetch=null;
+          ball.fetch=null; cornerPending=null; cornerSpot=null;
           restartHold=nowMs()+(cornerTaker===p?500:260);
           if(cornerTaker!==p){ throwPending=p; GKSTAT.lastThrower=p; }   // a throw must find a teammate
+          else { cornerPending=p; cornerSpot={x:R.x,y:R.y}; }            // and a corner waits on the flag
           pendingRestart=null;
         }
         return;
@@ -948,6 +950,19 @@ function think(dt){
           if(!nearer) want="emerg";                             // last man: close him down NOW
         }
       }
+      // ── HE HAS THE BALL AND HE IS GOING TO KICK IT ────────────────────────
+      // A keeper holding it is about to send it somewhere, and his side knew nothing about that
+      // — they stayed where the last passage of play left them, which is usually deep, which is
+      // why the only outlet was ever a short one.
+      //
+      // They push up. Not to a fixed line: away from their own goal, which on a hex is the only
+      // direction that means anything.
+      if(ball.owner && ball.owner.role==="K" && ball.owner.team===p.team && p!==ball.owner && !p.out){
+        const og9=goalCenter(p.team);
+        const ax=p.x-og9.x, ay=p.y-og9.y, al9=Math.hypot(ax,ay)||1;
+        if(al9<210){ steer(p, og9.x+ax/al9*250, og9.y+ay/al9*250, 1.9); }
+      }
+
       // GOING FOR A HEADER. He commits on what he can see — a ball above head height, coming
       // down, and close — and he does NOT know where it will land, who else is going, or whether
       // he has timed it. Two defenders can both jump and both miss, which is the drama and comes
@@ -1084,6 +1099,16 @@ function think(dt){
           .sort((a,b)=>dist(a,owner)-dist(b,owner));
         if(allies.length){ pickM=allies[0]; }
       }
+      // Crowded, and the only outlet is a short one in the same trouble? Clear it. A keeper does
+      // not pass into the scramble he just ended.
+      //
+      // Recomputed here rather than reused: `crowded` above is in the punt branch's scope, and
+      // reaching across for it is how a variable ends up undefined in one path and fine in the
+      // other. Two lines is cheaper than that bug.
+      let wolves2=0;
+      players.forEach(q=>{ if(q.team===owner.team||q.out||q.sentOff)return;
+        if(dist(q,owner)<95) wolves2++; });
+      if(wolves2>=2 && pickM && dist(pickM,owner)<110){ pickM=null; }
       if(pickM){
         kick(pickM.x+pickM.vx*4, pickM.y+pickM.vy*4, Math.min(6.2,3.2+dist(pickM,owner)*0.015), false);
         // A KEEPER'S THROW LOFTS. 2.4 peaked at 21 — a flat skimmer that reached knee height and
@@ -1106,7 +1131,11 @@ function think(dt){
       // goal, high, and long, so the game restarts somewhere other than six yards from where it
       // nearly ended.
       {
-        const away={x:owner.x-og.x, y:owner.y-og.y};
+        // `og` belongs to the branch above; this path never ran until the crowded keeper started
+        // reaching it, so the reference had been sitting there undefined and untested since the
+        // clearance was written. Computed here.
+        const og9=goalCenter(owner.team);
+        const away={x:owner.x-og9.x, y:owner.y-og9.y};
         const al=Math.hypot(away.x,away.y)||1;
         // straight out from his own goal, with a bit of lateral so three clearances in a row do
         // not land on the same blade of grass
@@ -1188,7 +1217,19 @@ function think(dt){
         if(sc3>fs){fs=sc3;far=m;fd=adv2;}});
       const fwdRoll=!!near;
       if(!near){ near=anyNear; nd2=anyD; }                       // backwards only if truly alone
-      const wantPunt=far&&(fd>255)&&(nd2>140||Math.random()<0.11);
+
+      // ── HOW CROWDED IS IT? ────────────────────────────────────────────────
+      // A keeper who has just smothered a shot is standing in the middle of the people who took
+      // it. Rolling it five yards to a defender there is how you concede the same chance twice —
+      // he should be throwing it long or clearing it, and he was doing neither because the short
+      // outlet is always the nearest one.
+      let wolves=0;
+      players.forEach(q=>{ if(q.team===owner.team||q.out||q.sentOff)return;
+        if(dist(q,owner)<95) wolves++; });
+      const crowded=wolves>=2;
+      // CROWDED MEANS GO LONG. Two or more opponents inside 95 and the short roll is off the
+      // table: he finds the deepest man he can, and if there is nobody deep he clears it.
+      const wantPunt=far&&((fd>255&&(nd2>140||Math.random()<0.11)) || (crowded&&fd>150));
       if(wantPunt){
         const dTo=dist(owner,far);
         const pw=Math.min(13.5, 5.5+dTo*0.014);   // drop it TO the man, not past him
@@ -1508,7 +1549,16 @@ function physics(dt){
     players.forEach(p=>{ if(!p.sentOff&&!((pendingRestart&&pendingRestart.p===p)||cornerTaker===p||throwPending===p)) clampInside(p, p.role==="K"?12:14); });
   }
   if(ball.owner){
-    if(throwPending===ball.owner){ ball.vx=0; ball.vy=0; return; }   // the ball waits ON THE CHALK — the thrower stands behind it
+    // THE BALL WAITS WHERE IT WAS PUT, and the taker stands by it. A throw pins it to the mark;
+    // a corner had NO SUCH PIN, so the ball followed its owner — which is why moving the corner
+    // taker outside the line dragged the ball out with him and collapsed corners to one a match.
+    //
+    // cornerPending is that pin. Same idea, ball on the ground: it does not move until he takes
+    // it, and where he stands is then his own business.
+    if(throwPending===ball.owner){ ball.vx=0; ball.vy=0; return; }   // the ball waits ON THE CHALK
+    if(cornerPending===ball.owner){ ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+      if(cornerSpot){ ball.x=cornerSpot.x; ball.y=cornerSpot.y; }    // pinned to the corner itself
+      return; }
     const o=ball.owner, v=Math.hypot(o.vx,o.vy);
     stats.poss[o.team]+=S;
     if(v>0.1){ o.hx=o.hx*0.85+(o.vx/v)*0.15; o.hy=o.hy*0.85+(o.vy/v)*0.15; }
@@ -1907,6 +1957,7 @@ function __probe(){ return {GK:GKSTAT, scored:scored?scored.slice():[0,0,0], clo
   EDGES, GOAL_EDGE, players, ball, oob:oobRule, pendingRestart, cornerTaker, phase, champ:champInfo?true:false}; }   // headless measurement port
 const gkHolding=()=>ball.owner&&ball.owner===gkHolder&&clockSec<gkHoldUntil;
 let camFocusP=null, camFocusUntil=0, walkOff=null, walkPending=null;
+let cornerPending=null, cornerSpot=null;   // the corner's own pin, see physics()
 function addStoppage(sec){ stoppageLen=Math.min(Math.min(65,matchLen*0.30), stoppageLen+sec); }
 const YELLOW_OFFENSES=[
   "cynically confiscated {V}'s shirt as a souvenir",
@@ -2850,7 +2901,10 @@ function stageCorner(ownerT,e,ex,ey){
   const taker=players.filter(q=>q.team===att&&q.role!=="K"&&!q.out&&!q.sentOff)
     .sort((a,b)=>dist(a,vtx)-dist(b,vtx))[0];
   if(!taker){ stageGoalKick(ownerT); return; }
-  const cx2=vtx.x+e.nx*14, cy2=vtx.y+e.ny*14;
+  // ON THE CORNER. This was 14 units INSIDE the vertex — which is not the corner, it is a spot
+  // near it, and a corner taken from a spot near the corner is a free kick. The flag is the
+  // vertex; the ball goes on the vertex.
+  const cx2=vtx.x, cy2=vtx.y;
   // ── THE BALL ROLLS TO THE FLAG, IT IS NOT PLACED THERE ────────────────────
   // Same as a throw-in with one difference that matters: A CORNER IS TAKEN FROM THE GROUND. He
   // does not pick it up, so there is nothing to carry — he dribbles it to the flag, which is
