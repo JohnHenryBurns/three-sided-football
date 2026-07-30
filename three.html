@@ -145,10 +145,14 @@ table.ft .sw{display:inline-block;width:.55rem;height:.55rem;border-radius:2px;
    Same options as the flat page, minus the voice engine — this page has no
    announcer, so offering a choice of throat would be a control that does
    nothing, which is worse than not having it. */
-/* The card scrolls INSIDE the overlay and the overlay stops at the stage, so Kick off cannot
-   end up underneath the control bar the way it did. */
-#setup{position:absolute;inset:0;z-index:8;display:none;overflow:auto;
-  background:rgba(6,10,8,.93);padding:.7rem .7rem 1.2rem;-webkit-overflow-scrolling:touch}
+/* THE WHOLE SCREEN, not just the stage. The overlay used to stop at the pitch, so a card taller
+   than the pitch had its bottom rows — the team pickers and Kick off among them — cut off below
+   the fold with no indication they were there. It is fixed to the viewport now and covers the
+   header and the control bar as well, which is also right in itself: while you are choosing a
+   match, the controls for a match in progress are not things you should be able to reach. */
+#setup{position:fixed;inset:0;z-index:20;display:none;overflow-y:auto;
+  background:rgba(6,10,8,.96);padding:.8rem .7rem 2rem;-webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain}
 #setup.on{display:block}
 .setupCard{max-width:24rem;margin:0 auto;padding:.85rem 1rem 1.05rem;
   background:var(--panel);border:1px solid var(--panel-edge);border-radius:14px}
@@ -196,7 +200,7 @@ table.ft .sw{display:inline-block;width:.55rem;height:.55rem;border-radius:2px;
   border:2px solid var(--panel-edge);border-radius:9px;cursor:pointer}
 .diceBtn:hover,.slotBtn:hover{border-color:var(--ink)}
 
-#tp{position:absolute;inset:0;z-index:9;display:none;overflow:auto;
+#tp{position:fixed;inset:0;z-index:21;display:none;overflow:auto;
   background:rgba(6,10,8,.94);padding:1rem}
 #tp.on{display:block}
 #tpCard{max-width:26rem;margin:0 auto;padding:.9rem 1rem 1.1rem;
@@ -217,7 +221,7 @@ table.ft .sw{display:inline-block;width:.55rem;height:.55rem;border-radius:2px;
   stroke-linecap:round;stroke-linejoin:round;display:block}
 
 /* The camera sheet, same shape as the team picker — one pattern for "choose one of these". */
-#cm{position:absolute;inset:0;z-index:9;display:none;background:rgba(6,10,8,.94);padding:1rem}
+#cm{position:fixed;inset:0;z-index:21;display:none;overflow:auto;background:rgba(6,10,8,.94);padding:1rem}
 #cm.on{display:block}
 #cmCard{max-width:22rem;margin:0 auto;padding:.9rem 1rem 1rem;
   background:var(--panel);border:1px solid var(--panel-edge);border-radius:14px}
@@ -231,10 +235,9 @@ table.ft .sw{display:inline-block;width:.55rem;height:.55rem;border-radius:2px;
 .cmName{font-size:.98rem;font-weight:600}
 .cmWhat{font-family:var(--mono);font-size:.64rem;color:var(--ink-dim);letter-spacing:.04em}
 
-/* THE TRANSPORT HIDES WHILE THE MENU IS UP. Pause, camera and speed all act on a match that has
-   not started, and a row of live-looking controls under a setup screen invites you to press one
-   and wonder why nothing happens. */
-body.setup #bar{display:none}
+/* The overlay covers everything now, so nothing needs hiding — but the body class stays, because
+   it is what tells the rest of the page a match is not running. */
+body.setup{overflow:hidden}
 
 /* Captions sit above the feed, in the middle, the way a broadcast puts them — big enough to read
    from arm's length and gone before the next line arrives. */
@@ -366,7 +369,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=29"></script>
+<script src="engine.js?v=30"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
