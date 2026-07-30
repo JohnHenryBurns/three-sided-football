@@ -883,13 +883,99 @@ const INSTRUCTIONS = [
 
   // ── RETREAT FROM A FREE KICK ──────────────────────────────────────────────
   // EXPLICIT, and the only rule in football that exists purely to make a restart possible.
+  // ── THE FREE KICK, ARCHITECTED ────────────────────────────────────────────
+  //
+  // FOOTBALL ALLOWS MOTION HERE. Only the ball must be stationary; the offending side must
+  // retreat 9.15m and everybody may move throughout — runs are made, walls shuffle, and a kick
+  // may be taken quickly while all of it is still happening. Nobody is frozen, and building it
+  // as a freeze would have been wrong.
+  //
+  // AND ONLY THE OFFENDING SIDE OWES THE RETREAT. On a hex the third team has no obligation at
+  // all — they may stand exactly where they like, including in the passing lanes. That has no
+  // analogue in the real laws and it is the most interesting thing about a three-sided free kick.
+
+  // ── THE TAKER ─────────────────────────────────────────────────────────────
+  // SCRIPT. He walks to it, stands over it, and gives the play A MOMENT TO FORM — but not
+  // forever. He goes when the wall is clear, or after 2.5 seconds regardless, which is what a
+  // quick free kick is.
+  { name:'standing over a free kick', tier:TIER.SCRIPT, base:960,
+    applies:p => !!(freeKick && !freeKick.done && freeKick.taker===p && !p.out && !p.sentOff),
+    score:p => 960,
+    act:p => {
+      const fd=dist(p,{x:freeKick.x,y:freeKick.y});
+      if(fd>12){ steer(p, freeKick.x, freeKick.y, 2.4); return true; }
+      p.vx=0; p.vy=0;
+      ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.touchT=0.4;
+      if(clockSec-freeKick.at>2.5 || wallClear(freeKick)){
+        freeKick.done=true;
+        p.noChase=clockSec+1.0;
+      }
+      return true;
+    } },
+
+  // ── THE RETREAT ───────────────────────────────────────────────────────────
+  // REQUIREMENT, and the only rule in football that exists purely to make a restart possible.
+  // The offending side and nobody else.
   { name:'retreating from a free kick', tier:TIER.REQUIREMENT, base:880,
-    applies:p => !!(freeKick && !freeKick.done && p.team===freeKick.wall
+    applies:p => !!(freeKick && !freeKick.done && p.team===freeKick.wall && !p.out && !p.sentOff
                     && Math.hypot(p.x-freeKick.x, p.y-freeKick.y)<64),
     score:p => 880,
     act:p => {
       const dx=p.x-freeKick.x, dy=p.y-freeKick.y, dl=Math.hypot(dx,dy)||1;
       steer(p, freeKick.x+dx/dl*70, freeKick.y+dy/dl*70, 2.4);
+      return true;
+    } },
+
+  // ── THE WALL ──────────────────────────────────────────────────────────────
+  // COACH. Once he is legal, he stands ON THE LINE between the ball and his own goal, at the
+  // required distance — which is what a wall is: bodies in the way of the direct route. Spread
+  // laterally by the usual stable hash so three men make a wall rather than a queue.
+  { name:'in the wall', tier:TIER.COACH, base:130,
+    applies:p => !!(freeKick && !freeKick.done && p.team===freeKick.wall && !p.out && !p.sentOff
+                    && p.role!=='K'
+                    && Math.hypot(p.x-freeKick.x, p.y-freeKick.y)>=64),
+    score:p => 130,
+    act:p => {
+      const og=goalCenter(p.team);
+      const dx=og.x-freeKick.x, dy=og.y-freeKick.y, dl=Math.hypot(dx,dy)||1;
+      const px=-dy/dl, py=dx/dl;
+      const lat=((p.k1*829)%1-0.5)*46;
+      steer(p, freeKick.x+dx/dl*72+px*lat, freeKick.y+dy/dl*72+py*lat, 2.2);
+      return true;
+    } },
+
+  // ── MAKING A RUN ──────────────────────────────────────────────────────────
+  // COACH. The taker's side finds an OPEN LANE: each man picks an angle from the ball by stable
+  // hash and runs to it, at a distance that keeps him a real option rather than on top of the
+  // kick. A weight, not a must — if the ball comes loose he plays football instead.
+  { name:'making a run', tier:TIER.COACH, base:128,
+    applies:p => !!(freeKick && !freeKick.done && p.team===freeKick.team && freeKick.taker!==p
+                    && !p.out && !p.sentOff && p.role!=='K'),
+    score:p => 128,
+    act:p => {
+      const tgt=goalCenter(targets[p.team]!==null?targets[p.team]:p.team);
+      const base=Math.atan2(tgt.y-freeKick.y, tgt.x-freeKick.x);
+      const ang=base + ((p.k1*887)%1-0.5)*1.7;      // fan across the attacking side
+      const rad=95 + ((p.k2*673)%1)*85;
+      steer(p, freeKick.x+Math.cos(ang)*rad, freeKick.y+Math.sin(ang)*rad, 2.1);
+      return true;
+    } },
+
+  // ── THE THIRD SIDE OWES NOTHING ───────────────────────────────────────────
+  // PLAYER, deliberately. They are not the offending team, so no retreat applies — and on a hex
+  // that means they can stand wherever suits them, INCLUDING THE PASSING LANES. They pick a lane
+  // between the ball and one of the taker's men, and sit in it.
+  //
+  // No analogue in the real laws. It is the free kick's version of "vultures with patience".
+  { name:'sitting in the lane', tier:TIER.PLAYER, base:405,
+    applies:p => !!(freeKick && !freeKick.done && p.team!==freeKick.team && p.team!==freeKick.wall
+                    && !p.out && !p.sentOff && p.role!=='K'),
+    score:p => 405,
+    act:p => {
+      const mates=players.filter(q=>q.team===freeKick.team&&q!==freeKick.taker&&!q.out&&!q.sentOff);
+      if(!mates.length) return false;
+      const m=mates[Math.floor(((p.k1*769)%1)*mates.length)%mates.length];
+      steer(p, (freeKick.x+m.x)/2, (freeKick.y+m.y)/2, 2.0);
       return true;
     } },
 
@@ -1715,25 +1801,10 @@ function think(dt){
       TEL.jobFallback++;
       job(p, 'cascade', 0);
 
-      if(freeKick && !freeKick.done){
-        if(p===freeKick.taker){ job(p,'standing over a free kick');
-          const fd9=dist(p,{x:freeKick.x,y:freeKick.y});
-          if(fd9>12){ steer(p, freeKick.x, freeKick.y, 2.4); return; }
-          p.vx=0; p.vy=0;
-          ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.touchT=0.4;
-          // he waits for the wall, but not forever: 2.5 seconds and he takes it regardless,
-          // which is also what a quick free kick is
-          if(clockSec-freeKick.at>2.5 || wallClear(freeKick)){
-            freeKick.done=true;
-            p.noChase=clockSec+1.0;
-          }
-          return;
-        }
-        if(p.team===freeKick.wall){ job(p,'retreating from a free kick');
-          const dx9=p.x-freeKick.x, dy9=p.y-freeKick.y, dl9=Math.hypot(dx9,dy9)||1;
-          if(dl9<64){ steer(p, freeKick.x+dx9/dl9*70, freeKick.y+dy9/dl9*70, 2.4); return; }
-        }
-      }
+      // THE FREE KICK MOVED WHOLE TO THE INSTRUCTION LIST. It was here AND there — the retreat
+      // was an instruction while the taker and the wall were still cascade branches, so two
+      // systems steered the same men on the same frame and they jittered between the answers.
+      // That is what duplication looks like when it is not merely untidy.
 
       // A MAN WHO HAS JUST RESTARTED PLAY DOES NOT CHASE IT. He offers himself instead — back
       // onto the pitch, at passing distance, facing the ball. Without this the taker and the ball
