@@ -57,7 +57,43 @@ it.**
 The pattern to copy is the walk of shame: a hold-time behaviour that moves one named
 player while the simulation is paused. Same shape, opposite direction.
 
-## 5. Restarts still teleport
+## 5. THE GOLD STANDARD: the ball never teleports
+
+**Every movement of the ball honours the engine's physics. No exceptions.**
+
+Where it is now impossible for the ball to travel — because it has gone into the stands,
+or because it is further from the taker than a person would walk — somebody puts it
+back:
+
+- **into the crowd** — the fans lob it back, which is a restart *and* a commentary
+  opportunity nothing else in the game offers
+- **out on the pitch, far from where it's needed** — a player retrieves it and kicks
+  it to the spot, the way the post-goal return already works (PR #93, #97)
+- **out on the pitch, close** — he carries it there
+
+Each of these is a journey rather than a jump, and the pattern exists already: two
+fixed points, a parameter from 0 to 1, over a hold. It cannot overshoot and it cannot
+be raced by a dropped frame.
+
+**Instrumented as of this session.** Every place the engine moves the ball instantly
+now names itself, and the report prints the tally by cause — kickoff, throw-in, corner,
+goal kick, and a claim that snapped the ball to the claimer. Eight sources.
+
+Four browser matches reported the largest jump as **314, 317, 321, 325**, and until now
+I could not have told you what any of them was. **The target is that every line in that
+table reads 0.**
+
+## 5b. What is already fixed
+
+The post-goal return travels (PR #93, #97). John reports it still teleports *after* the
+initial kick, which is the handover from the returning ball to the engine's own position
+at kick-off — the taker is standing on the spot and the ball arrives at the spot, so
+they should meet rather than swap. Related to item 4: the taker is frozen during the
+hold and does not walk to receive.
+
+## 6. The other restarts
+
+
 
 Largest single ball jump in three consecutive browser matches: **314, 317, 321** on a
 680-wide pitch. The post-goal return is fixed (PR #93, #97); throw-ins, goal kicks and
@@ -66,7 +102,7 @@ corners still snap the ball into place.
 Same treatment: interpolate between two fixed points over a hold. Cosmetic, and cheap
 now that the pattern exists.
 
-## 6. Throw-in rate
+## 7. Throw-in rate
 
 ~300–680 per 90 across three logs, against a real ~40. Consistently high, so real.
 
@@ -75,7 +111,7 @@ crowding figure agrees: **1.9 players within 60 of the ball, against 4–6 in fo
 Nobody is close enough to cut the ball off before it runs out. Fixing the chase and
 support shape should collapse the throw-in count without touching the boundary rule.
 
-## 7. Does the new ball height read as anticipation or as dead time?
+## 8. Does the new ball height read as anticipation or as dead time?
 
 Punts now reach 76 where they topped out at 45. The engine has always had a
 landing-run: above `z 34` and fast, one player per team runs to where it will *land*.
