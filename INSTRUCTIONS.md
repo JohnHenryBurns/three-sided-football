@@ -141,6 +141,49 @@ goals mean from **25.0 to 19.8**, a 26% error with nothing in the result to say 
 If the discard count climbs during a sweep, something has been broken rather than tuned.
 That is the alarm; the filter is not a fix.
 
+## Design: defending a throw-in and a corner
+
+**What exists.** *Denying a throw* puts a body in the lane between thrower and nearest
+target. *Marking at a corner* stands goal-side of the nearest attacker. *Packing the
+near zone* fills 16–34 out. All three are single-purpose and none of them knows anything
+about the state of the match.
+
+**What is missing, and it is the same three things John keeps pointing at:**
+
+**Alliance.** An ally's corner is not a threat, and the current instructions treat it as
+one — a marker marks whoever is nearest regardless of shirt. An allied attacker in the
+box should be *let alone*, and the men marking him freed to cover somebody who matters.
+Alliances are informal, so this is a weight and not a rule: mark him loosely rather than
+not at all.
+
+**Score.** Defending at 0-0 and defending two goals down are different jobs. A side that
+is bottom should be conceding the near post to keep a man forward, because a corner
+survived is worth nothing to them. That is a COACH-tier modifier on how many bodies go
+back, and the coach menu already has the axis for it.
+
+**The third goal.** On a hex a corner has *two* defending sides, and only one of them
+owns the goal. The other is defending a goal that is not being attacked — and their real
+question is whether to commit bodies at all or to hold a counter station. That is
+*vultures with patience*, applied to corners, and it does not exist yet.
+
+**Shape it wants:**
+
+```
+COACH   marking an ally           loose, and only if nothing better is available
+COACH   conceding the near post   when bottom, keep a man high
+COACH   committing to the box     the un-attacked side decides how many to send back
+PLAYER  covering the second ball  the edge of the box, where a cleared corner lands
+```
+
+**And on the throw-in specifically:** nothing currently distinguishes a throw deep in
+your own third from one in the opposition's. The first is dangerous and wants bodies;
+the second is a chance to press high. Same instruction, one condition, and it should be
+a COACH weight on the existing *denying a throw*.
+
+**Order:** this is calibration-shaped work and it wants the seeded harness first. Adding
+four instructions and tuning them against an unseeded sim would produce weights that
+mean nothing.
+
 ## To investigate
 
 **The corner trio is duplicated.** The three waves are in the list *and* still in the
