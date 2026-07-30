@@ -127,6 +127,38 @@ seed 1007   loose 30%   ball held too long
 **Those three seeds are the next piece of work.** Two of the three are the ball being
 held, which is the signature the watchdog does not catch.
 
+## The teleport standard, measured
+
+**Eight seeded matches, every remaining teleport by cause:**
+
+```
+22   kickoff        ~2.8 a match
+13   goal kick      ~1.6 a match
+ 3   unattributed   across all eight
+```
+
+**Throw-ins and corners no longer appear at all** — both fetch, and the ball never jumps.
+That is most of the way to the standard, from a list that once had eight named sources
+and fourteen unnamed.
+
+### The goal kick resists the fetch
+
+I gave it the same treatment: ball placed in the six-yard box, keeper walks to it. **On
+six identical seeds it went from 6/6 usable to 3/6** — three matches degenerated, two
+with the ball held and one with nobody chasing.
+
+**That is the seeded harness earning its cost.** Before today I would have shipped it,
+seen a noisy sample, and argued about whether it helped. The A/B is on the same six
+matches and the answer is unambiguous.
+
+**Why it resists is the open question.** The throw-in fetch works and this one does not,
+and the difference is probably that a keeper who leaves his line to fetch is out of
+position for everything else — his area clamp, his sweep, his distribution all assume he
+is near his goal.
+
+**So the kick-off and the goal kick are the last two teleports**, and the goal kick needs
+its own answer rather than the throw-in's.
+
 ## The degenerate match
 
 **Roughly one in ten, and it is not a fixed code path.** Instrumenting it consumes
