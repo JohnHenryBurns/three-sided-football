@@ -304,7 +304,13 @@ function fmtClock(s){
 // shame, penalties and coach menus; this one plays football and restarts after a goal. The match
 // flow it omits is flow the engine does not require — which is worth knowing, because it means
 // that flow is presentation and could move here later rather than being duplicated.
-let last = performance.now(), running = true, resumeAt = 0;
+// `running` and `resumeAt` are ENGINE names — declaring them again here is a SyntaxError, and a
+// SyntaxError in an inline script kills the whole block before its first line runs. That is why
+// the page showed its buttons and nothing else: not a failure during boot, a failure to reach
+// boot at all, which is also why the try/catch around boot() never said a word.
+//
+// The engine owns them, so use them rather than shadowing them.
+let last = performance.now();
 function loop(now){
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, (now - last)/1000);
