@@ -492,6 +492,7 @@ function kickoff(toTeam){
   // was hoisted to module scope so instructions could see it, and each time I did not ask what
   // clears it.
   freeKick=null; goalRestart=null; walking=null; cornerPending=null; cornerSpot=null;
+  justDelivered=null;
   chaser=[null,null,null];
   retargetTimer=0; celebrateUntil=0; camFocusP=null; camFocusUntil=0;
   lastBlazeSay=-99; lastStyleAt=-99; recentChatter=[];
@@ -654,9 +655,12 @@ function wallClear(fk){
 
 function kick(tx,ty,power,isShot){
   freeKick=null;                         // struck: the free kick is over
-  // A CORNER TAKER DOES NOT CHASE HIS OWN CORNER either — same reasoning as the throw. He is
-  // forty yards from where it lands and has no business arriving before it.
-  if(cornerPending===ball.owner && ball.owner){ ball.owner.noChase=clockSec+1.8; }
+  // WHO JUST DELIVERED A CORNER, so an instruction can give him something to do. This used to
+  // set a `noChase` flag, which is a rule about what he WILL NOT do — and a flag that says what a
+  // player is not doing is not an instruction, it is a hole where one should be. It also did not
+  // work: noChase is released the moment anybody claims the ball, and a corner is claimed within
+  // a second, so he was free to sprint forty yards after his own delivery.
+  if(cornerPending===ball.owner && ball.owner){ justDelivered={p:ball.owner, at:clockSec}; }
   cornerPending=null; cornerSpot=null;   // struck: the pin is released
   const o=ball.owner;
   ball.allyPass=false;
@@ -759,6 +763,7 @@ let chaser = [null, null, null];
 // tier, because a restart is the game doing something to the players rather than the players
 // deciding — and a renderer that wants to draw it can read the same state.
 let goalRestart = null;   // { conceder, taker, fetcher, until }
+let justDelivered = null; // { p, at } — the man who just took a corner, for the instruction below
 
 // WHETHER A WALK IS HAPPENING. `walkPending` says one is due; both front ends then run their own
 // copy of the walk — three.html and index.html each move the man to their own bench, with their
@@ -1573,6 +1578,29 @@ const INSTRUCTIONS = [
       const lat=((p.k1*911)%1-0.5)*180;
       const dep=0.45+((p.k2*631)%1)*0.25;
       steer(p, own.x+ax*dep+px*lat, own.y+ay*dep+py*lat, 1.6);   // no hurry; he has a walk to finish
+      return true;
+    } },
+
+  // ── HE HAS JUST SWUNG IT IN ───────────────────────────────────────────────
+  // What a corner taker does after delivering, which is not "not chase". He drops to the edge of
+  // the box — wide of the mess, square to it, and behind the flight — which is where the second
+  // ball goes and where he can actually do something about it.
+  //
+  // This replaces a `noChase` flag. A flag that says what a player is NOT doing is not an
+  // instruction, it is a hole where one should be: it also stopped working the moment anybody
+  // claimed the ball, which for a corner is about a second.
+  //
+  // Four seconds, then he is an ordinary footballer again.
+  { name:'dropping to the edge', tier:TIER.COACH, base:126,
+    applies:p => !!(justDelivered && justDelivered.p===p && clockSec-justDelivered.at<4
+                    && cornerGoal!==null && onPitch(p)),
+    score:p => 126,
+    act:p => {
+      const g=goalCenter(cornerGoal), e=EDGES[GOAL_EDGE[cornerGoal]];
+      const ux=-e.ny, uy=e.nx;
+      // the side he swung it from, so he covers his own flank rather than crossing the box
+      const side=((p.x-g.x)*ux+(p.y-g.y)*uy)>=0?1:-1;
+      steer(p, g.x+e.nx*128+ux*side*66, g.y+e.ny*128+uy*side*66, 2.0);
       return true;
     } },
 
