@@ -994,11 +994,41 @@ function think(dt){
       }
       if(pickM){
         kick(pickM.x+pickM.vx*4, pickM.y+pickM.vy*4, Math.min(6.2,3.2+dist(pickM,owner)*0.015), false);
-        ball.zv=2.4;                                // the arc carries it — power dialed for flight, not friction
+        // A KEEPER'S THROW LOFTS. 2.4 peaked at 21 — a flat skimmer that reached knee height and
+        // arrived before anybody could move for it. He is throwing it out to a teammate forty to
+        // two hundred and sixty away, and that is a lobbed ball with hang on it.
+        //
+        // Scaled to the distance: a short roll to a full-back stays low, a throw to the far side
+        // goes up and gives him time to come and meet it. 2.6 to 4.2, which is an apex of 24 to
+        // 63 — the far one clearing head height comfortably and hanging for a second.
+        const throwD=dist(pickM,owner);
+        ball.zv=2.6 + Math.min(1.6, throwD/260*1.6);
         if(allied(owner.team,pickM.team)) ball.allyPass=true;
         return;
       }
-      // truly alone in the world — he plays on himself, dribbling in
+      // NO OUTLET IS NOT A REASON TO PUT IT DOWN. This returned, which left the ball a normal
+      // owned ball at the keeper's feet — in the middle of whatever scramble had just forced the
+      // save. He had secured it and then simply set it down among them.
+      //
+      // A keeper with no options does what every keeper does: he clears it. Away from his own
+      // goal, high, and long, so the game restarts somewhere other than six yards from where it
+      // nearly ended.
+      {
+        const away={x:owner.x-og.x, y:owner.y-og.y};
+        const al=Math.hypot(away.x,away.y)||1;
+        // straight out from his own goal, with a bit of lateral so three clearances in a row do
+        // not land on the same blade of grass
+        const spread=(Math.random()-0.5)*0.5;
+        const cx2=owner.x+(away.x/al)*300 + (-away.y/al)*300*spread;
+        const cy2=owner.y+(away.y/al)*300 + ( away.x/al)*300*spread;
+        kick(cx2, cy2, 11.5, false);
+        ball.zv=4.2;                       // apex 63, a second of hang — time for anybody to read it
+        sayLogged(pick([
+          `${owner.name} has nobody to aim at \u2014 so he launches it and lets the hex sort it out.`,
+          `No options for ${owner.name}. Row Z it is, more or less.`,
+          `${owner.name} clears his lines with feeling.`,
+          `${owner.name} looks up, sees nothing he likes, and hoofs it.`]));
+      }
       return;
     }
     if(cornerTaker===owner){

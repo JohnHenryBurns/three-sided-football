@@ -461,7 +461,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=81"></script>
+<script src="engine.js?v=82"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2076,8 +2076,13 @@ let drawGL = function drawGL(){
   const heldByKeeper = (typeof gkHolding === 'function') && gkHolding();
   const heldForThrow = (typeof throwPending !== 'undefined') && throwPending &&
                        ball.owner === throwPending;
-  const held = heldByKeeper ? H_P * 0.62      // chest, hugged
-             : heldForThrow ? H_P + 9         // above the head, two-handed
+  // A HELD BALL RIDES ITS HOLDER. The heights below are measured from his FEET, and his feet
+  // move now — he jumps. Left as absolutes the ball stayed at 21 while the keeper rose past it,
+  // which is the hop: not the ball bouncing, the man leaving it behind.
+  const holder = heldByKeeper ? ball.owner : (heldForThrow ? throwPending : null);
+  const holderLift = (holder && holder.jz) || 0;
+  const held = heldByKeeper ? H_P * 0.62 + holderLift   // chest, hugged
+             : heldForThrow ? H_P + 9 + holderLift      // above the head, two-handed
              : 0;
   // THE FLIGHT INTO THE NET, if one is running. It overrides the engine's frozen position for
   // the length of a celebration and is dropped the moment the ball is live again — so nothing it
