@@ -744,6 +744,32 @@ function jobSettled(p){
 // and gets caught out; turn it down and it is twitchy but quick.
 const COMMIT = 12;                    // the degree factor. Per-side eventually; one number now.
 
+// ── FOUR TIERS, AND ONLY THREE OF THEM ARE WALLS ────────────────────────────
+//
+// `explicit` was a boolean worth a thousand points and I used it to mean "this is about a
+// restart", which cost a measurable regression. John's model has the resolution it needed:
+//
+//   SCRIPT       what HAPPENS. The thrower fetches the ball; the sent-off man walks off. Not a
+//                decision at all — the game doing something to him.
+//   REQUIREMENT  what may NOT happen. Stay out of the penalty area; retreat ten yards. The
+//                referee's business, not a tactic and not a choice.
+//   COACH        a tactic: which decisions to prioritise and how to coordinate. The bus, getting
+//                depth, marking at a corner.
+//   PLAYER       what he thinks best with what he can see. Chasing, intercepting, offering.
+//                The bottom tier and most of a match.
+//
+// THE TOP TWO ARE WALLS. A script and a requirement are never preferences and should never lose
+// to a good idea, so they sit 1700 clear of anything.
+//
+// THE BOTTOM TWO OVERLAP ON PURPOSE, which is John's correction and the important part: A PLAY IS
+// A WEIGHT, NOT A MUST. A corner routine wants him in the box — and if the ball breaks loose he
+// should go for it rather than finish his part like a man following stage directions. So COACH
+// sits only 300 above PLAYER. A tactic wins by default; a strong enough decision still beats it.
+//
+// That 300 is the difference between a routine and a puppet show, and it is the one number in
+// here worth arguing about.
+const TIER = { SCRIPT: 4000, REQUIREMENT: 3000, COACH: 1300, PLAYER: 1000 };
+
 /** A side's current tactical numbers, so an instruction can read them without knowing where
  *  they live. `T()` already does this; this is the same thing named for readers of the list. */
 function TACTICS(t){ return T(t); }
@@ -753,7 +779,7 @@ const INSTRUCTIONS = [
   // EXPLICIT. He has been given a restart and the ball is lying somewhere. Nothing outranks it,
   // and the base score is the position it held in the cascade so the refactor does not quietly
   // reshuffle the AI.
-  { name:'fetching the ball', explicit:true, base:900,
+  { name:'fetching the ball', tier:TIER.SCRIPT, base:900,
     applies:p => !!(pendingRestart && pendingRestart.p===p && pendingRestart.fetch
                     && ball.fetch && !pendingRestart.got),
     score:p => 900,
@@ -766,7 +792,7 @@ const INSTRUCTIONS = [
 
   // ── RETREAT FROM A FREE KICK ──────────────────────────────────────────────
   // EXPLICIT, and the only rule in football that exists purely to make a restart possible.
-  { name:'retreating from a free kick', explicit:true, base:880,
+  { name:'retreating from a free kick', tier:TIER.REQUIREMENT, base:880,
     applies:p => !!(freeKick && !freeKick.done && p.team===freeKick.wall
                     && Math.hypot(p.x-freeKick.x, p.y-freeKick.y)<64),
     score:p => 880,
@@ -779,7 +805,7 @@ const INSTRUCTIONS = [
   // ── INTO THE BOX FOR A CORNER ─────────────────────────────────────────────
   // EXPLICIT. Named from its steer target: g9 plus 46 along the goal's inward normal, with a
   // per-player lateral offset — that is "get in the box and spread across its width".
-  { name:'into the box', explicit:true, base:860,
+  { name:'into the box', tier:TIER.COACH, base:860,
     applies:p => !!(pendingRestart && cornerTaker===pendingRestart.p && cornerGoal!==null
                     && p!==pendingRestart.p && p.team===pendingRestart.team),
     score:p => 860,
@@ -793,7 +819,7 @@ const INSTRUCTIONS = [
   // ── MARKING AT A CORNER ───────────────────────────────────────────────────
   // EXPLICIT. Target: fifteen units from his man, on the line between that man and the goal —
   // which is goal-side marking, and is the whole of defending a corner.
-  { name:'marking at a corner', explicit:true, base:850,
+  { name:'marking at a corner', tier:TIER.COACH, base:850,
     applies:p => !!(pendingRestart && cornerTaker===pendingRestart.p && cornerGoal!==null
                     && p.team===cornerGoal),
     score:p => 850,
@@ -811,7 +837,7 @@ const INSTRUCTIONS = [
   // ── SHOWING FOR A THROW ───────────────────────────────────────────────────
   // NOT explicit — he is offering, not obeying. Target: the throw mark itself, from beyond 110,
   // which is "come and be available at throwing distance".
-  { name:'showing for a throw', explicit:false, base:760,
+  { name:'showing for a throw', tier:TIER.PLAYER, base:760,
     applies:p => !!(pendingRestart && cornerTaker!==pendingRestart.p && p!==pendingRestart.p
                     && p.team===pendingRestart.team
                     && dist(p,{x:pendingRestart.x,y:pendingRestart.y})>110),
@@ -821,7 +847,7 @@ const INSTRUCTIONS = [
   // ── DENYING A THROW ───────────────────────────────────────────────────────
   // Target: the midpoint between the thrower and the man he most wants, which is a body in the
   // passing lane rather than a man marking a man.
-  { name:'denying a throw', explicit:false, base:750,
+  { name:'denying a throw', tier:TIER.PLAYER, base:750,
     applies:p => !!(pendingRestart && cornerTaker!==pendingRestart.p
                     && p.team!==pendingRestart.team
                     && dist(p,{x:pendingRestart.x,y:pendingRestart.y})<150),
@@ -840,7 +866,7 @@ const INSTRUCTIONS = [
   // Named from its condition, not its target: TT.bunker>0.5 && role M. A coach setting that
   // changes WHICH INSTRUCTION APPLIES rather than tweaking a number — which is what a tactic is,
   // and it was already true before this list existed. The list just makes it legible.
-  { name:'the bus \u2014 dropping in', explicit:false, base:520,
+  { name:'the bus \u2014 dropping in', tier:TIER.COACH, base:520,
     applies:p => p.role==='M' && !p.out && !p.sentOff && ball.owner
               && TACTICS(p.team).bunker>0.5 && ball.owner.team!==p.team,
     score:p => 520,
@@ -853,7 +879,7 @@ const INSTRUCTIONS = [
   // ── THE LONE OUTLET ───────────────────────────────────────────────────────
   // The other half of the bus: while everyone else drops, one forward holds a position between
   // his own goal and the ball, so there is somebody to counter through.
-  { name:'holding the counter', explicit:false, base:510,
+  { name:'holding the counter', tier:TIER.COACH, base:510,
     applies:p => p.role==='F' && !p.out && !p.sentOff && ball.owner
               && TACTICS(p.team).bunker>0.5 && ball.owner.team!==p.team,
     score:p => 510,
@@ -866,7 +892,7 @@ const INSTRUCTIONS = [
   // ── INTERCEPTING ──────────────────────────────────────────────────────────
   // Target: ball.x + ball.vx*6 — six frames AHEAD of the ball rather than at it. Leading a pass
   // is a different instruction from chasing one, and the target is the only thing that says so.
-  { name:'intercepting', explicit:false, base:480,
+  { name:'intercepting', tier:TIER.PLAYER, base:480,
     applies:p => !p.out && !p.sentOff && p.role!=='K' && !ball.owner
               && Math.hypot(ball.vx,ball.vy)>2.5 && dist(p,ball)<120,
     score:p => 480 - dist(p,ball)*0.4,           // the nearest man wants it most
@@ -876,7 +902,7 @@ const INSTRUCTIONS = [
   // Three-sided-specific and it has no analogue in football: an ally's keeper is holding, so you
   // drop into your own shape rather than harassing him. The comment above it already said this;
   // the name just makes it visible.
-  { name:"an ally's keeper has it", explicit:false, base:600,
+  { name:"an ally's keeper has it", tier:TIER.PLAYER, base:600,
     applies:p => !!(gkHolding() && ball.owner && p.team!==ball.owner.team && p.role!=='K'
                     && allied(p.team, ball.owner.team)),
     score:p => 600,
@@ -889,7 +915,7 @@ const INSTRUCTIONS = [
   // ── RETREAT FOR THE LONG BALL ─────────────────────────────────────────────
   // A defender against an opposing keeper who has it: get depth, because what is coming is a
   // punt. The lateral spread is per-player and stable so a back line does not stack.
-  { name:'getting depth', explicit:false, base:590,
+  { name:'getting depth', tier:TIER.COACH, base:590,
     applies:p => !!(gkHolding() && ball.owner && p.team!==ball.owner.team && p.role==='D'
                     && !allied(p.team, ball.owner.team)),
     score:p => 590,
@@ -909,7 +935,7 @@ const INSTRUCTIONS = [
   //
   // The 85 floor keeps him out of the keeper's area — the same distance the area rule uses, and
   // it was already here before I gave keepers that clamp.
-  { name:'covering a roll lane', explicit:false, base:580,
+  { name:'covering a roll lane', tier:TIER.COACH, base:580,
     applies:p => !!(gkHolding() && ball.owner && p.team!==ball.owner.team && p.role!=='K'
                     && !allied(p.team, ball.owner.team) && p.role!=='D'
                     && players.some(m=>m.team===ball.owner.team && m.role!=='K' && !m.out && !m.sentOff)),
@@ -929,7 +955,7 @@ const INSTRUCTIONS = [
   // ── NOBODY TO COVER ───────────────────────────────────────────────────────
   // The same situation with no outlets left to stand in front of — a side down to its keeper.
   // He holds the middle, which is the only useful thing left to do.
-  { name:'holding the middle', explicit:false, base:570,
+  { name:'holding the middle', tier:TIER.PLAYER, base:570,
     applies:p => !!(gkHolding() && ball.owner && p.team!==ball.owner.team && p.role!=='K'
                     && !allied(p.team, ball.owner.team) && p.role!=='D'
                     && !players.some(m=>m.team===ball.owner.team && m.role!=='K' && !m.out && !m.sentOff)),
@@ -947,7 +973,7 @@ const INSTRUCTIONS = [
   // thousand points during any hold, and the measurements said so immediately: loose 50-61% ->
   // 61-68%, crowding 2.0-2.2 -> 1.5-1.9. Players were abandoning useful positions to go and
   // offer for a throw that had not happened yet.
-  { name:'offering a lane', explicit:false, base:840,
+  { name:'offering a lane', tier:TIER.PLAYER, base:840,
     applies:p => !!(holdingPlay() && pendingRestart && pendingRestart.p
                     && pendingRestart.p!==cornerTaker && pendingRestart.p.role!=='K'
                     && p.team===pendingRestart.team && p!==pendingRestart.p && p.role!=='K'),
@@ -967,7 +993,7 @@ const INSTRUCTIONS = [
   // Three-sided again, and a nice piece of design: an allied side offers too, but from 140-230
   // rather than 70-165 and spread wider. They are supplementary outlets ACROSS a battle line —
   // available without crowding the ally whose throw it is.
-  { name:'an ally offers deep', explicit:false, base:830,
+  { name:'an ally offers deep', tier:TIER.PLAYER, base:830,
     applies:p => !!(holdingPlay() && pendingRestart && pendingRestart.p
                     && pendingRestart.p!==cornerTaker && pendingRestart.p.role!=='K'
                     && p.team!==pendingRestart.team && p.role!=='K'
@@ -987,7 +1013,7 @@ const INSTRUCTIONS = [
   // NOT explicit: he has taken it and is choosing to make himself available rather than chase.
   // Released by POSSESSION — the moment anybody else has the ball he is a player again — with
   // the clock only as a floor so a throw that runs loose does not strand him.
-  { name:'just restarted \u2014 offering', explicit:false, base:700,
+  { name:'just restarted \u2014 offering', tier:TIER.PLAYER, base:700,
     applies:p => !!(p.noChase && clockSec<p.noChase && !(ball.owner && ball.owner!==p)),
     score:p => 700,
     act:p => {
@@ -1009,8 +1035,9 @@ function runInstruction(p){
   let best=null, bestScore=-1e9;
   for(const I of INSTRUCTIONS){
     if(!I.applies(p)) continue;
-    let sc=I.score(p);
-    if(I.explicit) sc+=1000;                     // told beats chosen, always
+    // Tier plus the instruction's own score, UNCLAMPED — clamping would make every band a wall,
+    // and the bottom two are meant to be crossable.
+    let sc=(I.tier||TIER.PLAYER) + I.score(p);
     if(p.job===I.name) sc+=COMMIT;               // and he sticks with what he is doing
     if(sc>bestScore){ bestScore=sc; best=I; }
   }
