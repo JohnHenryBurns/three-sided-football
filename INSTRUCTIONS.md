@@ -72,7 +72,11 @@ free kick, offering after a restart.
 They are unreachable, because the list scores first and returns. But *unreachable* and
 *deleted* are different, and two copies of a decision is how they drift.
 
-**Genuinely unextracted, best guess: four or five.** A deep line at `og4 + (CX-og4)*0.85`,
+**Now extracted (PR #149):** *vultures with patience*, *sweeping*, *pushing up*. The
+cascade is at **2% in the harness**, matching the browser — which is the first time the
+two have agreed on anything all session.
+
+**Previously listed as unextracted, best guess: four or five.** A deep line at `og4 + (CX-og4)*0.85`,
 a slow chase at 1.5, the keeper's push-up at 250, and one or two around `mx,my` and
 `tx2,ty2` that I have not identified.
 
