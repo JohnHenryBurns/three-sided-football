@@ -81,9 +81,21 @@ before assuming anything about frequency.
 camera whip. Almost certainly the throw-in fetch moving the ball onto a carrier and
 then onto the mark. Name both.
 
-**One harness match in three came out wrong** after the tier change — 28 throw-ins,
-loose 82%, crowding 0.8 against a normal 1.9. Other two normal. Bad seed or a real
-edge; unknown.
+**The 82% match, and it has now happened three times with the SAME numbers.**
+
+```
+loose 82%   crowding 0.8   throws 28-33   goals 9-11
+```
+
+Three occurrences, always the first of a run, always the same shape. That is not a bad
+seed — a seed produces different wrong numbers each time. Something about the **first
+match after a fresh load** puts the game in a state where nobody chases: crowding 0.8
+means fewer than one player within 60 of the ball, against a normal 1.7-2.0.
+
+Suspects, in order: `chaser[]` starting as `[null,null,null]` and something reading it
+before `think()` first fills it; `targets` being null on the opening frames; the
+harness's own first-match setup. **The browser has never shown this**, which points at
+the harness — but it points there three times identically, which is worth an hour.
 
 ## Notes worth keeping
 
