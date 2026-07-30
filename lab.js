@@ -86,6 +86,15 @@ function play(opts){
   if ('score' in o.rules) E.scoreMode  = o.rules.score;
   E.kickoff(o.first);
 
+  // ── MOTION AND TRANSITIONS ────────────────────────────────────────────────
+  // The two things worth watching closely: whether the ball ever MOVES in a way it should not,
+  // and how long the game spends not being played.
+  const jumps = [];            // frame-to-frame distance, to catch teleports
+  const speeds = [];
+  let deadFrames = 0, deadRuns = [], deadRun = 0;   // nobody within reach of a loose ball
+  let restartFrames = 0, keeperHold = 0, keeperRuns = [], kRun = 0;
+  let px = null, py = null;
+
   const own = [0,0,0], third = [0,0,0];
   let loose = 0, aerial = 0, keeper = 0, crowd = 0, frames = 0, guard = 0;
   const STEP = (1/60) * 0.75;                      // sim-seconds a frame advances the match clock
@@ -133,9 +142,31 @@ function play(opts){
       if (d < nd) { nd = d; near = t; }
     }
     third[near]++;
-    let n = 0;
-    for (const p of E.players) if (!p.out && Math.hypot(p.x - b.x, p.y - b.y) < 60) n++;
+    let n = 0, nearest = 1e9;
+    for (const p of E.players) {
+      if (p.out) continue;
+      const d = Math.hypot(p.x - b.x, p.y - b.y);
+      if (d < 60) n++;
+      if (d < nearest) nearest = d;
+    }
     crowd += n;
+
+    // How far the ball moved since the last frame. A real kick is a few units; anything large is
+    // a teleport, and a teleport is the thing that reads as "the ball jumped".
+    if (px !== null) {
+      const j = Math.hypot(b.x - px, b.y - py);
+      jumps.push(j);
+      speeds.push(Math.hypot(b.vx || 0, b.vy || 0));
+    }
+    px = b.x; py = b.y;
+
+    // Dead time: a loose ball with nobody within 40 of it is a game waiting for somebody.
+    if (!b.owner && nearest > 40) { deadFrames++; deadRun++; }
+    else { if (deadRun > 30) deadRuns.push(deadRun); deadRun = 0; }
+
+    if (E.pendingRestart) restartFrames++;
+    if (b.owner && b.owner.role === 'K') { keeperHold++; kRun++; }
+    else { if (kRun > 30) keeperRuns.push(kRun); kRun = 0; }
   }
 
   const owned = own.reduce((a, c) => a + c, 0) || 1;
@@ -156,6 +187,16 @@ function play(opts){
     busiestThird: Math.max(...third.map(x => 100 * x / frames)),
     crowd: crowd / frames,
     score: E.score.slice(),
+    // motion
+    jumpP99: pct(jumps, 0.99), jumpMax: Math.max(...jumps, 0),
+    teleports: jumps.filter(j => j > 25).length,
+    speedMed: pct(speeds, 0.5), speedP95: pct(speeds, 0.95),
+    // transitions
+    deadPct: 100 * deadFrames / frames,
+    deadLongest: Math.max(0, ...deadRuns) / 60,
+    deadRuns: deadRuns.length,
+    restartPct: 100 * restartFrames / frames,
+    keeperLongest: Math.max(0, ...keeperRuns) / 60,
   };
 }
 
@@ -169,6 +210,7 @@ function sweep(n, opts){
   return out;
 }
 
+const pct = (a, q) => { if(!a.length) return 0; const b=a.slice().sort((x,y)=>x-y); return b[Math.min(b.length-1, Math.floor(b.length*q))]; };
 const med = a => { const b = a.slice().sort((x,y)=>x-y); return b[Math.floor(b.length/2)]; };
 const avg = a => a.reduce((x,y)=>x+y,0) / a.length;
 
