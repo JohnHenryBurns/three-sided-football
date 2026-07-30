@@ -453,7 +453,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=52"></script>
+<script src="engine.js?v=53"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -484,16 +484,14 @@ function say(html, big){
   // A big line while a card is up belongs ON the card. It is the same event described twice: the
   // hook gives the facts, the commentary gives the flavour, and separating them across two
   // layers means you only ever see the facts.
-  if (big && celeUntil && celeCard) {
-    const slot = celeCard.querySelector('.flav');
-    if (slot) slot.innerHTML = html;
-    else {
-      const d = document.createElement('div');
-      d.className = 'flav';
-      d.innerHTML = html;
-      celeCard.appendChild(d);
-    }
-  }
+  // BUFFERED, NOT INJECTED. The engine calls say() and showCelebration() in whichever order
+  // suits it — for a legit goal the card comes first, for an OWN GOAL the line comes first — and
+  // injecting into the card only works in the first case. In the second the card's innerHTML
+  // was written afterwards and wiped the line straight back out, which is why own goals lost
+  // their flavour and ordinary ones kept it.
+  //
+  // So the line is remembered and the CARD asks for it. Either order works.
+  if (big) { lastBig = { html, at: performance.now() }; applyFlav(); }
   const p = document.createElement('p');
   p.innerHTML = String(html || '');
   // NOT `if (big)`. `big` means announce this urgently — a grudge match forming, an alliance
@@ -1429,8 +1427,15 @@ function stepEmbers(dt){
   for (const e of embers) {
     if (!e.sp.visible) continue;
     e.life += dt;
+    // AN ABSOLUTE CEILING as well as the proportional one. Embers were occasionally left glowing
+    // on the grass forever, and a life that is only ever compared against its own max cannot
+    // recover from a bad max — an undefined or zero one makes t NaN or Infinity, and NaN >= 1 is
+    // FALSE, so the ember lives on with no way back.
+    //
+    // 1.4 seconds is longer than any emitter asks for, so this never truncates a healthy ember
+    // and always retires a broken one.
     const t = e.life / e.max;
-    if (t >= 1) { e.sp.visible = false; e.sp.material.opacity = 0; continue; }
+    if (!(t < 1) || e.life > 1.4) { e.sp.visible = false; e.sp.material.opacity = 0; continue; }
     const ct = Math.min(1, (e.t0 || 0) + t * (1 - (e.t0 || 0)));   // where it sits on the ramp
     e.sp.position.x += e.vx;
     e.sp.position.z += e.vz;
@@ -1974,6 +1979,22 @@ const celeCard = document.getElementById('celeCard');
 const confettiBox = document.getElementById('confetti');
 let celeUntil = 0;
 
+// The most recent urgent line, and the card's way of collecting it. A second's grace either
+// side: a goal's commentary and its card arrive in the same handful of milliseconds, and nothing
+// older than that belongs on it.
+let lastBig = null;
+function applyFlav(){
+  if (!lastBig || !celeUntil) return;
+  if (performance.now() - lastBig.at > 1200) return;
+  let slot = celeCard.querySelector('.flav');
+  if (!slot) {
+    slot = document.createElement('div');
+    slot.className = 'flav';
+    celeCard.appendChild(slot);
+  }
+  slot.innerHTML = lastBig.html;
+}
+
 function showCard(colour, big, who, sub, ms, confetti, fire){
   celeCard.style.setProperty('--cele', colour);
   celeCard.innerHTML =
@@ -2000,6 +2021,7 @@ function showCard(colour, big, who, sub, ms, confetti, fire){
   celeEl.classList.add('on');
   // Infinity for a champion: the match is over and there is nothing to go back to.
   celeUntil = ms === Infinity ? Infinity : performance.now() + ms;
+  applyFlav();                     // a line that arrived just before the card still lands on it
 }
 function hideCard(){ celeEl.classList.remove('on'); confettiBox.innerHTML = ''; }
 
@@ -2724,12 +2746,32 @@ try { boot(); }
 catch (e) { fatal('Could not start:', e); }
 // and a frame that throws must not take the loop with it — one bad frame is a glitch, a dead
 // loop is a black screen
-let frameFailed = false;
+// ONE TRY AROUND THE WHOLE FRAME WAS THE REAL FAULT BEHIND THE STUCK EMBERS. If anything threw
+// partway through drawGL, everything after it was skipped — including stepEmbers — so embers
+// stopped ageing and sat on the pitch glowing. And because the report fires only once, there was
+// nothing on screen to say it had happened.
+//
+// The ageing runs in its own guard now, after the frame, so it cannot be skipped by a failure
+// somewhere else. Whatever else breaks, the fire still goes out.
+let frameFailed = false, ageFailed = false;
 const rawDraw = drawGL;
 drawGL = function(){
   try { rawDraw(); }
   catch (e) {
     if (!frameFailed) { frameFailed = true; fatal('Draw failed:', e); }
   }
+  try { retireStale(); }
+  catch (e) {
+    if (!ageFailed) { ageFailed = true; fatal('Ageing failed:', e); }
+  }
 };
+
+// A last sweep, independent of everything above: anything that has outlived any plausible life
+// goes away. Cheap, and it is the difference between one bad frame and a pitch that stays on
+// fire for the rest of the match.
+function retireStale(){
+  for (const e of embers) {
+    if (e.sp.visible && !(e.life < 1.4)) { e.sp.visible = false; e.sp.material.opacity = 0; }
+  }
+}
 </script>
