@@ -132,6 +132,43 @@ it moved code without changing what it did, and the harness could confirm that. 
 extraction cannot be safe in the same way, because half of it is new judgement. Every step
 wants seeds and a baseline, and "behaviour unchanged" is not available as a check.
 
+## Built: the framework, and one action
+
+**`ACTIONS` and `runAction(p)` are in**, with the shape John named:
+
+```
+can(p)     prerequisites — is this even available
+score(p)   how much it wants to happen, within its tier
+act(p)     do it, calling kick() or tryJump() as needed
+tier       SCRIPT actions are mandated; PLAYER actions are chosen
+```
+
+Actions run **before** instructions and **do not consume the frame** — a man who heads
+the ball is still somewhere and still wants to be somewhere next. That is the whole
+difference from the instruction list.
+
+### The header, and what calibration looks like
+
+The first action, and the one that was never real. Three measurements on six identical
+seeds:
+
+```
+reach 18, no lockout   0/6   aerial 95-97%   the ball never lands
+reach 18, 1.2s lockout 3/6   aerial 37%
+reach 11, 1.2s lockout 4/6   aerial 31-34%   baseline is 20%
+```
+
+**The first was a headed-ball loop** — one header sets the ball flying, the next man heads
+it again, forever. **An action that produces its own prerequisite needs a refractory
+period**, which is the same lesson as the woodwork lockout.
+
+**It is still not right.** 4/6 against a baseline 6/6, and aerial at 31–34% against 20%.
+The header wants either a tighter band, a cost, or a competing action to lose to — and
+that is a simulation question, which is where John said it belongs.
+
+**The framework is the deliverable and it works.** The action fires, is counted, is
+tiered, and can be tuned against seeds. That was not possible this morning.
+
 ## Order
 
 1. find the common shape, or establish that there isn't one
