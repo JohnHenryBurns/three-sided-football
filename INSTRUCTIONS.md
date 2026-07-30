@@ -148,6 +148,42 @@ goals mean from **25.0 to 19.8**, a 26% error with nothing in the result to say 
 If the discard count climbs during a sweep, something has been broken rather than tuned.
 That is the alarm; the filter is not a fix.
 
+## Design: the taker should wait
+
+**What happens now.** A throw-in is ready at `readyAt` — about 1.1s — and a corner at
+roughly 2.9s. Both are fixed. The taker arrives, the ball is live, and the men who were
+supposed to be making runs are still making them.
+
+**What it should be.** John: *"the average should be 2x the current pause or more,"* and
+crucially **"sometimes they can move quick."** Those are two different asks and both
+matter:
+
+**The average goes up.** A restart is the only moment either side gets to arrange itself,
+and rushing it wastes the one bit of choreography the game has. Roughly 2.5s for a throw,
+5–6s for a corner.
+
+**The variance goes up more.** A fixed longer pause is just a slower game. What makes a
+restart dramatic is *not knowing* — a quick throw that catches a defence still walking
+back is worth having precisely because the last one took six seconds. So: sample the
+wait, don't set it.
+
+**Shape it wants:**
+
+```
+throw-in   0.6s to 4s, mean ~2.5    quick ones are a real tactic
+corner     3s to 9s, mean ~5.5      nobody takes a quick corner
+free kick  unchanged                already has the wall-clear condition,
+                                    which is a better trigger than a timer
+```
+
+**And the wait should end early on a condition, not only on a clock** — when his side's
+runs have actually formed. That is the same shape as `wallClear()` for the free kick:
+*take it when it is ready, or when you have waited long enough.* A timer alone means the
+pause is dead time; a condition means it is anticipation.
+
+**Order:** wants the seeded harness, because "does a longer pause make the game better"
+is exactly the question a tournament answers and an opinion does not.
+
 ## Design: defending a throw-in and a corner
 
 **What exists.** *Denying a throw* puts a body in the lane between thrower and nearest
