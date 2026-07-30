@@ -453,7 +453,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=63"></script>
+<script src="engine.js?v=64"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2404,8 +2404,13 @@ ENGINE_HOOKS.crownChampion = (t, how) => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
     a.download = 'match-report-' + [0,1,2].map(m => TEAMS[m].short).join('-') + '.md';
+    // ATTACHED FIRST. Chrome refuses click() on an anchor that is not in the document, which is
+    // why nothing happened — no error, no download, just a button that did not work. The flat
+    // page gets away with it on desktop; a phone does not.
+    a.style.display = 'none';
+    document.body.appendChild(a);
     a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
   };
 
   say('<span class="goal">\u{1F3C6} ' + T.name + ' ARE CHAMPIONS OF THE HEX!</span>', true);
@@ -2667,6 +2672,7 @@ function loop(now){
       retargetTimer += step;
       if (retargetTimer > 6) { retargetTimer = 0; computeTargets(); }
       think(step); physics(step); colorCommentary();
+      if (typeof telFrame === 'function') telFrame();   // telemetry for the match report
 
       // ── STOPPAGE TIME AND FULL TIME ─────────────────────────────────────
       // This page had the resolveFullTime() call and neither of the two things around it: the

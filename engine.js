@@ -160,7 +160,7 @@ const shirtOf = n => SHIRT[n] || 0;
 
 function resetMatch(){
   players=[]; score=[0,0,0]; conceded=[0,0,0]; scored=[0,0,0]; clockSec=0; feed.length=0;
-  phase="regulation"; out=[false,false,false]; otGolden=false;
+  phase="regulation"; out=[false,false,false]; otGolden=false; champInfo=null; telReset();
   coached=[false,false,false]; coachTarget=[null,null,null]; activeCoach=null;
   for(let t=0;t<3;t++){
     teamATK[t]=TEAMS[t].id.atk; teamDEF[t]=TEAMS[t].id.def; teamAGG[t]=TEAMS[t].id.agg;
@@ -319,6 +319,11 @@ let matchStadium=STADIUMS[0];
 const feed=[];
 let players=[], ball, score, conceded, scored, targets, clockSec, running=true, speed=1;
 let phase="regulation", out=[false,false,false], otGolden=false, scoreMode="points";
+// MATCH STATE, not front-end state. buildMatchReport() reads this, and it was declared only in
+// index.html — so the report threw on any other page the moment it was asked for. That is the
+// second reason the 3D download did nothing: the button was blocked by Chrome AND the thing
+// behind it would have thrown anyway.
+let champInfo=null;
 let coached=[false,false,false], coachTarget=[null,null,null], activeCoach=null;
 // ---------- Tactics: six lab-validated dials, bundled into identities ----------
 const ATK_PRESETS={Balanced:{tempo:.5,risk:.5,direct:.5},TikiTaka:{tempo:.9,risk:.3,direct:.15},
@@ -1425,7 +1430,7 @@ function physics(dt){
       ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
       if(ball.flameShot&&best.role==="K") ENGINE_HOOKS.spawnNote(best.x,best.y-24,"🔥 extinguished!","#ffd166");
       ball.flameShot=false;
-      GKSTAT.claims=(GKSTAT.claims||0)+1;
+      GKSTAT.claims=(GKSTAT.claims||0)+1; TEL.keeperClaims++;
       if(clockSec-(GKSTAT.lastClaimAt||-9)<0.45
          && Math.hypot(ball.x-(GKSTAT.lastClaimX||-999),ball.y-(GKSTAT.lastClaimY||-999))<70)
         GKSTAT.rapid=(GKSTAT.rapid||0)+1;   // scramble signature: fast AND same spot
@@ -1638,7 +1643,8 @@ function goalScored(concederTeam){
       const champ=legit?scorerTeam:aliveTeams().find(t=>t!==concederTeam);
       if(legit&&scorer&&scorer.team===scorerTeam) goldenScorer=scorer;
       ENGINE_HOOKS.say(`<span class="goal">⚽ GOLDEN GOAL!</span> ${name??tm(champ)} settles it!`,true);
-      ENGINE_HOOKS.crownChampion(champ, legit?`golden goal by ${name}`:`golden goal — own-goal heartbreak for ${TEAMS[concederTeam].name}`);
+      champInfo={t:champ,how:legit?`golden goal by ${name}`:`golden goal — own-goal heartbreak for ${TEAMS[concederTeam].name}`};
+      ENGINE_HOOKS.crownChampion(champ, champInfo.how);
       return;
     }
     // three left: the conceder is eliminated, survivors play golden goal
@@ -1709,6 +1715,44 @@ function goalScored(concederTeam){
   ENGINE_HOOKS.flash(concederTeam); if(legit) ENGINE_HOOKS.flash(scorerTeam);
   pendingKickoff=concederTeam;   // kickoff happens after the celebration clears
 }
+// ── TELEMETRY ───────────────────────────────────────────────────────────────
+// Counters the match report prints, so a match played in a real browser can be compared against
+// what the headless harness claims. The harness has been wrong four times — about the clock, the
+// match length, the frame budget and the elimination rule — and each time the tell was a number
+// that did not match what somebody was watching.
+//
+// These are the numbers I could not verify from outside: how often the ball actually goes out,
+// how long a keeper really holds it, and how much of a match is nobody-in-reach dead time.
+const TEL = {
+  frames:0, loose:0, deadFrames:0, aerial:0,
+  throwIns:0, corners:0, goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0,
+  poss:[0,0,0], jumps:0, bigJumps:0, maxJump:0, lastX:null, lastY:null,
+  stall:0, stalls:0, worstStall:0, shots:0, blocked:0
+};
+function telReset(){
+  Object.assign(TEL, { frames:0, loose:0, deadFrames:0, aerial:0, throwIns:0, corners:0,
+    goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0, poss:[0,0,0], jumps:0,
+    bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
+    shots:0, blocked:0 });
+}
+/** Called once a frame by whichever front end is driving. Cheap: one hypot and a few adds. */
+function telFrame(){
+  TEL.frames++;
+  if(ball.owner){ TEL.ownedFrames++; TEL.poss[ball.owner.team]++; if(ball.owner.role==="K") TEL.keeperFrames++; }
+  else TEL.loose++;
+  if((ball.z||0)>4) TEL.aerial++;
+  let nearest=1e9;
+  for(const p of players){ if(p.out) continue;
+    const d=Math.hypot(p.x-ball.x,p.y-ball.y); if(d<nearest) nearest=d; }
+  if(!ball.owner && nearest>40){ TEL.deadFrames++; TEL.stall++; }
+  else { if(TEL.stall>30){ TEL.stalls++; if(TEL.stall>TEL.worstStall) TEL.worstStall=TEL.stall; } TEL.stall=0; }
+  if(TEL.lastX!==null){
+    const j=Math.hypot(ball.x-TEL.lastX, ball.y-TEL.lastY);
+    TEL.jumps++; if(j>25) TEL.bigJumps++; if(j>TEL.maxJump) TEL.maxJump=j;
+  }
+  TEL.lastX=ball.x; TEL.lastY=ball.y;
+}
+
 function buildMatchReport(){
   const totPoss=stats.poss.reduce((a,b)=>a+b,0)||1;
   const idOf=t=>`${teamATK[t]} · ${teamDEF[t]} · ${teamAGG[t]}`;
@@ -1729,6 +1773,27 @@ function buildMatchReport(){
       :`- ⚽ ${mm2}:${ss2} ${g.name} (${TEAMS[g.scorer].short}) v ${TEAMS[g.conceder].short}${g.ot?" (OT)":""}\n`;
   });
   md+=`\n## Full play-by-play\n\n`+matchLog.map(l=>`- ${l}`).join("\n")+"\n";
+  // ── TELEMETRY ─────────────────────────────────────────────────────────────
+  // For comparing a real browser match against the headless harness. If these disagree, the
+  // harness is wrong — it has been four times — and this is the section that says so.
+  const f=TEL.frames||1, ow=TEL.ownedFrames||1, secs=f/60;
+  md+=`\n## Telemetry\n\n`;
+  md+=`*A real match, measured while you watched it. Compare against \`node lab.js\`.*\n\n`;
+  md+=`| measure | this match | per 90 | real football |\n|---|---|---|---|\n`;
+  const p90=x=>Math.round(x*(5400/Math.max(1,secs)));
+  md+=`| throw-ins | ${TEL.throwIns} | ${p90(TEL.throwIns)} | ~40 |\n`;
+  md+=`| corners | ${TEL.corners} | ${p90(TEL.corners)} | ~10 |\n`;
+  md+=`| keeper claims | ${TEL.keeperClaims} | ${p90(TEL.keeperClaims)} | ~8 |\n`;
+  md+=`| ball loose | ${Math.round(100*TEL.loose/f)}% | | ~35% |\n`;
+  md+=`| ball airborne | ${Math.round(100*TEL.aerial/f)}% | | ~20% |\n`;
+  md+=`| in a keeper's gloves | ${Math.round(100*TEL.keeperFrames/ow)}% of owned | | ~5% |\n`;
+  md+=`| loose with nobody within 40 | ${Math.round(100*TEL.deadFrames/f)}% | | |\n`;
+  md+=`| stalls over 0.5s | ${TEL.stalls} | ${p90(TEL.stalls)} | |\n`;
+  md+=`| longest stall | ${(TEL.worstStall/60).toFixed(1)}s | | |\n`;
+  md+=`| ball jumps over 25 units | ${TEL.bigJumps} | ${p90(TEL.bigJumps)} | |\n`;
+  md+=`| largest single jump | ${Math.round(TEL.maxJump)} | | pitch is 680 across |\n`;
+  md+=`| possession | ${TEL.poss.map((x,i2)=>TEAMS[i2].short+" "+Math.round(100*x/ow)+"%").join(" \u00b7 ")} | | |\n`;
+  md+=`\n*${Math.round(secs)}s of play across ${f} frames.*\n`;
   return md;
 }
 // ── ELIMINATION IS A RULE, NOT A PICTURE ────────────────────────────────────
@@ -1757,7 +1822,7 @@ function resolveFullTime(){
   // rank by mode metric, tiebreak on goals scored (FIFA-style)
   const order=[0,1,2].sort(rankCmp);
   const leaders=[0,1,2].filter(t=>rankCmp(t,order[0])===0);
-  if(leaders.length===1){ ENGINE_HOOKS.crownChampion(order[0],"at full time"); return; }
+  if(leaders.length===1){ champInfo={t:order[0],how:"at full time"}; ENGINE_HOOKS.crownChampion(order[0],"at full time"); return; }
   // dead level at the top: golden-concession overtime
   phase="overtime";
   [0,1,2].filter(t=>!leaders.includes(t)).forEach(t=>{
@@ -2252,7 +2317,7 @@ function refreshNameColors(){
 // because each calls spawnNote, and a classifier looking for DOM-shaped names counted that as
 // touching the page. It is a hook. Found by a ninety-second headless run, where the first
 // sixty seconds had simply never put the ball out of play.
-function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)+1;
+function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)+1; TEL.throwIns++;
   if(clockSec-(GKSTAT.lastThrowAt||-99)<6&&Math.hypot(ex-(GKSTAT.lastThrowX||-999),ey-(GKSTAT.lastThrowY||-999))<70){
     GKSTAT.throwRepeat=(GKSTAT.throwRepeat||0)+1;
     GKSTAT.loopTrace=GKSTAT.loopTrace||[];
