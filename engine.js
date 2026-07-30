@@ -1010,6 +1010,15 @@ function think(dt){
       // A MAN WHO HAS JUST RESTARTED PLAY DOES NOT CHASE IT. He offers himself instead — back
       // onto the pitch, at passing distance, facing the ball. Without this the taker and the ball
       // travel together and the restart looks like a dribble.
+      // ── HE IS THE THROWER UNTIL SOMEBODY ELSE HAS IT ──────────────────────
+      // A timer was a guess at the thing that actually ends a restart, which is POSSESSION. He
+      // stops being the man who threw it the moment his throw is received — by anybody, his side
+      // or not — and at that instant he is just another player with a job.
+      //
+      // The clock stays as a floor, not a schedule: if nobody claims it he should not stand
+      // admiring his own throw forever, and a ball that runs loose out of play would otherwise
+      // leave him rooted.
+      if(p.noChase && ball.owner && ball.owner!==p) p.noChase=0;
       if(p.noChase && clockSec<p.noChase){
         const bx8=ball.x-p.x, by8=ball.y-p.y, bl8=Math.hypot(bx8,by8)||1;
         const inward={x:CX-p.x, y:CY-p.y}, il=Math.hypot(inward.x,inward.y)||1;
