@@ -462,7 +462,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=120"></script>
+<script src="engine.js?v=121"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1378,9 +1378,12 @@ function buildGround(){
   // seats; who is sitting on them is drawn each frame, because that changes.
   GOAL_EDGE.forEach((k, t) => {
     const e = EDGES[k], hw = e.len * GOAL_HALF;
-    const bx = e.mx - e.nx * 30 + e.ux * (hw + 62);
-    const by = e.my - e.ny * 30 + e.uy * (hw + 62);
-    benchAt[t] = { x: bx, y: by, ux: e.ux, uy: e.uy, nx: e.nx, ny: e.ny };
+    // FROM THE ENGINE. It is derived from the goal edge, which is engine geometry, and it was
+    // computed here and again in index.html — so a sent-off man walked to a different place
+    // depending on which page you had open.
+    const B = benchSpot(t);
+    const bx = B.x, by = B.y;
+    benchAt[t] = B;
     const dug = new THREE.Mesh(new THREE.BoxGeometry(78, 4, 26),
       new THREE.MeshLambertMaterial({ color: 0x1a2229 }));
     dug.position.set(bx, 44, by);           // raised: see the note on the seat below
@@ -1994,6 +1997,12 @@ let drawGL = function drawGL(){
       // player a real arc with real gravity, and his reach grows with it, so the renderer's only
       // job is to draw where he already is.
       p._jump = p.jz || 0;
+      // THE SULK. The engine decides how much; this draws it — a forward slump and a little lower
+      // in the seat, deepening over four seconds and then easing into sullen acceptance.
+      if (p.benched && p.sulk) {
+        b.g.rotation.x = p.sulk * 0.34;
+        b.g.position.y = -p.sulk * 2.2;
+      }
 
       // ── THE DIVE ────────────────────────────────────────────────────────
       // A keeper spends 0.6 of his burst to reach 23 instead of 17 for 1.2 seconds, and NEITHER
