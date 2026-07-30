@@ -1441,6 +1441,9 @@ function physics(dt){
       if(kd>AREA){
         const f=AREA/(kd||1);
         o.x=og.x+kx*f; o.y=og.y+ky*f;
+        // My own keeper-area clamp drags the ball 70 per cent of the way back to him, which
+        // for a keeper hauled in from 400 out is a jump of nearly 300. Counted now.
+        if(Math.hypot(ball.x-o.x,ball.y-o.y)*0.7>25) telPort('keeper hauled back into his area');
         ball.x=o.x+(ball.x-o.x)*0.3; ball.y=o.y+(ball.y-o.y)*0.3;
       }
     }
@@ -1966,6 +1969,7 @@ const TEL = {
   claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0,
+  unattributed:0, unattMax:0, portFrame:-1,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
 function telReset(){
@@ -1973,10 +1977,14 @@ function telReset(){
     goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0, poss:[0,0,0], jumps:0,
     claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
-    jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, deflected:0,
-  jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, woodwork:0, bars:0, posts:0, port:{},
+    jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0,
+    unattributed:0, unattMax:0, portFrame:-1,
+  unattributed:0, unattMax:0, portFrame:-1, deflected:0,
+  jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0,
+  unattributed:0, unattMax:0, portFrame:-1, woodwork:0, bars:0, posts:0, port:{},
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
-  jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, behindGoal:0, behindOwn:0, behindOther:0,
+  jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0,
+  unattributed:0, unattMax:0, portFrame:-1, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
 }
@@ -1989,7 +1997,22 @@ function telReset(){
 // Each place the engine moves the ball instantly now names itself, and the report prints the
 // tally. The goal is that every one of these becomes a journey instead — a player fetching it, or
 // the crowd throwing it back — and this is how we watch that number go to zero.
-function telPort(why){ TEL.port[why] = (TEL.port[why] || 0) + 1; }
+function telPort(why){ TEL.port[why] = (TEL.port[why] || 0) + 1; TEL.portFrame = TEL.frames; }
+
+// ── THE CATCH-ALL ───────────────────────────────────────────────────────────
+// Naming sources one at a time is a hunt, and a hunt ends when you stop finding things rather
+// than when there is nothing left. A real match said 37 jumps over 25 units against 23 that had
+// names — so 14 came from somewhere, and I could only have found them by reading every line that
+// touches ball.x and hoping.
+//
+// This closes it instead: any frame where the ball moved more than physics could account for AND
+// nothing declared itself gets counted as unattributed. If that number is zero, the list is
+// complete — not because I looked hard, but because nothing else can move the ball.
+function telUnattributed(dist2){
+  if(TEL.portFrame===TEL.frames) return;      // something owned up this frame
+  TEL.unattributed++;
+  if(dist2>TEL.unattMax) TEL.unattMax=dist2;
+}
 
 function telFrame(){
   TEL.frames++;
@@ -2011,7 +2034,8 @@ function telFrame(){
   else { if(TEL.stall>30){ TEL.stalls++; if(TEL.stall>TEL.worstStall) TEL.worstStall=TEL.stall; } TEL.stall=0; }
   if(TEL.lastX!==null){
     const j=Math.hypot(ball.x-TEL.lastX, ball.y-TEL.lastY);
-    TEL.jumps++; if(j>25) TEL.bigJumps++; if(j>TEL.maxJump) TEL.maxJump=j;
+    TEL.jumps++; if(j>25) { TEL.bigJumps++; telUnattributed(j); }
+    if(j>TEL.maxJump) TEL.maxJump=j;
   }
   TEL.lastX=ball.x; TEL.lastY=ball.y;
 }
@@ -2074,6 +2098,10 @@ function buildMatchReport(){
   // WHICH restart moved it, so the gold standard has something to aim at.
   const ports=Object.entries(TEL.port).sort((a2,b2)=>b2[1]-a2[1]);
   for(const [why,n2] of ports) md+=`| \u2014 ${why} | ${n2} | ${p90(n2)} | should be 0 |\n`;
+  // THE CHECK. If this is zero the list above is complete — not because I hunted well, but
+  // because nothing else can move the ball. If it is not zero, something is still unnamed.
+  md+=`| \u2014 **unattributed** | ${TEL.unattributed} | | must be 0, or the list is incomplete |\n`;
+  if(TEL.unattributed) md+=`| \u2014 largest unattributed | ${Math.round(TEL.unattMax)} | | |\n`;
   md+=`| largest single jump | ${Math.round(TEL.maxJump)} | | pitch is 680 across |\n`;
   md+=`| possession | ${TEL.poss.map((x,i2)=>TEAMS[i2].short+" "+Math.round(100*x/ow)+"%").join(" \u00b7 ")} | | |\n`;
   md+=`\n*${Math.round(secs)}s of play across ${f} frames.*\n`;
@@ -2654,9 +2682,12 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
 }
 function stageGoalKick(t){
   const gk=players.find(q=>q.team===t&&q.role==="K"&&!q.out);
-  if(!gk){ telPort('goal kick: no keeper'); telPort('goal kick'); ball.x=CX; ball.y=CY; return; }
+  if(!gk){ telPort('goal kick: no keeper'); ball.x=CX; ball.y=CY; return; }
   ball.owner=gk; ball.lastTouch=t; ball.lastKicker=gk;
-  ball.x=gk.x; ball.y=gk.y; ball.touchT=0.4;
+  // THE GOAL KICK. Untagged until now, which is a large part of the fourteen teleports the
+  // report could see but not name: the ball is lifted from wherever it went out and placed on
+  // the keeper, which from the far corner is most of the width of the pitch.
+  telPort('goal kick'); ball.x=gk.x; ball.y=gk.y; ball.touchT=0.4;
   ENGINE_HOOKS.spawnNote(gk.x,gk.y-24,"goal kick",TEAMS[t].color,TEAMS[t].accent);
   if(Math.random()<0.35) sayLogged(pick([
     `Behind for a goal kick — ${tm(t)} restart.`,
@@ -2675,7 +2706,8 @@ function stageCorner(ownerT,e,ex,ey){
     .sort((a,b)=>dist(a,vtx)-dist(b,vtx))[0];
   if(!taker){ stageGoalKick(ownerT); return; }
   const cx2=vtx.x+e.nx*14, cy2=vtx.y+e.ny*14;
-  ball.owner=null; ball.x=cx2; ball.y=cy2;
+  // THE CORNER'S OWN PLACEMENT, distinct from the taker walking to it below. Also untagged.
+  telPort('corner: ball to the flag'); ball.owner=null; ball.x=cx2; ball.y=cy2;
   pendingRestart={p:taker, x:cx2, y:cy2, team:att, cap:nowMs()+2400, readyAt:nowMs()+1250};
   cornerTaker=taker; cornerGoal=ownerT;
   restartHold=Math.max(restartHold,nowMs()+2900);   // corners earn a longer ceremony — let the box fill GKSTAT.cornerStage=(GKSTAT.cornerStage||0)+1;
