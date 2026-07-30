@@ -225,6 +225,12 @@ body.setup #bar{display:none}
    to the view, and the bar was getting crowded enough that everything read as equally important.
    It also stays reachable when the transport hides under the setup screen. */
 header #reset{font-size:.78rem;padding:.28rem .55rem;margin-left:.1rem}
+
+/* Both header buttons are compact — they are match-and-window controls, not the transport, and
+   sizing them like the transport would say they were the same kind of thing. */
+header #reset,header #full{font-size:.78rem;padding:.28rem .5rem}
+header #full{padding:.3rem .42rem}
+header #full.on{border-color:var(--hot);color:var(--hot)}
 </style>
 
 <header>
@@ -234,6 +240,8 @@ header #reset{font-size:.78rem;padding:.28rem .55rem;margin-left:.1rem}
   <div class="scores" id="scores"></div>
   <span id="clock">0:00</span>
   <button id="reset" title="New match">Kick off</button>
+  <button id="full" title="Fullscreen" aria-label="Enter fullscreen">
+    <svg viewBox="0 0 24 24" class="ico"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
 </header>
 
 <div id="stage">
@@ -294,7 +302,6 @@ header #reset{font-size:.78rem;padding:.28rem .55rem;margin-left:.1rem}
   <button id="zoomIn" title="Zoom in" aria-label="Zoom in">
     <svg viewBox="0 0 24 24" class="ico"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M7.5 10.5h6M10.5 7.5v6M15.5 15.5L21 21"/></svg></button>
   <button id="speed">1&times;</button>
-  <button id="full">Full</button>
   <span class="hint">drag to orbit · pinch or wheel to zoom</span>
 </div>
 
@@ -302,7 +309,7 @@ header #reset{font-size:.78rem;padding:.28rem .55rem;margin-left:.1rem}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=16"></script>
+<script src="engine.js?v=17"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1382,15 +1389,26 @@ document.getElementById('speed').addEventListener('click', e => {
 // Fullscreen. On the STAGE rather than the document, so the pitch fills the screen and the
 // controls come with it — a fullscreen page that leaves its buttons behind is a trap on a phone,
 // where there is no obvious way back.
-document.getElementById('full').addEventListener('click', async e => {
+// The icon shows the way OUT, not the state you are in: arrows pointing outward mean "this will
+// expand", inward mean "this will shrink". A button that shows its current state leaves you
+// working out what pressing it does.
+const EXPAND_D = 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5';
+const SHRINK_D = 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5';
+function setFullIcon(){
+  const b = document.getElementById('full');
+  const inFs = !!document.fullscreenElement;
+  b.querySelector('path').setAttribute('d', inFs ? SHRINK_D : EXPAND_D);
+  b.setAttribute('aria-label', inFs ? 'Exit fullscreen' : 'Enter fullscreen');
+  b.classList.toggle('on', inFs);
+}
+document.getElementById('full').addEventListener('click', async () => {
   try {
     if (document.fullscreenElement) await document.exitFullscreen();
     else await document.documentElement.requestFullscreen();
-    e.target.classList.toggle('on', !!document.fullscreenElement);
-  } catch (err) { /* refused, or unsupported: leave the button as it was */ }
+  } catch (err) { /* refused, or unsupported: the icon is corrected by the event below */ }
 });
 document.addEventListener('fullscreenchange', () => {
-  document.getElementById('full').classList.toggle('on', !!document.fullscreenElement);
+  setFullIcon();
   resize();                      // the canvas is sized from its box, and the box just changed
 });
 
@@ -1518,6 +1536,7 @@ function boot(){
   buildBodies();
   renderTeamSlots();
   setPlayIcon();
+  setFullIcon();
   document.body.classList.add('setup');
   resize();
   // The match is built but held: the menu is up and `running` is false, so the first frame draws
