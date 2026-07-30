@@ -151,13 +151,27 @@ with the ball held and one with nobody chasing.
 seen a noisy sample, and argued about whether it helped. The A/B is on the same six
 matches and the answer is unambiguous.
 
-**Why it resists is the open question.** The throw-in fetch works and this one does not,
-and the difference is probably that a keeper who leaves his line to fetch is out of
-position for everything else — his area clamp, his sweep, his distribution all assume he
-is near his goal.
+**Two fetch designs tried, both worse, on identical seeds:**
 
-**So the kick-off and the goal kick are the last two teleports**, and the goal kick needs
-its own answer rather than the throw-in's.
+```
+baseline (teleport)          6/6 usable
+keeper walks out to fetch    3/6      two held, one nobody-chasing
+a defender fetches instead   1/6      five nobody-chasing, loose 78-96%
+```
+
+The second was the fix for the first — keep the keeper on his line, send the nearest
+outfielder — **and it was much worse.** Loose at 94-96% means the ball sits and nobody
+goes for it at all, so the restart never completes.
+
+**What that says:** the fault is not *which player* fetches. It is that `pendingRestart`
+with a non-thrower taker does not complete for a goal kick — a throw-in ends when the
+thrower reaches his mark and throws, and there is no equivalent step here. The fetcher
+arrives, puts the ball down, and nothing takes it.
+
+**So the goal kick needs the completion path examined, not another fetcher.** Two
+attempts at the wrong layer is enough.
+
+**The kick-off and the goal kick remain the last two teleports.**
 
 ## The degenerate match
 
