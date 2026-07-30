@@ -181,6 +181,26 @@ button.on{border-color:var(--hot);color:var(--hot)}
 .tpName{font-size:1rem;font-weight:600}
 .tpId{font-family:var(--mono);font-size:.66rem;color:var(--ink-dim);letter-spacing:.04em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Icons on the transport, because Pause/Play is the one control whose state you read at a
+   glance and a word makes you read it. 22px so it matches the cap height beside it. */
+.ico{width:1.05rem;height:1.05rem;fill:none;stroke:currentColor;stroke-width:2.2;
+  stroke-linecap:round;stroke-linejoin:round;display:block}
+
+/* The camera sheet, same shape as the team picker — one pattern for "choose one of these". */
+#cm{position:absolute;inset:0;z-index:9;display:none;background:rgba(6,10,8,.94);padding:1rem}
+#cm.on{display:block}
+#cmCard{max-width:22rem;margin:0 auto;padding:.9rem 1rem 1rem;
+  background:var(--panel);border:1px solid var(--panel-edge);border-radius:14px}
+#cmCard .big2{font-size:1.05rem;font-weight:600;margin-bottom:.6rem;color:var(--hot)}
+.cmOpt{display:flex;gap:.6rem;align-items:center;padding:.5rem .6rem;margin-top:.35rem;
+  border:2px solid var(--panel-edge);border-radius:10px;cursor:pointer;background:var(--bg)}
+.cmOpt:hover{border-color:var(--ink)}
+.cmOpt.on{border-color:var(--hot)}
+.cmGlyph{font-size:1.25rem;width:2rem;text-align:center;flex:0 0 auto}
+.cmBody{display:flex;flex-direction:column;min-width:0}
+.cmName{font-size:.98rem;font-weight:600}
+.cmWhat{font-family:var(--mono);font-size:.64rem;color:var(--ink-dim);letter-spacing:.04em}
 </style>
 
 <header>
@@ -232,14 +252,16 @@ button.on{border-color:var(--hot);color:var(--hot)}
     </div>
   </div>
   <div id="tp"><div id="tpCard"></div></div>
+  <div id="cm"><div id="cmCard"></div></div>
   <div id="cele"><div id="celeCard"></div><div id="confetti"></div></div>
   <div id="feed"></div>
 </div>
 
 <div id="bar">
-  <button id="play">Pause</button>
+  <button id="play" title="Pause / play" aria-label="Pause">
+    <svg viewBox="0 0 24 24" class="ico"><path d="M8 5v14M16 5v14"/></svg></button>
   <button id="reset">Kick off</button>
-  <button id="follow" class="on">Follow ball</button>
+  <button id="cam" class="on" title="Camera">Follow ball</button>
   <button id="speed">1&times;</button>
   <button id="full">Full</button>
   <span class="hint">drag to orbit · pinch or wheel to zoom</span>
@@ -249,7 +271,7 @@ button.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=12"></script>
+<script src="engine.js?v=13"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1169,7 +1191,7 @@ function startMatch(){
   renderScore();
   buildBodies();          // the kits change with the teams, so the bodies are rebuilt
   running = true;
-  document.getElementById('play').textContent = 'Pause';
+  setPlayIcon();
   if (oobRule) say('Touchlines in play \u2014 throw-ins, goal kicks, and corners.');
 }
 document.getElementById('btnStart').addEventListener('click', startMatch);
@@ -1216,10 +1238,13 @@ function loop(now){
   drawGL();
 }
 
-document.getElementById('play').addEventListener('click', e => {
-  running = !running;
-  e.target.textContent = running ? 'Pause' : 'Play';
-});
+const PAUSE_D = 'M8 5v14M16 5v14', PLAY_D = 'M7 4l13 8-13 8z';
+function setPlayIcon(){
+  const b = document.getElementById('play');
+  b.querySelector('path').setAttribute('d', running ? PAUSE_D : PLAY_D);
+  b.setAttribute('aria-label', running ? 'Pause' : 'Play');
+}
+document.getElementById('play').addEventListener('click', () => { running = !running; setPlayIcon(); });
 // Reset opens the menu rather than restarting the same match: a reset is the moment you might
 // want different teams or a different length, and the flat page treats it the same way.
 document.getElementById('reset').addEventListener('click', () => {
@@ -1252,11 +1277,70 @@ document.addEventListener('fullscreenchange', () => {
   resize();                      // the canvas is sized from its box, and the box just changed
 });
 
-document.getElementById('follow').addEventListener('click', e => {
-  follow = !follow;
-  e.target.classList.toggle('on', follow);
-  if (!follow) { look.set(CX, 0, CY); placeCam(); }
-});
+
+// ── CAMERAS ─────────────────────────────────────────────────────────────────
+// Six views. `follow` says whether the look-at point chases the ball; the rest is where the
+// camera sits relative to it.
+//
+// Three-sided football is the reason this needs more than one. There is no attacking direction,
+// so no single angle is right for everything: overhead shows the shape of a three-way press and
+// nothing about height, a low goal camera shows a shot arriving and nothing about what is
+// happening behind it. Offering both is cheaper than choosing wrong.
+const CAMS = [
+  { id:'follow',  glyph:'\u26BD', name:'Follow ball',
+    what:'three-quarter, chases the ball',      az:-Math.PI/2, el:0.52, rad:1250, follow:true },
+  { id:'broad',   glyph:'\u{1F4FA}', name:'Broadcast',
+    what:'high and fixed \u00b7 the whole hex',  az:-Math.PI/2, el:0.62, rad:1750, follow:false },
+  { id:'over',    glyph:'\u{1F53D}', name:'Overhead',
+    what:'straight down \u00b7 shape and space', az:-Math.PI/2, el:1.42, rad:1500, follow:false },
+  { id:'low',     glyph:'\u{1F3DF}', name:'Pitchside',
+    what:'low \u00b7 height and pace',           az:-Math.PI/2, el:0.16, rad:900,  follow:true },
+  { id:'goal',    glyph:'\u{1F945}', name:'Behind the goal',
+    what:'from one end \u00b7 shots arriving',   az:Math.PI/2,  el:0.34, rad:1050, follow:false },
+  { id:'free',    glyph:'\u{1F504}', name:'Free look',
+    what:'drag and pinch \u00b7 stays put',      az:null,       el:null, rad:null, follow:false },
+];
+let camId = 'follow';
+const cmEl = document.getElementById('cm'), cmCard = document.getElementById('cmCard');
+const camBtn = document.getElementById('cam');
+
+function useCam(id){
+  const C = CAMS.find(c => c.id === id) || CAMS[0];
+  camId = C.id;
+  follow = C.follow;
+  // `free` keeps whatever the last drag left, which is the point of it — everything else snaps
+  // to its own angle so choosing a view actually changes what you see.
+  if (C.az !== null) { az = C.az; el = C.el; rad = C.rad; }
+  if (!C.follow) look.set(CX, 0, CY);
+  // Behind the goal looks at that goal's mouth rather than the middle, or it is just Broadcast
+  // from the other side.
+  if (C.id === 'goal') { const e = EDGES[GOAL_EDGE[0]]; look.set(e.mx, 0, e.my); }
+  placeCam();
+  camBtn.textContent = C.name;
+  camBtn.classList.toggle('on', C.id !== 'free');
+}
+
+function openCams(){
+  cmCard.innerHTML = '<div class="big2">Camera</div>' + CAMS.map(C =>
+    '<div class="cmOpt' + (C.id === camId ? ' on' : '') + '" data-id="' + C.id + '">' +
+    '<span class="cmGlyph">' + C.glyph + '</span><div class="cmBody">' +
+    '<span class="cmName">' + C.name + '</span>' +
+    '<span class="cmWhat">' + C.what + '</span></div></div>').join('');
+  cmCard.querySelectorAll('.cmOpt').forEach(el2 => el2.addEventListener('click', () => {
+    useCam(el2.dataset.id);
+    cmEl.classList.remove('on');
+  }));
+  cmEl.classList.add('on');
+}
+camBtn.addEventListener('click', openCams);
+cmEl.addEventListener('click', e => { if (e.target === cmEl) cmEl.classList.remove('on'); });
+
+// Dragging is always allowed, and it drops you into Free look — a camera you can move is one you
+// have taken over, and pretending you are still on Broadcast afterwards is a lie the button
+// would be telling.
+function wentFree(){ if (camId !== 'free') { camId = 'free'; follow = false;
+  camBtn.textContent = 'Free look'; camBtn.classList.remove('on'); } }
+
 
 // drag to orbit, wheel or pinch to pull back
 let drag = null, pinch = 0;
@@ -1264,6 +1348,7 @@ cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY };
 cv.addEventListener('pointerup',   () => { drag = null; });
 cv.addEventListener('pointermove', e => {
   if (!drag) return;
+  wentFree();
   az += (e.clientX - drag.x) * 0.006;
   el = Math.max(0.16, Math.min(1.42, el + (e.clientY - drag.y) * 0.005));
   drag = { x: e.clientX, y: e.clientY };
@@ -1299,6 +1384,7 @@ function boot(){
   renderScore();
   buildBodies();
   renderTeamSlots();
+  setPlayIcon();
   resize();
   // The match is built but held: the menu is up and `running` is false, so the first frame draws
   // a pitch with players standing on it behind the card, which is a better backdrop than black.
