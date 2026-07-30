@@ -453,7 +453,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=65"></script>
+<script src="engine.js?v=66"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2049,7 +2049,39 @@ let drawGL = function drawGL(){
   // THE FLIGHT INTO THE NET, if one is running. It overrides the engine's frozen position for
   // the length of a celebration and is dropped the moment the ball is live again — so nothing it
   // does can survive into play.
-  if (netFly && !celeUntil) netFly = null;
+  // ── THE BALL COMES BACK ───────────────────────────────────────────────────
+  // Instead of teleporting to the centre spot, somebody fetches it. The ball hits the net, and
+  // when the card clears a player boots it back up the pitch — a big one, the way it is done —
+  // and it runs out toward the middle while the countdown plays.
+  //
+  // Render-only and bounded by the countdown, so it cannot leak into play: whatever it is doing,
+  // the engine's own position takes over the moment the ball is live.
+  if (netFly && !celeUntil && !netFly.returning) {
+    // the card has just cleared: turn it round and send it back
+    const dx = CX - netFly.x, dz = CY - netFly.y, d = Math.hypot(dx, dz) || 1;
+    netFly.returning = true;
+    netFly.dead = false;
+    netFly.vx = dx/d; netFly.vy = dz/d;
+    netFly.speed = d / (60 * 1.6);      // arrives near the middle in about 1.6 seconds
+    netFly.z = 0;
+    netFly.arc = d;                     // remember the distance so it can rise and fall
+    netFly.travelled = 0;
+  }
+  if (netFly && netFly.returning) {
+    const f = netFly;
+    if (!f.dead) {
+      f.x += f.vx * f.speed;
+      f.y += f.vy * f.speed;
+      f.travelled += f.speed;
+      // A big ol' kick: up and down over the run, so it reads as struck rather than slid.
+      const t2 = Math.min(1, f.travelled / (f.arc || 1));
+      f.z = Math.sin(t2 * Math.PI) * 42;
+      if (t2 >= 1) { f.dead = true; f.z = 0; f.vx = f.vy = 0; }
+    }
+    // and it is dropped the moment the ball is live again, whoever wins the race
+    if (running && performance.now() >= resumeAt) netFly = null;
+  }
+  if (netFly && !celeUntil && netFly.returning === undefined) netFly = null;
   if (netFly && !netFly.dead) {
     const f = netFly;
     f.x += f.vx * f.speed;
