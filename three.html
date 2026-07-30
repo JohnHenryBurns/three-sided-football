@@ -429,6 +429,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
         <div class="chk"><label for="setOob" title="Throw-ins, goal kicks, corners, keeper parries">↩️ Out of bounds</label><input id="setOob" type="checkbox" checked></div>
         <div class="chk"><label for="setVoice" title="Spoken play-by-play, using your device's own voice">🎙️ Announcer</label><input id="setVoice" type="checkbox" checked></div>
         <div class="chk"><label for="setCaps" title="The announcer's words over the pitch">💬 Captions</label><input id="setCaps" type="checkbox" checked></div>
+        <div class="chk"><label for="setJobs" title="What each player is being told to do, over his head">🔍 Show instructions</label><input id="setJobs" type="checkbox"></div>
       </div>
 
       <button id="btnStart">Kick off</button>
@@ -461,7 +462,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=97"></script>
+<script src="engine.js?v=98"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2715,6 +2716,9 @@ function startMatch(){
   zoneRule   = document.getElementById('setZone').checked;
   oobRule    = document.getElementById('setOob').checked;
   capsOn     = document.getElementById('setCaps').checked;
+  // The debug overlay is a match setting now rather than a key nobody would find. D still
+  // toggles it mid-match, because that is when you actually want it on and off.
+  showJobs   = document.getElementById('setJobs').checked;
   // Speech has to be started by a gesture on mobile, and this click IS one — asking for it here
   // rather than at load is the difference between a working announcer and a silent one.
   sayAloud   = speechOK && document.getElementById('setVoice').checked;

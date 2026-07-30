@@ -313,6 +313,49 @@ So: name from the targets, and where a target is ambiguous leave it blank rather
 guess. A confidently wrong label is worse than a missing one, especially in a system whose
 whole purpose is to tell instructions apart.
 
+## Should each instruction be its own function?
+
+**Yes — and the commitment system practically requires it.**
+
+To charge a cost for switching, you have to compare the instruction a player is *on*
+against the one he *might take*. A cascade cannot do that: an early return is not a
+value, it is a position in a list, and you cannot weigh a position against another
+position. Instructions have to become things before they can be compared.
+
+**The shape that works:**
+
+```
+  instruction(p, world) -> null            not applicable to him right now
+                        -> { score, act }  applicable, this is how much it wants him,
+                                           and here is what he does
+```
+
+Then `think()` becomes: score them all, add the commitment bonus to whichever he is
+already on, take the best, run its `act`. **That is the whole system**, and the degree
+factor is one number in one line.
+
+**What the cascade encodes that a list must not lose:**
+
+**Order is priority.** Fifty-three early returns in a sequence are a preference ranking
+written as control flow. Extracting them to functions throws that away unless the scores
+reproduce it deliberately — so the first pass should give each instruction a base score
+matching its old position, and only then start tuning.
+
+**A return means "I acted, stop."** Some branches steer, some kick, some do nothing but
+prevent a later branch from firing. That third kind is invisible as a function unless it
+is written as a real instruction — *stand still, deliberately* — which it is.
+
+**How to do it without a big bang:**
+
+Not all fifty-three. Take the ones already named by `job()` — nine — and give them the
+new shape, with the cascade kept underneath as the default branch. A player picks from
+the extracted instructions if any apply, and falls through to the old cascade if none
+do. **Both systems run side by side until the list is long enough to delete the
+fallback.**
+
+That way the refactor is testable at every step, `?jobs` shows which system is driving
+each player, and nothing has to work first time.
+
 ## The order
 
 1. name the branches from their steer targets
