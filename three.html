@@ -410,7 +410,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=38"></script>
+<script src="engine.js?v=39"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1225,13 +1225,29 @@ function emit(p, pal, hard){
   e.life = 0;
   e.max = 0.34 + Math.random() * 0.36;   // brief: a flame, not a cloud
   e.size = (hard ? 9 : 6.5) + Math.random() * 4.5;
-  e.pal = pal;
+  e.pal = heatRamp(pal);
+  // A BLAST IS MANY TEMPERATURES AT ONCE. Each ember starts a little way into the ramp rather
+  // than all at the same white — so at any instant the mass shows white cores, yellow bodies and
+  // red edges together, which is what makes fire look like heat rather than a coloured cloud.
+  e.t0 = Math.random() * 0.32;
   e.sp.visible = true;
 }
 
-/** Age every live ember. Colour runs the palette from its hot end to its cool one over the
- *  particle's life, so a rainbow team burns through all six and everybody else through three —
- *  the easter egg gets MORE visible here, not less. */
+// ── HEAT ────────────────────────────────────────────────────────────────────
+// The palette ran the wrong way. FLAME3 is red, orange, pale yellow — and an ember spent its
+// LONGEST, LARGEST, most spread-out phase on the last entry, so the thing you actually saw was a
+// big soft yellow blob, additive, over green grass. Toxic gas, exactly as described.
+//
+// Real fire cools the other way: white-hot at the core, then yellow, orange, red, and dark as it
+// dies. So the ramp is built hot-to-cold with the team's palette THROUGH THE MIDDLE of it —
+// which keeps the easter egg (a rainbow side still burns rainbow) while making everyone read as
+// heat rather than gas.
+const WHITE_HOT = '#fff4e2', DYING = '#6b0f00';
+function heatRamp(pal){
+  return [WHITE_HOT].concat(pal.slice().reverse(), [DYING]);
+}
+
+/** Age every live ember, cooling it along its own heat ramp. */
 const _c1 = new THREE.Color(), _c2 = new THREE.Color();
 function stepEmbers(dt){
   for (const e of embers) {
@@ -1239,13 +1255,14 @@ function stepEmbers(dt){
     e.life += dt;
     const t = e.life / e.max;
     if (t >= 1) { e.sp.visible = false; e.sp.material.opacity = 0; continue; }
+    const ct = Math.min(1, (e.t0 || 0) + t * (1 - (e.t0 || 0)));   // where it sits on the ramp
     e.sp.position.x += e.vx;
     e.sp.position.z += e.vz;
     e.sp.position.y += e.vy;
     e.vy *= 0.94;                       // rises, slows, hangs
     e.vx *= 0.93; e.vz *= 0.93;
     // through the palette, hot to cool
-    const n = e.pal.length, f = t * (n - 1);
+    const n = e.pal.length, f = ct * (n - 1);
     const i = Math.min(n - 2, Math.floor(f));
     _c1.set(e.pal[i]); _c2.set(e.pal[i + 1]);
     e.sp.material.color.copy(_c1).lerp(_c2, f - i);
@@ -1363,9 +1380,12 @@ function buildBodies(){
       const tongue = new THREE.Mesh(
         new THREE.ConeGeometry(5.4 - f * 1.1, len, 7),
         new THREE.MeshBasicMaterial({
-          color: new THREE.Color(pal[f % pal.length]),
+          // The CORE, so it takes the hot end of the ramp — the innermost tongue nearly white,
+          // the outer ones cooling. It was indexing the raw palette, which put the palest colour
+          // on the longest tongue and made the middle of a fire the coolest part of it.
+          color: new THREE.Color(heatRamp(pal)[f]),
           transparent: true, opacity: 0, depthWrite: false,
-          blending: THREE.AdditiveBlending }));   // the hot core the embers stream out of
+          blending: THREE.AdditiveBlending }));
       tongue.rotation.order = 'YZX';
       tongue.rotation.z = Math.PI/2;                  // lay it along -X, pointing back
       // base ON the surface, tip trailing away: half the length beyond the shell
