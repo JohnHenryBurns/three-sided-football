@@ -271,7 +271,7 @@ button.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=13"></script>
+<script src="engine.js?v=14"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -525,7 +525,7 @@ ENGINE_HOOKS.flamePop = q => {
 function drawPolish(now){
   // possession
   if (ball.owner) {
-    haloGL.position.set(ball.x, 1.1, ball.y);
+    haloGL.position.set(ball.x, 1.1, ball.y);      // the halo stays on the grass, held or not
     haloGL.material.color.set(TEAMS[ball.owner.team].color);
     haloGL.material.opacity = 0.85;
   } else haloGL.material.opacity = 0;
@@ -633,9 +633,13 @@ function buildGround(){
     const edgeMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(bg).multiplyScalar(0.72) });
     const board = new THREE.Mesh(
       new THREE.BoxGeometry(e.len * 0.92, 26, 3.2),
+      // +Z carries the MIRRORED copy and -Z the plain one, which is the opposite of what I had.
+      // The board is placed outside the touchline and turned to face the pitch, so its -Z face
+      // is the one a viewer inside the ground sees; +Z faces out at the stands. Lettering them
+      // the other way round is why the text read backwards from the non-field side.
       [edgeMat, edgeMat, edgeMat, edgeMat,
-       new THREE.MeshLambertMaterial({ map: boardTexture(text, bg, fg, false) }),
-       new THREE.MeshLambertMaterial({ map: boardTexture(text, bg, fg, true) })]);
+       new THREE.MeshLambertMaterial({ map: boardTexture(text, bg, fg, true) }),
+       new THREE.MeshLambertMaterial({ map: boardTexture(text, bg, fg, false) })]);
     board.position.set(e.mx - e.nx * 34, 13, e.my - e.ny * 34);
     // ORDER MATTERS. three.js applies Euler angles XYZ by default, so setting .x then .y leans
     // the board in WORLD space and only then swings it to face the pitch — which points the lean
@@ -963,7 +967,20 @@ let drawGL = function drawGL(){
     b.pip.visible = !!(p.redCard || p.yellows > 0);
     if (b.pip.visible) b.pip.material.color.set(p.redCard ? 0xe11d2e : 0xffd166);
   });
-  const z = Math.max(0, ball.z || 0);
+  // A HELD BALL IS OFF THE GROUND. The engine keeps ball.z at zero while a keeper has it and
+  // while a throw is waiting, because in two dimensions height is only ever used for flight — so
+  // in 3D the ball sat on the grass at the keeper's feet with him standing over it, and a
+  // thrower held nothing.
+  //
+  // Read from the engine's own predicates rather than guessed at: gkHolding() is true while the
+  // keeper's hold clock runs, and throwPending is the player who must find a teammate.
+  const heldByKeeper = (typeof gkHolding === 'function') && gkHolding();
+  const heldForThrow = (typeof throwPending !== 'undefined') && throwPending &&
+                       ball.owner === throwPending;
+  const held = heldByKeeper ? H_P * 0.62      // chest, hugged
+             : heldForThrow ? H_P + 9         // above the head, two-handed
+             : 0;
+  const z = Math.max(0, (ball.z || 0), held);
   // ROLLING. A ball travelling along the ground turns about the axis perpendicular to its
   // heading, through an angle of distance/radius — that is what rolling IS, and getting it from
   // the actual velocity rather than a fixed spin means it slows and stops when the ball does.
@@ -974,7 +991,8 @@ let drawGL = function drawGL(){
   {
     const vx = ball.vx || 0, vy = ball.vy || 0;
     const sp = Math.hypot(vx, vy);
-    if (sp > 0.02) {
+    if (sp > 0.02 && !held) {          // a ball in two hands does not spin
+
       const axis = new THREE.Vector3(vy, 0, -vx).normalize();   // perpendicular, in the ground
       // Damped to 0.6 of the true rate, deliberately. A ball of radius 9 moving at 14 units a
       // step turns 1.55 radians a frame, which at 60fps is nine rotations a second — past the
