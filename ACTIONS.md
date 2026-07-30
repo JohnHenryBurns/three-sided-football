@@ -408,6 +408,40 @@ a seed, rather than a crash whose cause is somewhere in 495 lines.
 **Next:** instrument which actions fire during a flipped match and which never do. The
 ones that never fire are the ones whose `can()` is wrong.
 
+## The instrumentation, and what it says
+
+One flipped match, 300 seconds, 15 players — so roughly **270,000 player-frames**:
+
+```
+fired   corner-swing 2   gk-punt 1   gk-clear 1   secure it 2
+        tackle 1   pass 3   shield it 1
+NEVER   throw-in  penalty  free-kick  gk-roll  dive
+        gk-hopeful  pass-safe  shot  shot-power  head it
+
+play on: 142
+```
+
+**153 total action opportunities in a whole match.** That is the finding, and it is not
+about any individual `can()`.
+
+`runAction` is reached by every player every frame, and for almost all of them nothing
+applies — correctly, since they do not have the ball. **But the ball's owner should have
+several actions available on nearly every frame he holds it**, and 153 says he almost
+never does.
+
+**So the fault is upstream of the conditions.** Either `runAction` is not being reached
+for the owner, or the owner exists for far fewer frames than expected. The 84% loose
+figure points at the second: **if nobody holds the ball, no ball-owning action can fire,
+and every one of the ten looks broken when only one thing is.**
+
+**That reframes the next step.** Not "check ten `can()` conditions" but "find out why
+possession barely exists in a flipped match" — one question instead of ten, and the
+answer probably restores most of the ten at once.
+
+**Prime suspect:** the claim path. `if(owner && ball.owner===owner)` guards a block with
+no `else`, so nothing there handles a loose ball — but if claiming happens somewhere that
+depends on that block having run, guarding it would starve possession exactly this way.
+
 ## Order
 
 1. find the common shape, or establish that there isn't one
