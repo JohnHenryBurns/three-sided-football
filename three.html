@@ -119,8 +119,10 @@ button.on{border-color:var(--hot);color:var(--hot)}
    Same options as the flat page, minus the voice engine — this page has no
    announcer, so offering a choice of throat would be a control that does
    nothing, which is worse than not having it. */
+/* The card scrolls INSIDE the overlay and the overlay stops at the stage, so Kick off cannot
+   end up underneath the control bar the way it did. */
 #setup{position:absolute;inset:0;z-index:8;display:none;overflow:auto;
-  background:rgba(6,10,8,.93);padding:1rem}
+  background:rgba(6,10,8,.93);padding:.7rem .7rem 1.2rem;-webkit-overflow-scrolling:touch}
 #setup.on{display:block}
 .setupCard{max-width:24rem;margin:0 auto;padding:.85rem 1rem 1.05rem;
   background:var(--panel);border:1px solid var(--panel-edge);border-radius:14px}
@@ -159,8 +161,10 @@ button.on{border-color:var(--hot);color:var(--hot)}
    the accent under each, a die for a random matchup, and a sheet to choose from.
    A dropdown lists names; these show you the kit, which is what you recognise a
    side by on the pitch. */
-#teamSlots{display:flex;gap:.4rem;align-items:stretch}
-.slotBtn{flex:1;font-family:var(--sans);font-size:1.05rem;font-weight:700;letter-spacing:.04em;
+/* flex:1 so it fills the row. Without it the slot chips had no width to share and each dropped
+   onto its own line — which is the column of buttons in the screenshot, not three side by side. */
+#teamSlots{flex:1;min-width:0;display:flex;gap:.4rem;align-items:stretch}
+.slotBtn{flex:1;min-width:0;font-family:var(--sans);font-size:1.05rem;font-weight:700;letter-spacing:.04em;
   padding:.5rem .2rem;background:var(--bg);border:2px solid var(--panel-edge);border-radius:9px;
   cursor:pointer}
 .diceBtn{flex:0 0 auto;font-size:1.1rem;padding:.5rem .6rem;background:var(--bg);
@@ -201,6 +205,21 @@ button.on{border-color:var(--hot);color:var(--hot)}
 .cmBody{display:flex;flex-direction:column;min-width:0}
 .cmName{font-size:.98rem;font-weight:600}
 .cmWhat{font-family:var(--mono);font-size:.64rem;color:var(--ink-dim);letter-spacing:.04em}
+
+/* THE TRANSPORT HIDES WHILE THE MENU IS UP. Pause, camera and speed all act on a match that has
+   not started, and a row of live-looking controls under a setup screen invites you to press one
+   and wonder why nothing happens. */
+body.setup #bar{display:none}
+
+/* Captions sit above the feed, in the middle, the way a broadcast puts them — big enough to read
+   from arm's length and gone before the next line arrives. */
+#caption{position:absolute;left:0;right:0;bottom:34%;z-index:5;text-align:center;
+  padding:0 1.2rem;pointer-events:none;opacity:0;transition:opacity .18s}
+#caption.on{opacity:1}
+#caption:empty{display:none}
+#caption{font-size:1.05rem;font-weight:600;line-height:1.3;
+  text-shadow:0 2px 6px rgba(0,0,0,.95),0 0 14px rgba(0,0,0,.8)}
+@media (max-width:560px){ #caption{font-size:.98rem;bottom:38%} }
 </style>
 
 <header>
@@ -246,6 +265,8 @@ button.on{border-color:var(--hot);color:var(--hot)}
         <div class="chk"><label for="setMom">🔥 Underdog fire</label><input id="setMom" type="checkbox" checked></div>
         <div class="chk"><label for="setZone" title="Attackers can't enter the penalty area before the ball">🚩 Enforce offsides</label><input id="setZone" type="checkbox"></div>
         <div class="chk"><label for="setOob" title="Throw-ins, goal kicks, corners, keeper parries">↩️ Out of bounds</label><input id="setOob" type="checkbox" checked></div>
+        <div class="chk"><label for="setVoice" title="Spoken play-by-play, using your device's own voice">🎙️ Announcer</label><input id="setVoice" type="checkbox"></div>
+        <div class="chk"><label for="setCaps" title="The announcer's words over the pitch">💬 Captions</label><input id="setCaps" type="checkbox" checked></div>
       </div>
 
       <button id="btnStart">Kick off</button>
@@ -254,6 +275,7 @@ button.on{border-color:var(--hot);color:var(--hot)}
   <div id="tp"><div id="tpCard"></div></div>
   <div id="cm"><div id="cmCard"></div></div>
   <div id="cele"><div id="celeCard"></div><div id="confetti"></div></div>
+  <div id="caption"></div>
   <div id="feed"></div>
 </div>
 
@@ -271,7 +293,7 @@ button.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=14"></script>
+<script src="engine.js?v=15"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -279,6 +301,7 @@ button.on{border-color:var(--hot);color:var(--hot)}
 // nothing is a decision; a hook that is missing is a crash.
 const feedEl = document.getElementById('feed');
 function say(html, big){
+  announce(html, big);
   const p = document.createElement('p');
   p.innerHTML = String(html || '');
   if (big) p.className = 'goal';
@@ -293,6 +316,64 @@ Object.assign(ENGINE_HOOKS, {
   // renderTeamSlots, resetGoals, drawBoards and clearMarks stay no-ops: this page has no
   // sponsor boards, no coach menu and no SVG marks to clear.
 });
+
+
+// ── THE ANNOUNCER ───────────────────────────────────────────────────────────
+// The browser's own voice. No hollerbox here — that was pulled out of this page deliberately and
+// this is not the moment to put an experiment back inside an experiment.
+//
+// The engine already writes the commentary; all this does is speak it and put it on screen. The
+// text arrives as HTML with colour spans in it, so it has to be stripped before speaking or the
+// voice reads out the markup.
+// `voiceOn` is an ENGINE name — declaring it here again is a SyntaxError that kills the whole
+// inline script, which is exactly how this page went blank earlier today. Caught before shipping
+// this time by concatenating the two files and parsing them together, which is the only test
+// that sees it.
+const speechOK = 'speechSynthesis' in window;
+let sayAloud = false, capsOn = true, lastSpokeAt = 0;
+const capEl = document.getElementById('caption');
+
+const strip = html => String(html)
+  .replace(/<[^>]*>/g, '')
+  .replace(/&mdash;|&#8212;/g, '\u2014')
+  .replace(/&[a-z]+;/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+function shutUp(){
+  if (speechOK) { try { speechSynthesis.cancel(); } catch(e){} }
+  capEl.classList.remove('on');
+}
+
+// Big lines jump the queue. A goal said thirty seconds late, behind four throw-ins, is worse than
+// a goal not said at all — so anything urgent cancels what is in progress rather than joining it.
+function announce(html, big){
+  const text = strip(html);
+  if (!text) return;
+  if (capsOn) {
+    capEl.textContent = text;
+    capEl.classList.add('on');
+    clearTimeout(capEl._t);
+    capEl._t = setTimeout(() => capEl.classList.remove('on'), big ? 4200 : 2800);
+  }
+  if (!sayAloud || !speechOK) return;
+  const now = performance.now();
+  if (big) { try { speechSynthesis.cancel(); } catch(e){} }
+  else if (speechSynthesis.speaking || speechSynthesis.pending) return;   // do not stack up
+  else if (now - lastSpokeAt < 900) return;
+  lastSpokeAt = now;
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = big ? 1.08 : 1.0;
+    u.pitch = big ? 1.15 : 1.0;
+    speechSynthesis.speak(u);
+  } catch(e) { /* refused: the caption still carries it */ }
+}
+
+// Android suspends speech when the tab blurs and does not always resume; nudging it is the
+// standard workaround and costs nothing when it is unnecessary.
+setInterval(() => { try { if (sayAloud && speechSynthesis.speaking) speechSynthesis.resume(); } catch(e){} }, 4000);
+document.addEventListener('visibilitychange', () => { if (document.hidden) shutUp(); });
 
 // ── THE SCENE ───────────────────────────────────────────────────────────────
 const cv = document.getElementById('gl');
@@ -1188,7 +1269,7 @@ function openTeamPick(slot){
 }
 tpEl.addEventListener('click', e => { if (e.target === tpEl) tpEl.classList.remove('on'); });
 ENGINE_HOOKS.renderTeamSlots = renderTeamSlots;
-ENGINE_HOOKS.showSetup = () => { running = false; hideCard(); celeUntil = 0; setupEl.classList.add('on'); };
+ENGINE_HOOKS.showSetup = () => openSetup();
 
 function startMatch(){
   // Read every control into the engine, then build. The engine owns all of these — the page is
@@ -1199,8 +1280,14 @@ function startMatch(){
   momentumOn = document.getElementById('setMom').checked;
   zoneRule   = document.getElementById('setZone').checked;
   oobRule    = document.getElementById('setOob').checked;
+  capsOn     = document.getElementById('setCaps').checked;
+  // Speech has to be started by a gesture on mobile, and this click IS one — asking for it here
+  // rather than at load is the difference between a working announcer and a silent one.
+  sayAloud   = speechOK && document.getElementById('setVoice').checked;
+  if (sayAloud) { try { speechSynthesis.cancel(); } catch(e){} }
 
   setupEl.classList.remove('on');
+  document.body.classList.remove('setup');
   feedEl.innerHTML = '';
   hideCard(); celeUntil = 0;
   applyTeamSelection();
@@ -1265,12 +1352,15 @@ function setPlayIcon(){
 document.getElementById('play').addEventListener('click', () => { running = !running; setPlayIcon(); });
 // Reset opens the menu rather than restarting the same match: a reset is the moment you might
 // want different teams or a different length, and the flat page treats it the same way.
-document.getElementById('reset').addEventListener('click', () => {
+function openSetup(){
   running = false;
   hideCard(); celeUntil = 0;
+  shutUp();                      // an announcer mid-sentence about a match you just ended
   renderTeamSlots();
   setupEl.classList.add('on');
-});
+  document.body.classList.add('setup');
+}
+document.getElementById('reset').addEventListener('click', openSetup);
 // Speed. The same five steps the flat page offers, and it multiplies the engine's own `speed`,
 // so a second of match clock and a second of football stay the same length as each other.
 const SPEEDS = [0.5, 1, 1.5, 2, 3];
@@ -1403,6 +1493,7 @@ function boot(){
   buildBodies();
   renderTeamSlots();
   setPlayIcon();
+  document.body.classList.add('setup');
   resize();
   // The match is built but held: the menu is up and `running` is false, so the first frame draws
   // a pitch with players standing on it behind the card, which is a better backdrop than black.
