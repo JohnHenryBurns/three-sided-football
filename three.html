@@ -461,7 +461,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=73"></script>
+<script src="engine.js?v=74"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -827,7 +827,11 @@ function buildPitch(){
   // three goals, on the three goal edges the engine nominates
   const postMat = new THREE.MeshLambertMaterial({ color: 0xf2f4f2 });
   GOAL_EDGE.forEach((gi, t) => {
-    const e = EDGES[gi], half = e.len * GOAL_HALF, HGT = 54;
+    // HGT comes from the ENGINE now. It is the height the RULE tests against, and drawing a bar
+    // at a different number is exactly what let a ball between 28 and 54 pass under a drawn
+    // crossbar, inside the frame, without scoring. The width already came from GOAL_HALF; the
+    // height had no equivalent, so the picture and the rule were free to disagree and did.
+    const e = EDGES[gi], half = e.len * GOAL_HALF, HGT = GOAL_H;
     for (const s of [-1, 1]) {
       const post = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, HGT, 8), postMat);
       post.position.set(e.mx + e.ux*half*s, HGT/2, e.my + e.uy*half*s);
