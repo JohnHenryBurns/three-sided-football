@@ -16,6 +16,29 @@
 // The simulation announces; it does not render. Every hook defaults to a no-op, so the sim runs
 // headless -- which is what makes it testable without a browser, and what stops a missing hook
 // being a crash rather than a silence.
+// ── THE CLOCK ───────────────────────────────────────────────────────────────
+//
+// Everything here that waits — restart holds, celebration pauses, the beat before a corner is
+// taken — measured itself against `performance.now()`, which is real wall-clock time. In a
+// browser that is exactly right: a hold of 2.6 seconds should be 2.6 seconds of somebody's life.
+//
+// It makes the engine untestable. A harness advancing the match clock faster than real time —
+// which is the whole point of a harness — outruns those timers. A throw-in is staged, its hold
+// is set 2.6 REAL seconds out, and five simulated minutes pass before it expires. The ball sits
+// on the touchline for the entire match, and every metric taken from that run measures the
+// harness rather than the football.
+//
+// That fooled me four times over two days. So there is ONE time source now, and a harness can
+// replace it:
+//
+//   ENGINE_CLOCK.now = () => myFakeMilliseconds;
+//
+// In a browser nothing changes — it is performance.now() and always was. Under a harness the
+// same fake clock drives both the match clock and the holds, so they finally agree about how
+// long a second is.
+const ENGINE_CLOCK = { now: () => performance.now() };
+function nowMs(){ return ENGINE_CLOCK.now(); }
+
 const ENGINE_HOOKS = {
   say: () => {},
   spawnNote: () => {},
@@ -388,7 +411,7 @@ function kickoff(toTeam){
     const dx = ball.x - p.x, dy = ball.y - p.y, d = Math.hypot(dx, dy);
     if (d > 0.5) { p.hx = dx/d; p.hy = dy/d; }     // the taker is on top of it; leave his be
   });
-  if(performance.now()>resumeAt-2500)   // countdown in progress? the note waits for GO
+  if(nowMs()>resumeAt-2500)   // countdown in progress? the note waits for GO
     ENGINE_HOOKS.spawnNote(CX,CY-46,"kick-off!",TEAMS[toTeam].color,TEAMS[toTeam].accent);
 }
 
@@ -564,7 +587,7 @@ function think(dt){
     } else pb.burst=Math.min(bcap, pb.burst+dt/BURST_RECHG);
   });
   const owner=ball.owner;
-  const holdActive=performance.now()<restartHold;   // restart staging: ball dead, positioning live
+  const holdActive=nowMs()<restartHold;   // restart staging: ball dead, positioning live
   const FL=[fieldersLeft(0),fieldersLeft(1),fieldersLeft(2)];   // cached: avoids per-player array filters
   for(let a2=0;a2<3;a2++) coalAlly[a2]=allied(a2,(a2+1)%3)||allied(a2,(a2+2)%3);
   if(gkHolding()){
@@ -597,10 +620,10 @@ function think(dt){
           sx8=R.x+odx/ol*20; sy8=R.y+ody/ol*20;
         }
         steer(p,sx8,sy8,2.6);
-        if((dist(p,{x:sx8,y:sy8})<10&&performance.now()>(R.readyAt||0))||performance.now()>R.cap){
+        if((dist(p,{x:sx8,y:sy8})<10&&nowMs()>(R.readyAt||0))||nowMs()>R.cap){
           p.x=sx8; p.y=sy8; p.vx=0; p.vy=0;
           ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.touchT=0.4;
-          restartHold=performance.now()+(cornerTaker===p?500:260);
+          restartHold=nowMs()+(cornerTaker===p?500:260);
           if(cornerTaker!==p){ throwPending=p; GKSTAT.lastThrower=p; }   // a throw must find a teammate
           pendingRestart=null;
         }
@@ -1375,7 +1398,7 @@ function physics(dt){
     if(ball.noClaimF>0) ball.noClaimF-=S; else ball.noClaim=null;
     if(ball.strayF>0) ball.strayF-=S; else ball.strayer=null;
     let best=null,bd=1e9;
-    if(performance.now()<restartHold&&!ball.owner) return;   // dead ball awaits its taker
+    if(nowMs()<restartHold&&!ball.owner) return;   // dead ball awaits its taker
     if(ball.clearT&&clockSec<ball.clearT) return;            // a clearance in flight escapes the furnace
     players.forEach(p=>{ if(p.out||p.sentOff)return; if(p===ball.noClaim&&ball.noClaimF>0)return;
       if(suppress&&suppress.team===p.team&&clockSec<suppress.until)return;
@@ -1407,7 +1430,7 @@ function physics(dt){
          && Math.hypot(ball.x-(GKSTAT.lastClaimX||-999),ball.y-(GKSTAT.lastClaimY||-999))<70)
         GKSTAT.rapid=(GKSTAT.rapid||0)+1;   // scramble signature: fast AND same spot
       GKSTAT.lastClaimAt=clockSec; GKSTAT.lastClaimX=ball.x; GKSTAT.lastClaimY=ball.y;
-      if((typeof __NOCLEAR==="undefined")&&best.role!=="K"&&performance.now()>=restartHold){
+      if((typeof __NOCLEAR==="undefined")&&best.role!=="K"&&nowMs()>=restartHold){
         // CONFIDENT CLEAR: two+ wolves at the door — boot it out of the scramble first-time
         let wolves=0,wx=0,wy=0;
         players.forEach(q=>{ if(q.team!==best.team&&!q.out&&!q.sentOff&&q.role!=="K"&&dist(q,best)<36){ wolves++; wx+=q.x; wy+=q.y; }});
@@ -1873,7 +1896,7 @@ const usingHollerbox = () => voiceEngineName==='hollerbox' && !!holler;
 function ambientChatter(){
   if(!matchLive||!voiceOn||!speechOK) return;
   if(queuedUtter>0||(!usingHollerbox()&&speechSynthesis.speaking)) return;
-  const rt=performance.now()/1000;
+  const rt=nowMs()/1000;
   if(rt-lastChatterAt<6) return;   // REAL seconds: slow-speed viewing gets a full broadcast
   const cand=[];
   const o=ball.owner;
@@ -2219,14 +2242,14 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
   }
   GKSTAT.lastThrower=null;
   GKSTAT.lastThrowAt=clockSec; GKSTAT.lastThrowX=ex; GKSTAT.lastThrowY=ey;
-  restartHold=Math.max(restartHold,performance.now()+2400);   // staging owns its hold
+  restartHold=Math.max(restartHold,nowMs()+2400);   // staging owns its hold
   const sx=ex+e.nx*6, sy=ey+e.ny*6;   // he throws FROM the line, not from midfield
   const cands=players.filter(q=>q.team!==toucher&&q.role!=="K"&&!q.out&&!q.sentOff)
     .sort((a,b)=>dist(a,{x:sx,y:sy})-dist(b,{x:sx,y:sy}));
   const thr=cands[0];
   if(!thr){ ball.x=CX; ball.y=CY; return; }
   ball.owner=null; ball.x=sx; ball.y=sy;
-  pendingRestart={p:thr, x:sx, y:sy, team:thr.team, cap:performance.now()+2000, readyAt:performance.now()+1100};
+  pendingRestart={p:thr, x:sx, y:sy, team:thr.team, cap:nowMs()+2000, readyAt:nowMs()+1100};
   suppress={team:toucher,until:clockSec+0.8};
   ENGINE_HOOKS.spawnNote(sx,sy-24,"throw-in!",TEAMS[thr.team].color,TEAMS[thr.team].accent);
   if(Math.random()<0.4) ENGINE_HOOKS.say(pick([
@@ -2234,7 +2257,7 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
     `Into touch. ${thr.name} hurls it back in for ${tm(thr.team)}.`,
     `${tm(thr.team)} with the throw — no time wasted.`,
     `Over the line! ${thr.name} takes it quickly.`]));
-  restartHold=performance.now()+2200;   // shortened the moment the taker arrives
+  restartHold=nowMs()+2200;   // shortened the moment the taker arrives
 }
 function stageGoalKick(t){
   const gk=players.find(q=>q.team===t&&q.role==="K"&&!q.out);
@@ -2247,10 +2270,10 @@ function stageGoalKick(t){
     `${gk.name} places it for the goal kick. Deep breath.`,
     `Nothing doing — goal kick ${tm(t)}.`,
     `All the way through for a goal kick. ${gk.name} resets the board.`]));
-  restartHold=performance.now()+650;
+  restartHold=nowMs()+650;
 }
 function stageCorner(ownerT,e,ex,ey){
-  restartHold=Math.max(restartHold,performance.now()+2400);   // staging owns its hold
+  restartHold=Math.max(restartHold,nowMs()+2400);   // staging owns its hold
   const alive=[0,1,2].filter(x=>x!==ownerT&&!out[x]);
   const att=alive.find(x=>targets[x]===ownerT)??alive[0];
   if(att===undefined){ ball.x=CX; ball.y=CY; return; }
@@ -2260,16 +2283,16 @@ function stageCorner(ownerT,e,ex,ey){
   if(!taker){ stageGoalKick(ownerT); return; }
   const cx2=vtx.x+e.nx*14, cy2=vtx.y+e.ny*14;
   ball.owner=null; ball.x=cx2; ball.y=cy2;
-  pendingRestart={p:taker, x:cx2, y:cy2, team:att, cap:performance.now()+2400, readyAt:performance.now()+1250};
+  pendingRestart={p:taker, x:cx2, y:cy2, team:att, cap:nowMs()+2400, readyAt:nowMs()+1250};
   cornerTaker=taker; cornerGoal=ownerT;
-  restartHold=Math.max(restartHold,performance.now()+2900);   // corners earn a longer ceremony — let the box fill GKSTAT.cornerStage=(GKSTAT.cornerStage||0)+1;
+  restartHold=Math.max(restartHold,nowMs()+2900);   // corners earn a longer ceremony — let the box fill GKSTAT.cornerStage=(GKSTAT.cornerStage||0)+1;
   ENGINE_HOOKS.spawnNote(taker.x,taker.y-26,"corner!",TEAMS[att].color,TEAMS[att].accent);
   ENGINE_HOOKS.say(pick([
     `<b style="color:${TEAMS[att].color}">Corner to ${tm(att)}</b> — ${taker.name} to swing it in...`,
     `<b style="color:${TEAMS[att].color}">Corner ${tm(att)}!</b> Big bodies forward... ${taker.name} over the flag.`,
     `<b style="color:${TEAMS[att].color}">Corner to ${tm(att)}</b> — the box fills. ${taker.name} whips it...`,
     `<b style="color:${TEAMS[att].color}">Corner!</b> ${taker.name} raises an arm... here it comes...`]),true);
-  restartHold=performance.now()+2600;   // shortened once he's over the ball
+  restartHold=nowMs()+2600;   // shortened once he's over the ball
 }
 function stagePenalty(){
   const pen=pendingPenalty; pendingPenalty=null;
@@ -2293,5 +2316,5 @@ function stagePenalty(){
     `${shooter.name} steps up. The stadium holds its breath...`,
     `Twelve yards between ${shooter.name} and glory. The keeper waits...`,
     `${shooter.name} takes a long breath and starts the run-up...`]),true);
-  resumeAt=performance.now()+1000;
+  resumeAt=nowMs()+1000;
 }
