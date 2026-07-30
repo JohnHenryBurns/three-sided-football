@@ -453,7 +453,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=50"></script>
+<script src="engine.js?v=51"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1696,12 +1696,27 @@ let drawGL = function drawGL(){
     if (p.benched) {
       // ON THE BENCH, not stacked at the origin. The engine keeps a sent-off player's own x,y
       // wherever they were standing, so drawing them there leaves a ghost on the pitch.
+      // SITTING ON IT, not standing in it. He was placed at y=11 at full-ish scale, which put
+      // his feet on the seat top and his head 5.5 THROUGH the dugout roof, with a body wide
+      // enough to fill the seat front to back. A man standing inside the furniture.
+      //
+      // A seated body is a bit over half a standing one, its base is the seat surface, and it
+      // sits BACK from the front edge rather than centred on it. All three of those, plus the
+      // roof clearance checked rather than assumed.
       const B = benchAt[p.team];
       if (B) {
-        const seat = ((p.seat || 0) % 4) - 1.5;
-        b.g.position.set(B.x + B.ux * seat * 17, 11, B.y + B.uy * seat * 17);
+        // 0.50 rather than 0.55: at 0.55 his head cleared the dugout roof by 0.8, which is not
+        // clearance so much as a coincidence. 0.50 gives 2.5 and still reads as a person rather
+        // than a stool.
+        const SIT = 0.50;
+        const slot = ((p.seat || 0) % 4) - 1.5;
+        // along the bench for the seat, and back from its front edge so he is on it not over it
+        const bx2 = B.x + B.ux * slot * 17 - B.nx * 3;
+        const bz2 = B.y + B.uy * slot * 17 - B.ny * 3;
+        b.g.position.set(bx2, 10.5, bz2);                  // the seat's top surface
         b.g.rotation.y = -Math.atan2(B.ny, B.nx) + Math.PI;   // facing the pitch
-        b.g.scale.setScalar(0.72);
+        b.g.rotation.z = 0;
+        b.g.scale.set(0.72, SIT, 0.72);                    // squat, not shrunk: still his width
       }
     } else {
       b.g.position.set(p.x, 0, p.y);
