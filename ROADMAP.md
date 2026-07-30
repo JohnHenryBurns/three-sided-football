@@ -141,7 +141,19 @@ in the right place. The engine already resolves aerial duels — this would feed
 wrong answer to a ball over his head. A high shot should be met with a jump, and his
 reach while airborne is the thing that decides whether item 2's crossbar gets hit.
 
-## 4. Nobody moves during a restart
+## 4. Nobody moves during a restart — DONE for the kick-off taker
+
+The kick-off taker walks out during the celebration hold and turns to face the ball
+coming back to him (PR #109). From most of the pitch he beats it there; from the far
+side they arrive together. Either way nobody materialises.
+
+**Still frozen:** everybody else, and the takers of throw-ins, corners and goal kicks
+— though those go through `pendingRestart`, which the engine already walks. Worth
+checking whether they are actually frozen or merely look it.
+
+### The original note
+
+
 
 Play is held for a celebration, so `think()` never runs and every player is frozen
 while the ball is booted back to the centre. **The kickoff taker doesn't walk to meet
