@@ -89,6 +89,21 @@ other anchors did not match and want doing by hand.
 That is the method, and it matters because **I have broken this file twice deleting
 cascade blocks by eye.** Evidence first, then the knife.
 
+## Still front-end only
+
+**The walk of shame is implemented twice.** `three.html` moves the man to its bench,
+`index.html` moves him to its own, each with its own arrival test. The engine has only
+`walkPending`. **That is the `champInfo` shape again** — shared behaviour written twice —
+though the bench position genuinely is front-end geometry, so unifying it is not
+straightforward.
+
+**The ball's return flight after a goal (`netFly`) is renderer-only.** 27 mentions in
+`three.html`, none anywhere else. The flat page teleports the ball; the 3D page animates
+it. Same split.
+
+**What is now engine-owned:** who fetches after a goal, who takes the kick-off, where
+everybody stands during both a goal restart and a sending-off.
+
 ## To investigate
 
 **The corner trio is duplicated.** The three waves are in the list *and* still in the

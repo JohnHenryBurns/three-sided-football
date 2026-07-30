@@ -462,7 +462,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=119"></script>
+<script src="engine.js?v=120"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2812,10 +2812,10 @@ function loop(now){
   //
   // It owns the stage: play holds, the camera escorts him, and he is only out when he sits down.
   // That pause is the point — a sending-off should cost the match a moment.
-  if (!held && typeof walkPending !== 'undefined' && walkPending) { walkOff = walkPending; walkPending = null; }
+  if (!held && typeof walkPending !== 'undefined' && walkPending) { walkOff = walkPending; if (typeof setWalking==='function') setWalking(walkOff); walkPending = null; }
   if (walkOff) {
     const q = walkOff, B = benchAt[q.team];
-    if (!B) { q.out = true; q.benched = true; walkOff = null; }
+    if (!B) { q.out = true; q.benched = true; walkOff = null; if (typeof setWalking==='function') setWalking(null); }
     else {
       const dx = B.x - q.x, dy = B.y - q.y, bd = Math.hypot(dx, dy) || 1;
       q.x += dx/bd * 1.5 * dt * 60;
@@ -2828,7 +2828,7 @@ function loop(now){
       if (bd < 12) {
         q.out = true; q.sentOff = false; q.benched = true;
         q.seat = players.filter(o => o.team === q.team && o.benched).length - 1;
-        walkOff = null;
+        walkOff = null; if (typeof setWalking==='function') setWalking(null);
         // FIVE LINES, PICKED, not one fixed string. I had flattened this to a single sentence,
         // which means the tenth sending-off of a match reads exactly like the first. The flat
         // page has always picked, and the engine's pick() and pronoun helper are right here.
