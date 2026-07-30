@@ -416,7 +416,12 @@ function kick(tx,ty,power,isShot){
   ball.z=0; ball.zv=0;
   if(!isShot && d>235){ ball.zv=3.0; }   // long balls travel through the air
   if(isShot){ stats.shots[o.team]++; ENGINE_HOOKS.spawnNote(ball.x,ball.y-18,"shot!","#ffd166");
-    if(typeof spawnPing==="function"&&ballHalo) ENGINE_HOOKS.spawnPing(ball.x,ball.y,TEAMS[o.team].color); }
+    // The guard here was `typeof spawnPing==="function" && ballHalo` — a check that the front end
+    // had both, written when the front end was the only thing there was. After the extraction
+    // neither name exists in this file, `typeof` on an undeclared name is "undefined", and the
+    // condition became permanently false: twenty-five simulated minutes produced zero pings.
+    // The hook defaults to a no-op, which is what the guard was for.
+    ENGINE_HOOKS.spawnPing(ball.x,ball.y,TEAMS[o.team].color); }
 }
 
 // ---------- AI ----------
