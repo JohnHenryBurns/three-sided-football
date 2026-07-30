@@ -979,6 +979,28 @@ function TACTICS(t){ return T(t); }
 // baseline.json. One commit, and it either holds or it reverts whole.
 const ACTIONS_LIVE = false;
 
+/** The keeper's outlet search, which three of his four actions need. Lifted from the cascade
+ *  unchanged and computed once per call — the cascade did it once and branched; the list needs
+ *  it available to each can(), which is the one real cost of the scored shape. */
+function gkOutlets(gk){
+  let near=null,nd=1e9, far=null,fd=-1,fs=-1e9, anyNear=null,anyD=1e9;
+  const og=goalCenter(gk.team);
+  players.forEach(m=>{
+    if(m.team!==gk.team||m===gk||!onPitch(m)||m.role==='K') return;
+    const d=dist(m,gk), adv=dist(m,og);
+    if(adv>dist(gk,og)+15){ if(d<nd){nd=d;near=m;} }
+    if(d<anyD){anyD=d;anyNear=m;}
+    let open=1e9;
+    players.forEach(q=>{ if(q.team!==gk.team&&onPitch(q)&&q.role!=='K') open=Math.min(open,dist(q,m)); });
+    const sc=adv+Math.min(open,140)*1.5;
+    if(sc>fs){fs=sc;far=m;fd=adv;}
+  });
+  if(!near){ near=anyNear; nd=anyD; }
+  let wolves=0;
+  players.forEach(q=>{ if(q.team!==gk.team&&onPitch(q)&&dist(q,gk)<95) wolves++; });
+  return { near, nd, far, fd, crowded: wolves>=2 };
+}
+
 const PORTED = [
   // ── SCRIPT: the game takes these ──────────────────────────────────────────
   { name:'corner-swing', tier:TIER.SCRIPT, ported:true,
@@ -1016,27 +1038,72 @@ const PORTED = [
   // does not; neither of them is being ordered.
   { name:'gk-roll', tier:TIER.PLAYER, ported:true,
     coach:T => (1-T.direct)*60,
-    can:p => p.role==='K' && ball.owner===p && !p.mustKick,
+    can:p => {
+      if(p.role!=='K' || ball.owner!==p) return false;
+      const f=gkOutlets(p);
+      return !!f.near && !(f.crowded && dist(f.near,p)<110);
+    },
     score:p => 300,
-    act:p => { return false; } },
+    act:p => {
+      const f=gkOutlets(p);
+      if(!f.near) return false;
+      const pw=Math.min(6.2, Math.max(2.4, dist(f.near,p)/66 * 1.15));
+      kick(f.near.x+f.near.vx*4, f.near.y+f.near.vy*4, pw, false);
+      const throwD=dist(f.near,p);
+      ball.zv=2.6 + Math.min(1.6, throwD/260*1.6);
+      if(allied(p.team,f.near.team)) ball.allyPass=true;
+      return true;
+    } },
 
+  // The cascade's outlet search, lifted whole. It runs in can() rather than act() because the
+  // whole point of a scored list is that a candidate must be found BEFORE the action is chosen —
+  // "is there somebody to punt to" is a prerequisite, not part of the punt.
   { name:'gk-punt', tier:TIER.PLAYER, ported:true,
     coach:T => T.direct*80,
-    can:p => p.role==='K' && ball.owner===p,
+    can:p => {
+      if(p.role!=='K' || ball.owner!==p) return false;
+      const f=gkOutlets(p);
+      return !!(f.far && ((f.fd>255 && (f.nd>140 || RNG()<0.11)) || (f.crowded && f.fd>150)));
+    },
     score:p => 310,
-    act:p => { return false; } },
+    act:p => {
+      const f=gkOutlets(p);
+      if(!f.far) return false;
+      const dTo=dist(p,f.far);
+      const pw=Math.min(11.5, Math.max(4.2, dTo/66 * 1.12));
+      kick(f.far.x+f.far.vx*7, f.far.y+f.far.vy*7, pw, false);
+      ball.zv=4.6;                       // up into the lights, as the cascade has it
+      GKSTAT.punts=(GKSTAT.punts||0)+1;
+      return true;
+    } },
 
   { name:'gk-clear', tier:TIER.PLAYER, ported:true,
     coach:T => (T.bunker>0.5?110:0),
-    can:p => p.role==='K' && ball.owner===p,
+    can:p => {
+      if(p.role!=='K' || ball.owner!==p) return false;
+      const f=gkOutlets(p);
+      // crowded, and the only outlet is short and in the same trouble
+      return f.crowded && (!f.near || dist(f.near,p)<110);
+    },
     score:p => 290,
-    act:p => { return false; } },
+    act:p => {
+      const og9=goalCenter(p.team);
+      const ax=p.x-og9.x, ay=p.y-og9.y, al=Math.hypot(ax,ay)||1;
+      const spread=(RNG()-0.5)*0.5;
+      kick(p.x+(ax/al)*300 + (-ay/al)*300*spread,
+           p.y+(ay/al)*300 + ( ax/al)*300*spread, 11.5, false);
+      ball.zv=4.2;
+      return true;
+    } },
 
+  // THE FLOOR. Nothing else applied — no outlet near, none far, nobody to aim at. The cascade
+  // wrote this as a bare `else kick(CX,CY,9)` and the scored list says the same thing by scoring
+  // 100 when everything else scores 290 or more. An else IS the lowest score.
   { name:'gk-hopeful', tier:TIER.PLAYER, ported:true,
     coach:T => 0,
     can:p => p.role==='K' && ball.owner===p,
-    score:p => 100,                     // the floor: nothing else was available
-    act:p => { return false; } },
+    score:p => 100,
+    act:p => { kick(CX,CY,9); return true; } },
 
   { name:'pass', tier:TIER.PLAYER, ported:true,
     coach:T => (1-T.direct)*50,
