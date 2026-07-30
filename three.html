@@ -92,7 +92,11 @@ button.on{border-color:#ff8a4c;color:#ff8a4c}
   <span class="hint">drag to orbit · pinch or wheel to zoom</span>
 </div>
 
-<script src="engine.js"></script>
+<!-- The version tag exists because GitHub Pages caches, and a page fetched fresh alongside an
+     engine.js from twenty minutes ago fails in the most confusing way available: everything works
+     except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
+     the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
+<script src="engine.js?v=3"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -564,7 +568,9 @@ function buildBodies(){
     // the camera, which is right for a name floating above a head and wrong for a number on a
     // shirt — the whole point of a squad number is that you read it when a player is running
     // away from you, and it should disappear when they turn round.
-    const num = shirtOf(p.name);
+    // Guarded: a missing helper should cost a shirt number, not the whole match. This page
+    // cannot control when a browser decides its copy of engine.js is stale.
+    const num = (typeof shirtOf === 'function') ? shirtOf(p.name) : 0;
     if (num) {
       const c = document.createElement('canvas');
       c.width = 64; c.height = 64;
