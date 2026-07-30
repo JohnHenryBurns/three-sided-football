@@ -944,6 +944,95 @@ const TIER = { SCRIPT: 4000, REQUIREMENT: 3000, COACH: 1300, PLAYER: 1000 };
  *  they live. `T()` already does this; this is the same thing named for readers of the list. */
 function TACTICS(t){ return T(t); }
 
+// ── THE ACTION LIST ─────────────────────────────────────────────────────────
+//
+// An action is a THING A PLAYER DOES WITH THE BALL, as distinct from an instruction, which is
+// where he goes. The two run side by side and both can fire on the same frame — a carrier is
+// moving somewhere AND deciding whether to shoot, which is exactly why actions could not simply
+// be added to the instruction list.
+//
+//   can(p)     PREREQUISITES. Not "should he", but "is this even available". You must control
+//              the ball to consider shooting; a header needs the ball airborne and near you.
+//              Most actions are unavailable to most players on most frames, which is the
+//              opposite of instructions and the reason for a separate runner.
+//   score(p)   how much it wants to happen, within its tier
+//   act(p)     do it. Calls kick(), tryJump() or whatever primitive it needs — the primitives
+//              are fine and stay exactly as they are.
+//   tier       SCRIPT actions are MANDATED: a throw-in gets taken, nobody decides that. PLAYER
+//              actions are chosen. That distinction is John's, from the tiers, and it maps onto
+//              actions more cleanly than onto positions.
+//
+// The runner is the instruction runner's shape, with one difference: it may decline. Most frames
+// nothing fires, and an action list that always does something is a list of reflexes.
+const ACTIONS = [
+  // ── HEAD IT ───────────────────────────────────────────────────────────────
+  // The first action, and the one that was never real: "going for the header" has only ever been
+  // a job() tag on a cascade branch — it reads 0% in every log because nothing was ever extracted.
+  //
+  // PREREQUISITES, which is what can() is for: the ball must be ABOVE HEAD HEIGHT, COMING DOWN,
+  // WITHIN REACH OF WHERE HIS HEAD ACTUALLY IS, and nobody may already own it. That last one
+  // matters — you cannot head a ball somebody is dribbling.
+  //
+  // His head is at H_HEAD + his jump, so a man who has left the ground can reach a ball a
+  // standing player cannot. That is the jump becoming worth something beyond the animation, which
+  // is what John asked for when the jump was still cosmetic.
+  { name:'head it', tier:TIER.PLAYER, base:500,
+    can:p => {
+      if(!onPitch(p) || ball.owner) return false;
+      const head = H_HEAD + (p.jz||0);
+      if(ball.z < head*0.72 || ball.z > head + 22) return false;   // in the band his head occupies
+      if(ball.zv > 0.4) return false;                              // coming down, not going up
+      // A HEADED BALL MAY NOT BE HEADED AGAIN AT ONCE. Without this the ball never lands: one
+      // header sets it flying, the next man heads it again, and six matches came back at 97%
+      // aerial with nobody chasing anything. The same shape as the woodwork lockout, and the
+      // same lesson — an action that produces its own prerequisite needs a refractory period.
+      if(clockSec - (ball.headedAt||-9) < 1.2) return false;
+      // CALIBRATED DOWN, and this is the number the simulation will argue about. At reach 18 and
+      // a 1.2s lockout the game came back 3/6 usable with 37% aerial against a baseline 20% —
+      // headers were happening constantly and the ball never settled.
+      //
+      // 11 is a head's width rather than an arm's, which is what a header actually requires. The
+      // right value is a calibration question and this is the first action, so it is deliberately
+      // set on the shy side: an action that never fires is a smaller problem than one that
+      // dominates, and the telemetry counts it either way.
+      return dist(p,ball) < 11;
+    },
+    score:p => 500 + (p.jz||0)*3,          // a man in the air wants it more than one who is not
+    act:p => {
+      // headed toward the goal he is attacking, with what pace a head can give it
+      const tgt = goalCenter(targets[p.team]!==null?targets[p.team]:p.team);
+      const dx=tgt.x-p.x, dy=tgt.y-p.y, dl=Math.hypot(dx,dy)||1;
+      const far = dl > 200;
+      // kick() reads ball.owner to know who struck it, so he owns it for the instant of contact.
+      // A header is a touch, not a possession — he has it for one frame and it is gone, which is
+      // exactly what the primitive expects and what I got wrong by nulling the owner first.
+      ball.owner=p;
+      kick(p.x+dx/dl*140, p.y+dy/dl*140, far?5.2:4.0, dl<200);
+      ball.owner=null;
+      ball.z = Math.max(ball.z, H_HEAD*0.8);
+      ball.zv = 1.9;                       // a header loops rather than drills
+      ball.lastTouch=p.team; ball.lastKicker=p;
+      ball.headedAt = clockSec;
+      TEL.headers++;
+      ENGINE_HOOKS.spawnNote(p.x, p.y-30, "\u{1F9E0} header!", TEAMS[p.team].color);
+      return true;
+    } },
+];
+
+/** Score every available action, take the best, do it. Returns true if anything happened. */
+function runAction(p){
+  let best=null, bestScore=-1e9;
+  for(const A of ACTIONS){
+    if(!A.can(p)) continue;
+    const sc=(A.tier||TIER.PLAYER) + A.score(p);
+    if(sc>bestScore){ bestScore=sc; best=A; }
+  }
+  if(!best) return false;
+  p.lastAction = best.name;
+  TEL.actFrames[best.name] = (TEL.actFrames[best.name]||0) + 1;
+  return best.act(p)!==false;
+}
+
 const INSTRUCTIONS = [
   // ── FETCH THE BALL ────────────────────────────────────────────────────────
   // EXPLICIT. He has been given a restart and the ball is lying somewhere. Nothing outranks it,
@@ -1691,6 +1780,12 @@ function think(dt){
 
   players.forEach(p=>{
     if(p.out||p.sentOff||targets[p.team]===null)return;
+
+    // ── AN ACTION MAY FIRE, AND THEN HE STILL MOVES ───────────────────────────
+    // Actions run BEFORE instructions and do not consume the frame: a man who heads the ball is
+    // still somewhere, and still wants to be somewhere next. That is the whole difference from the
+    // instruction list, where one winner takes the frame.
+    runAction(p);
 
     // ── AND IT GOES BACK BEHIND THE SIXTEEN ───────────────────────────────────
     // Moving it to the top was the right experiment and the answer was chaos. Normalised per
@@ -3199,6 +3294,7 @@ const TEL = {
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
+  actFrames:{}, headers:0,
   unattributed:0, unattMax:0, portFrame:-1,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
@@ -3208,16 +3304,21 @@ function telReset(){
     claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
     jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
-    jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0, backPass:0, restartVoid:0,
-  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0, freeKicks:0,
+    jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
+    actFrames:{}, headers:0, headers:0,
+  actFrames:{}, headers:0, backPass:0, restartVoid:0,
+  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
+  actFrames:{}, headers:0, freeKicks:0,
     unattributed:0, unattMax:0, portFrame:-1,
   unattributed:0, unattMax:0, portFrame:-1, deflected:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
+  actFrames:{}, headers:0,
   unattributed:0, unattMax:0, portFrame:-1, woodwork:0, bars:0, posts:0, port:{},
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
+  actFrames:{}, headers:0,
   unattributed:0, unattMax:0, portFrame:-1, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
@@ -3311,6 +3412,7 @@ function buildMatchReport(){
   md+=`| throw-ins | ${TEL.throwIns} | ${p90(TEL.throwIns)} | ~40 |\n`;
   md+=`| free kicks | ${TEL.freeKicks} | ${p90(TEL.freeKicks)} | ~22 |\n`;
   md+=`| back-passes (keeper must kick) | ${TEL.backPass} | ${p90(TEL.backPass)} | |\n`;
+  md+=`| **headers** | ${TEL.headers} | ${p90(TEL.headers)} | ~40 |\n`;
   md+=`| **restarts voided by the watchdog** | ${TEL.restartVoid} | | should be 0 |\n`;
 
   // ── INSTRUCTIONS ──────────────────────────────────────────────────────────
