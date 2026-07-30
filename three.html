@@ -420,7 +420,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=42"></script>
+<script src="engine.js?v=43"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -728,11 +728,14 @@ function buildPitch(){
     // white disappeared against grass from any distance. Brighter, denser, and now with something
     // visible holding it up.
     const BACK = 40;                                    // how far the frame reaches behind the line
-    // The frame carries the team colour, not the net. Tinting the net was what made it invisible
-    // — a white mesh lerped halfway to a dark kit against grass is nothing — and the stanchions
-    // say whose goal it is just as well while being solid enough to take a colour.
-    const barMat = new THREE.MeshLambertMaterial({
-      color: new THREE.Color(TEAMS[t].color).lerp(new THREE.Color(0xffffff), 0.35) });
+    // THE TEAM'S COLOUR, EXACTLY. It was lerped 35 per cent toward white, which is how a red
+    // frame came out pink and a white one came out white-on-white — a washed colour reads as a
+    // rendering artefact rather than a choice, and the point of colouring the frame is to say
+    // whose goal it is.
+    //
+    // The posts and crossbar stay white, so the frame identifies the goal and the mouth still
+    // reads as a mouth.
+    const barMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(TEAMS[t].color) });
     const foot = [];                                    // where each stanchion meets the ground
     for (const sgn of [-1, 1]) {
       const topX = e.mx + e.ux*half*sgn,  topZ = e.my + e.uy*half*sgn;
@@ -753,7 +756,14 @@ function buildPitch(){
       const gl2 = Math.hypot(foot[1].x-foot[0].x, foot[1].z-foot[0].z);
       const gb = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, gl2, 7), barMat);
       gb.position.set((foot[0].x+foot[1].x)/2, 2.2, (foot[0].z+foot[1].z)/2);
-      gb.rotation.order = 'ZYX';
+      // THE DEFAULT ORDER, like the crossbar two feet away. I set ZYX here and it is wrong for
+      // exactly the reason I wrote down when I un-broke the crossbar: a three.js Euler order
+      // names a matrix product, so the LAST letter is applied to a vector FIRST. ZYX swings an
+      // upright cylinder about Y, where it does nothing, and then lays it along world X on every
+      // goal. XYZ lays it down first and then swings it, which is what a bar wants.
+      //
+      // Checked with the matrices: wrong on 3 of 3 goals under ZYX, right on 3 of 3 under the
+      // default. I had the answer written in a comment and reached for the other one anyway.
       gb.rotation.z = Math.PI/2;
       gb.rotation.y = -Math.atan2(foot[1].z-foot[0].z, foot[1].x-foot[0].x);
       scene.add(gb);
