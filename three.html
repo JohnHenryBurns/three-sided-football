@@ -461,7 +461,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=96"></script>
+<script src="engine.js?v=97"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1867,11 +1867,19 @@ function buildBodies(){
     const T2 = TEAMS[p.team];
     const shown = T2.ours ? p.name : p.name.split(' ').slice(-1)[0];
     const label = nameSprite(shown, '#ffffff', 30, 'rgba(6,10,8,.92)');
+    // ── THE DEBUG LABEL ───────────────────────────────────────────────────
+    // What this player is being told to do, right now. The engine names each branch of think()
+    // as it is taken; this draws the name. Off by default and rebuilt on demand, because it is
+    // a development tool rather than a feature.
+    const jobLabel = nameSprite('', '#7ee787', 22, 'rgba(6,10,8,.92)');
+    jobLabel.position.set(0, H_P + 40, 0);
+    jobLabel.visible = false;
+    g.add(jobLabel);
     label.position.set(0, H_P + 26, 0);
     label.material.depthWrite = false;
     g.add(label);
     scene.add(g);
-    return { g, ring, flames, pip, label, pal, mo, stars, ribbons };
+    return { g, ring, flames, pip, label, pal, mo, stars, ribbons, jobLabel, jobText:'' };
   });
 }
 
@@ -1914,6 +1922,13 @@ scene.add(shadowGL);
 
 // Per-frame bookkeeping the fire needs: a real delta so embers age in seconds rather than
 // frames, and a note of who is burning hardest so the light knows where to sit.
+// DEBUG: what every player is being told to do. Toggled with the D key, or ?jobs in the URL —
+// no button, because it is for developing rather than for watching.
+let showJobs = new URLSearchParams(location.search).has('jobs');
+addEventListener('keydown', e => {
+  if (e.key === 'd' || e.key === 'D') { showJobs = !showJobs; say(showJobs ? 'debug: instructions on' : 'debug: instructions off'); }
+});
+
 let hottest = { spent: 0, p: null };
 // NOT declared here: `walkOff` is an engine name, and re-declaring it is a SyntaxError that kills
 // the whole inline script. Caught by parsing the two files together before pushing, which is the
@@ -2071,6 +2086,19 @@ let drawGL = function drawGL(){
           m.lookAt(cam.position);                     // always edge-on to nobody
           m.material.opacity = (0.85 - k * 0.09) * 0.9;
         });
+      }
+    }
+    // the debug instruction, redrawn only when it changes — a canvas texture a frame would be
+    // sixty texture uploads a second per player
+    if (b.jobLabel) {
+      b.jobLabel.visible = showJobs;
+      if (showJobs && (p.job || '') !== b.jobText) {
+        b.jobText = p.job || '';
+        g.remove(b.jobLabel);
+        const nl = nameSprite(b.jobText || '\u2014', '#7ee787', 22, 'rgba(6,10,8,.92)');
+        nl.position.set(0, H_P + 40, 0);
+        b.g.add(nl);
+        b.jobLabel = nl;
       }
     }
     b.pip.visible = !!(p.redCard || p.yellows > 0);

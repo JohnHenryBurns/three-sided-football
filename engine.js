@@ -681,6 +681,16 @@ function kick(tx,ty,power,isShot){
 }
 
 // ---------- AI ----------
+// ── WHAT IS HE DOING? ───────────────────────────────────────────────────────
+// think() is 894 lines, 53 early returns and no stored state: a cascade where the first branch
+// that matches acts and returns. That works, and it means a player's instruction exists for one
+// frame and is never written down — so nothing can show it, log it, or check it.
+//
+// job() names the branch as it is taken. One assignment, no logic, and it makes the AI
+// inspectable: a debug overlay can read p.job, the report can count them, and a player stuck
+// doing something daft becomes visible rather than inferred from where he is standing.
+function job(p, what){ p.job = what; p.jobAt = clockSec; }
+
 function think(dt){
   players.forEach(pb=>{
     if(pb.out) return;
@@ -722,7 +732,7 @@ function think(dt){
         const isCorner=(cornerTaker===R.p);
         if(isCorner && cornerGoal!==null){
           const g9=goalCenter(cornerGoal);
-          if(p.team===R.team){
+          if(p.team===R.team){ job(p,'into the box');
             // ATTACKING A CORNER: get in the box, and spread across its width rather than
             // stacking on one spot — a lateral offset per player, stable so nobody jitters.
             const lat=((p.k1*997)%1-0.5)*90;
@@ -763,7 +773,7 @@ function think(dt){
         // A fetching restart has the ball lying where it went out rather than sitting on the
         // spot. He goes and GETS it, carries it to the mark, and only then takes the throw. Play
         // is not held for any of this — everyone else is still playing.
-        if(R.fetch && ball.fetch && !R.got){
+        if(R.fetch && ball.fetch && !R.got){ job(p,'fetching the ball');
           const bd9=dist(p,ball);
           if(bd9>13){
             steer(p, ball.x, ball.y, 2.6);         // jog out to it
@@ -827,7 +837,7 @@ function think(dt){
         return;
       }
     }
-    if(gkHolding()&&p.team===ball.owner.team&&p!==ball.owner&&p.role!=="K"){
+    if(gkHolding()&&p.team===ball.owner.team&&p!==ball.owner&&p.role!=="K"){ job(p,'showing for the keeper');
       // spread into outlet positions: the roll should never have to go backwards
       const og3=goalCenter(p.team);
       const ax=CX-og3.x, ay=CY-og3.y, al=Math.hypot(ax,ay)||1;
@@ -988,7 +998,7 @@ function think(dt){
       // The taker walks to the ball. His side offers itself. THE OFFENDING SIDE RETREATS — ten
       // yards, which is the only rule in football that exists purely to make a restart possible.
       if(freeKick && !freeKick.done){
-        if(p===freeKick.taker){
+        if(p===freeKick.taker){ job(p,'standing over a free kick');
           const fd9=dist(p,{x:freeKick.x,y:freeKick.y});
           if(fd9>12){ steer(p, freeKick.x, freeKick.y, 2.4); return; }
           p.vx=0; p.vy=0;
@@ -1001,7 +1011,7 @@ function think(dt){
           }
           return;
         }
-        if(p.team===freeKick.wall){
+        if(p.team===freeKick.wall){ job(p,'retreating from a free kick');
           const dx9=p.x-freeKick.x, dy9=p.y-freeKick.y, dl9=Math.hypot(dx9,dy9)||1;
           if(dl9<64){ steer(p, freeKick.x+dx9/dl9*70, freeKick.y+dy9/dl9*70, 2.4); return; }
         }
@@ -1019,17 +1029,17 @@ function think(dt){
       // admiring his own throw forever, and a ball that runs loose out of play would otherwise
       // leave him rooted.
       if(p.noChase && ball.owner && ball.owner!==p) p.noChase=0;
-      if(p.noChase && clockSec<p.noChase){
+      if(p.noChase && clockSec<p.noChase){ job(p,'just restarted \u2014 offering');
         const bx8=ball.x-p.x, by8=ball.y-p.y, bl8=Math.hypot(bx8,by8)||1;
         const inward={x:CX-p.x, y:CY-p.y}, il=Math.hypot(inward.x,inward.y)||1;
         steer(p, p.x+inward.x/il*40, p.y+inward.y/il*40, 1.6);
         p.hx=bx8/bl8; p.hy=by8/bl8;                 // watching where it went
         return;
       }
-      if(!ball.owner && ball.z>H_HEAD*0.8 && ball.zv<0 && bd7<34 && p.jz<=0 && Math.random()<0.55){
+      if(!ball.owner && ball.z>H_HEAD*0.8 && ball.zv<0 && bd7<34 && p.jz<=0 && Math.random()<0.55){ job(p,'going for the header');
         tryJump(p, ball.z>H_HEAD*1.3 && p.burst>0.7);
       }
-      if(!want&&!ball.owner&&ball.z>34&&Math.hypot(ball.vx,ball.vy)>3.5&&bd7<260){
+      if(!want&&!ball.owner&&ball.z>34&&Math.hypot(ball.vx,ball.vy)>3.5&&bd7<260){ job(p,'running onto the landing');
         let mateNearer=false;                                   // true punts only — one chaser per team
         players.forEach(q=>{ if(q.team===p.team&&q!==p&&!q.out&&!q.sentOff&&dist(q,ball)<bd7) mateNearer=true; });
         if(!mateNearer) want="landing";
