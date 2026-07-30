@@ -366,7 +366,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=27"></script>
+<script src="engine.js?v=28"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -485,6 +485,7 @@ function placeCam(){
                    look.y + rad*Math.sin(el),
                    look.z + rad*Math.cos(el)*Math.sin(az));
   cam.lookAt(look);
+  if (stands.length) occludeStands();
 }
 function resize(){
   const r = cv.getBoundingClientRect();
@@ -917,6 +918,7 @@ function buildGround(){
       tier.position.set(e.mx - e.nx * (depth + 58), h/2, e.my - e.ny * (depth + 58));
       tier.rotation.y = -Math.atan2(e.uy, e.ux);
       scene.add(tier);
+      stands.push({ m: tier, ox: -e.nx, oy: -e.ny });   // which way this stand faces outward
       const crowd = new THREE.Mesh(
         new THREE.PlaneGeometry(e.len * 1.30, 22),
         new THREE.MeshBasicMaterial({ map: crowdTexture(), side: THREE.DoubleSide }));
@@ -925,6 +927,7 @@ function buildGround(){
       crowd.rotation.y = -Math.atan2(e.uy, e.ux);
       crowd.rotation.x = -0.34;
       scene.add(crowd);
+      stands.push({ m: crowd, ox: -e.nx, oy: -e.ny });
     }
   });
 
@@ -941,6 +944,7 @@ function buildGround(){
       wedge.position.set(v.x + ox * (depth + 30), h/2, v.y + oy * (depth + 30));
       wedge.rotation.y = -Math.atan2(oy, ox) + Math.PI/2;
       scene.add(wedge);
+      stands.push({ m: wedge, ox, oy });
       const crowd = new THREE.Mesh(
         new THREE.PlaneGeometry(96, 22),
         new THREE.MeshBasicMaterial({ map: crowdTexture(), side: THREE.DoubleSide }));
@@ -949,6 +953,7 @@ function buildGround(){
       crowd.rotation.y = -Math.atan2(oy, ox) + Math.PI/2;
       crowd.rotation.x = -0.34;
       scene.add(crowd);
+      stands.push({ m: crowd, ox, oy });      // the corner crowds fade with their wedge
     }
   });
 
