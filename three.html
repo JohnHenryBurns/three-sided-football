@@ -333,7 +333,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
 
       <div class="chks">
         <div class="chk"><label for="setMom">🔥 Underdog fire</label><input id="setMom" type="checkbox" checked></div>
-        <div class="chk"><label for="setZone" title="Attackers can't enter the penalty area before the ball">🚩 Enforce offsides</label><input id="setZone" type="checkbox"></div>
+        <div class="chk"><label for="setZone" title="Attackers can't enter the penalty area before the ball">🚩 Enforce offsides</label><input id="setZone" type="checkbox" checked></div>
         <div class="chk"><label for="setOob" title="Throw-ins, goal kicks, corners, keeper parries">↩️ Out of bounds</label><input id="setOob" type="checkbox" checked></div>
         <div class="chk"><label for="setVoice" title="Spoken play-by-play, using your device's own voice">🎙️ Announcer</label><input id="setVoice" type="checkbox"></div>
         <div class="chk"><label for="setCaps" title="The announcer's words over the pitch">💬 Captions</label><input id="setCaps" type="checkbox" checked></div>
@@ -366,7 +366,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=28"></script>
+<script src="engine.js?v=29"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -526,19 +526,43 @@ function buildPitch(){
   grass.rotation.x = Math.PI/2;
   scene.add(grass);
 
-  const lineMat = new THREE.LineBasicMaterial({ color: 0xdfe8df, transparent: true, opacity: 0.5 });
-  scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(
-    V.concat([V[0]]).map(p => new THREE.Vector3(p.x, 0.7, p.y))), lineMat));
+  // ── THE MARKINGS ─────────────────────────────────────────────────────────
+  // Drawn as RIBBONS, not lines. THREE.LineBasicMaterial has a linewidth property and almost
+  // every browser ignores it — every marking on this pitch was a one-pixel hairline that thinned
+  // to nothing as the camera pulled back, which is why the pitch read as bare grass.
+  //
+  // A ribbon is two triangles per segment laid flat on the turf. It has real width in world
+  // units, so it stays a line of chalk at any distance, and it can be as bright as chalk is.
+  const CHALK = 0xf2f6f2;
+  function ribbon(pts, w, colour, y){
+    const half = w/2, verts = [], h = y === undefined ? 0.8 : y;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i+1];
+      const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz) || 1;
+      const nx = -dz/d * half, nz = dx/d * half;
+      verts.push(a.x+nx, h, a.z+nz,  b.x+nx, h, b.z+nz,  b.x-nx, h, b.z-nz);
+      verts.push(a.x+nx, h, a.z+nz,  b.x-nx, h, b.z-nz,  a.x-nx, h, a.z-nz);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    scene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({
+      color: colour === undefined ? CHALK : colour, side: THREE.DoubleSide,
+      transparent: true, opacity: 0.92 })));
+  }
+
+  // THE TOUCHLINE, and it is the widest of them: it is the edge of the world here, and a pitch
+  // whose boundary you cannot see is a green field with players milling about on it.
+  ribbon(V.concat([V[0]]).map(p => new THREE.Vector3(p.x, 0, p.y)), 5.5);
   // A closed ring of points, at the flat page's own radius of 70 rather than the 92 I guessed.
   const ring = (r, cx, cy, from, to) => {
     const pts = [];
     const a0 = from === undefined ? 0 : from, a1 = to === undefined ? Math.PI*2 : to;
     for (let k = 0; k <= 64; k++) {
       const a = a0 + (a1 - a0) * k/64;
-      pts.push(new THREE.Vector3((cx === undefined ? CX : cx) + r*Math.cos(a), 0.7,
+      pts.push(new THREE.Vector3((cx === undefined ? CX : cx) + r*Math.cos(a), 0,
                                  (cy === undefined ? CY : cy) + r*Math.sin(a)));
     }
-    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat));
+    ribbon(pts, 3.6);
   };
   ring(70);
   scene.add(new THREE.Mesh(new THREE.CircleGeometry(4, 10),
@@ -552,10 +576,8 @@ function buildPitch(){
     for (let i = 0; i <= 22; i++) {            // dashes, as short segments
       if (i % 2) continue;
       const t0 = i/22, t1 = Math.min(1, (i+1)/22);
-      const g = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(CX + (e.mx-CX)*t0, 0.7, CY + (e.my-CY)*t0),
-        new THREE.Vector3(CX + (e.mx-CX)*t1, 0.7, CY + (e.my-CY)*t1)]);
-      scene.add(new THREE.Line(g, lineMat));
+      ribbon([new THREE.Vector3(CX + (e.mx-CX)*t0, 0, CY + (e.my-CY)*t0),
+              new THREE.Vector3(CX + (e.mx-CX)*t1, 0, CY + (e.my-CY)*t1)], 3.0);
     }
   });
 
