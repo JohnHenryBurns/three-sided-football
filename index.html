@@ -323,7 +323,7 @@
 <div id="coachMenu"><div id="cmCard"></div></div>
 <div id="teamPick"><div id="tpCard"></div></div>
 
-<script src="engine.js?v=62"></script>
+<script src="engine.js?v=63"></script>
 <script>
 function statBars(lib){   // display stats DERIVED from the engine bundle — the UI never lies
   const A={TikiTaka:4,RouteOne:3,Swashbuckle:5,Probe:3,Balanced:3};
@@ -377,11 +377,9 @@ function showNotice(color,big,whoHTML,subHTML,dur){
 
 // ---------- Full time, elimination, and the crown ----------
 function eliminateTeam(t){
-  out[t]=true;
-  if(goalEls[t]) goalEls[t].setAttribute("opacity",.3);   // the goal seals
-  coached[t]=false; coachTarget[t]=null; if(activeCoach===t)activeCoach=null;
-  players.forEach(p=>{ if(p.team===t){ p.out=true; if(ball.owner===p) ball.owner=null; }});
-  if(ball.lastKicker&&ball.lastKicker.out) ball.isShot=false;
+  // The state moved into the engine's knockOut(), which runs before this and does out[t], the
+  // players, the ball and the coach. This is the picture only: the goal seals.
+  if(goalEls[t]) goalEls[t].setAttribute("opacity",.3);
 }
 function downloadReport(){
   const md=buildMatchReport();
