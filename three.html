@@ -410,7 +410,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=40"></script>
+<script src="engine.js?v=41"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -709,39 +709,74 @@ function buildPitch(){
     bar.rotation.z = Math.PI/2;
     bar.rotation.y = -Math.atan2(e.uy, e.ux);
     scene.add(bar);
-    // ── THE NET ──────────────────────────────────────────────────────────
-    // A real mesh of cords rather than a tinted pane. A translucent plane says "there is
-    // something there"; a net says what it is, and it is the thing that makes a goal read as a
-    // goal from any angle rather than only from the front.
+    // ── THE FRAME BEHIND THE GOAL ────────────────────────────────────────
+    // A real goal is held up by two angled stanchions running back and down from the top of each
+    // post to a ground bar behind — and the net hangs OFF those, which is why a goal has that
+    // wedge shape from side on rather than being a box.
     //
-    // Drawn as LineSegments — one geometry, two loops, no per-cord objects. A net of individual
-    // meshes would be four hundred draw calls per goal for something that never moves.
-    const netMat = new THREE.LineBasicMaterial({
-      color: new THREE.Color(TEAMS[t].color).lerp(new THREE.Color(0xffffff), 0.55),
-      transparent: true, opacity: 0.38 });
-    const W = half*2, DEEP = 34, COLS = 13, ROWS = 7;
-    const pts = [];
-    // the back face, hanging behind the line and sloping in toward the ground
-    const backAt = (u, v) => new THREE.Vector3(
-      e.mx - e.nx*(DEEP*(0.35 + 0.65*(1-v))) + e.ux*(u - 0.5)*W,
-      HGT*v,
-      e.my - e.ny*(DEEP*(0.35 + 0.65*(1-v))) + e.uy*(u - 0.5)*W);
-    for (let i = 0; i <= COLS; i++) for (let j = 0; j < ROWS; j++) {
-      pts.push(backAt(i/COLS, j/ROWS), backAt(i/COLS, (j+1)/ROWS));
-    }
-    for (let j = 0; j <= ROWS; j++) for (let i = 0; i < COLS; i++) {
-      pts.push(backAt(i/COLS, j/ROWS), backAt((i+1)/COLS, j/ROWS));
-    }
-    // and the two side panels, from the posts back to the net's foot
+    // The net was also far too subtle: an opacity-0.38 line mesh in a colour lerped halfway to
+    // white disappeared against grass from any distance. Brighter, denser, and now with something
+    // visible holding it up.
+    const BACK = 40;                                    // how far the frame reaches behind the line
+    // The frame carries the team colour, not the net. Tinting the net was what made it invisible
+    // — a white mesh lerped halfway to a dark kit against grass is nothing — and the stanchions
+    // say whose goal it is just as well while being solid enough to take a colour.
+    const barMat = new THREE.MeshLambertMaterial({
+      color: new THREE.Color(TEAMS[t].color).lerp(new THREE.Color(0xffffff), 0.35) });
+    const foot = [];                                    // where each stanchion meets the ground
     for (const sgn of [-1, 1]) {
-      const sideAt = (u, v) => new THREE.Vector3(
-        e.mx + e.ux*sgn*half - e.nx*(DEEP*(0.35 + 0.65*(1-v))*u),
-        HGT*v*(1 - 0.35*u),
-        e.my + e.uy*sgn*half - e.ny*(DEEP*(0.35 + 0.65*(1-v))*u));
-      for (let i = 0; i <= 5; i++) for (let j = 0; j < 4; j++)
-        pts.push(sideAt(i/5, j/4), sideAt(i/5, (j+1)/4));
-      for (let j = 0; j <= 4; j++) for (let i = 0; i < 5; i++)
-        pts.push(sideAt(i/5, j/4), sideAt((i+1)/5, j/4));
+      const topX = e.mx + e.ux*half*sgn,  topZ = e.my + e.uy*half*sgn;
+      const botX = topX - e.nx*BACK,      botZ = topZ - e.ny*BACK;
+      foot.push({ x: botX, z: botZ });
+      // the stanchion itself: a cylinder from the top of the post down and back to the ground
+      const dx = botX - topX, dy = -HGT, dz = botZ - topZ;
+      const len = Math.hypot(dx, dy, dz);
+      const st = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.4, len, 7), barMat);
+      st.position.set((topX+botX)/2, HGT/2, (topZ+botZ)/2);
+      // point it along the run: a cylinder is built up the Y axis, so rotate Y onto that vector
+      st.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0),
+        new THREE.Vector3(dx/len, dy/len, dz/len));
+      scene.add(st);
+    }
+    // the ground bar joining the two feet, which is what the bottom of the net is tied to
+    {
+      const gl2 = Math.hypot(foot[1].x-foot[0].x, foot[1].z-foot[0].z);
+      const gb = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, gl2, 7), barMat);
+      gb.position.set((foot[0].x+foot[1].x)/2, 2.2, (foot[0].z+foot[1].z)/2);
+      gb.rotation.order = 'ZYX';
+      gb.rotation.z = Math.PI/2;
+      gb.rotation.y = -Math.atan2(foot[1].z-foot[0].z, foot[1].x-foot[0].x);
+      scene.add(gb);
+    }
+
+    // ── THE NET, HUNG OFF THE FRAME ──────────────────────────────────────
+    // Every cord runs between the goal mouth and the frame behind, so the sheet follows the slope
+    // the stanchions define rather than hanging in a plane of its own.
+    const netMat = new THREE.LineBasicMaterial({
+      color: 0xf4f8f6, transparent: true, opacity: 0.62 });
+    const COLS = 15, ROWS = 9;
+    const pts = [];
+    // u across the mouth, v up it; the net's depth falls off as v drops, which is the slope
+    const at = (u, v) => {
+      const mx = e.mx + e.ux*half*(u*2-1), mz = e.my + e.uy*half*(u*2-1);
+      const d = BACK * (1 - v) * 0.92;                   // deepest at the foot, tight at the bar
+      return new THREE.Vector3(mx - e.nx*d, HGT*v, mz - e.ny*d);
+    };
+    for (let i2 = 0; i2 <= COLS; i2++) for (let j2 = 0; j2 < ROWS; j2++)
+      pts.push(at(i2/COLS, j2/ROWS), at(i2/COLS, (j2+1)/ROWS));
+    for (let j2 = 0; j2 <= ROWS; j2++) for (let i2 = 0; i2 < COLS; i2++)
+      pts.push(at(i2/COLS, j2/ROWS), at((i2+1)/COLS, j2/ROWS));
+    // and the two side panels, from post to stanchion
+    for (const sgn of [-1, 1]) {
+      const side = (w, v) => {
+        const px = e.mx + e.ux*half*sgn, pz = e.my + e.uy*half*sgn;
+        const d = BACK * (1 - v) * 0.92 * w;
+        return new THREE.Vector3(px - e.nx*d, HGT*v, pz - e.ny*d);
+      };
+      for (let i2 = 0; i2 <= 6; i2++) for (let j2 = 0; j2 < 5; j2++)
+        pts.push(side(i2/6, j2/5), side(i2/6, (j2+1)/5));
+      for (let j2 = 0; j2 <= 5; j2++) for (let i2 = 0; i2 < 6; i2++)
+        pts.push(side(i2/6, j2/5), side((i2+1)/6, j2/5));
     }
     scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), netMat));
   });
@@ -1589,6 +1624,30 @@ let drawGL = function drawGL(){
       b.g.position.set(p.x, 0, p.y);
       b.g.rotation.y = -Math.atan2(p.hy, p.hx);
       b.g.scale.setScalar(1);
+      // ── THE DIVE ────────────────────────────────────────────────────────
+      // A keeper spends 0.6 of his burst to reach 23 instead of 17 for 1.2 seconds, and NEITHER
+      // page has ever drawn it — the most consequential number in the mechanic was invisible,
+      // and a save looked like a cylinder that happened to be standing in the right place.
+      //
+      // He leans. Toward the ball, hard, and back upright as the dive expires — which is both
+      // the thing that happened and, incidentally, the only way to make a cylinder look like it
+      // is trying.
+      //
+      // The tilt is applied about the axis perpendicular to the lean, in the group's own frame,
+      // so it works whichever way he is facing.
+      if (p.role === 'K' && p.diveUntil && clockSec < p.diveUntil) {
+        const left = (p.diveUntil - clockSec) / 1.2;         // 1 at the moment of the dive
+        const bx = ball.x - p.x, bz = ball.y - p.y;
+        const bd = Math.hypot(bx, bz) || 1;
+        const lean = 0.95 * Math.min(1, left * 1.4);         // eases back as it runs out
+        b.g.rotation.order = 'YXZ';
+        b.g.rotation.y = -Math.atan2(bz, bx);                // face what he is diving at
+        b.g.rotation.z = -lean;                              // and go over toward it
+        b.g.position.y = Math.sin(lean) * R_P * 0.5;         // the pivot is his feet, not his middle
+      } else {
+        b.g.rotation.z = 0;
+        b.g.position.y = 0;
+      }
     }
     // ONLY WHOEVER HAS THE BALL IS NAMED. Fifteen labels over fifteen cylinders is a wall of
     // text with a football behind it — and the name you actually want is the one the commentary
