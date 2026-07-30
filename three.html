@@ -453,7 +453,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=61"></script>
+<script src="engine.js?v=62"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1928,7 +1928,11 @@ let drawGL = function drawGL(){
         const bx2 = B.x + B.ux * slot * 18 - B.nx * 2;
         const bz2 = B.y + B.uy * slot * 18 - B.ny * 2;
         b.g.position.set(bx2, 10.5, bz2);                  // the seat's top surface
-        b.g.rotation.y = -Math.atan2(B.ny, B.nx) + Math.PI;   // facing the pitch
+        // NO +PI. The edge normal already points INWARD — checked against the direction to the
+        // centre, dot product +294 — so adding half a turn faced him at the stands. He has been
+        // sitting with his back to the match since the bench was built, which the comment
+        // claiming otherwise did nothing to prevent.
+        b.g.rotation.y = -Math.atan2(B.ny, B.nx);
         b.g.rotation.z = 0;
         b.g.scale.set(0.72, SIT, 0.72);                    // squat, not shrunk: still his width
       }
