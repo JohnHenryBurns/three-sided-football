@@ -234,7 +234,7 @@ button.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=10"></script>
+<script src="engine.js?v=11"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -521,13 +521,16 @@ const SPONSORS = [
 const BOARD_INK = [["#c8102e","#ffd166"],["#0a2a66","#ffffff"],["#ffd166","#1a1a1a"],
   ["#0b6e3f","#ffffff"],["#ffffff","#0a2a66"],["#5b2a86","#ffd166"],["#e8600a","#ffffff"]];
 
-/** Text on a coloured board, as a texture. Canvas rather than geometry because a hoarding is
- *  writing on a flat thing, which is what a canvas is. */
-function boardTexture(text, bg, fg){
+/** Text on a coloured board. `mirror` draws it back-to-front, so that when the texture is applied
+ *  to the FAR face of a box — which the viewer sees from behind — it still reads left to right.
+ *  Without it, half the ground's advertising is written backwards, which is what a single
+ *  double-sided plane gives you. */
+function boardTexture(text, bg, fg, mirror){
   const c = document.createElement('canvas');
   c.width = 512; c.height = 64;
   const x = c.getContext('2d');
   x.fillStyle = bg; x.fillRect(0, 0, 512, 64);
+  if (mirror) { x.translate(512, 0); x.scale(-1, 1); }
   x.fillStyle = fg;
   x.font = '700 40px "Barlow Condensed","Arial Narrow",sans-serif';
   x.textAlign = 'center'; x.textBaseline = 'middle';
@@ -561,9 +564,19 @@ function buildGround(){
   EDGES.forEach((e, k) => {
     const [bg, fg] = BOARD_INK[k % BOARD_INK.length];
     const text = SPONSORS[(k * 7 + 3) % SPONSORS.length];
+    // A BOX, NOT A PLANE. A hoarding has a thickness and an edge that catches the light, and a
+    // plane seen edge-on from a low camera simply vanishes. Six materials, one per face: the two
+    // long faces carry the advertisement — the outer one MIRRORED so it reads left to right from
+    // behind as well — and the rest are the board's own colour.
+    //
+    // three.js orders BoxGeometry materials +X, -X, +Y, -Y, +Z, -Z. The geometry is built
+    // width-along-X and depth-along-Z, so the two faces to letter are +Z and -Z.
+    const edgeMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(bg).multiplyScalar(0.72) });
     const board = new THREE.Mesh(
-      new THREE.PlaneGeometry(e.len * 0.92, 26),
-      new THREE.MeshBasicMaterial({ map: boardTexture(text, bg, fg), side: THREE.DoubleSide }));
+      new THREE.BoxGeometry(e.len * 0.92, 26, 3.2),
+      [edgeMat, edgeMat, edgeMat, edgeMat,
+       new THREE.MeshLambertMaterial({ map: boardTexture(text, bg, fg, false) }),
+       new THREE.MeshLambertMaterial({ map: boardTexture(text, bg, fg, true) })]);
     board.position.set(e.mx - e.nx * 34, 13, e.my - e.ny * 34);
     // ORDER MATTERS. three.js applies Euler angles XYZ by default, so setting .x then .y leans
     // the board in WORLD space and only then swings it to face the pitch — which points the lean
@@ -809,8 +822,37 @@ function buildBodies(){
   });
 }
 
-const ballGL = new THREE.Mesh(new THREE.SphereGeometry(9, 18, 12),
-  new THREE.MeshLambertMaterial({ color: 0xffffff }));
+// ── THE BALL ────────────────────────────────────────────────────────────────
+// A white sphere is a marble. A football is white with black patches, and the patches are what
+// make rotation VISIBLE — a featureless sphere can spin as fast as it likes and look still,
+// which is why the ball never read as rolling.
+//
+// Drawn rather than modelled: a real truncated icosahedron is 32 faces of geometry to say
+// something a texture says at a tenth of the cost, and at this size nobody counts the pentagons.
+function ballTexture(){
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 128;
+  const x = c.getContext('2d');
+  x.fillStyle = '#f4f4f2'; x.fillRect(0, 0, 256, 128);
+  // pentagons in two offset rows, which is what the pattern looks like unwrapped
+  const put = (cx, cy, r) => {
+    x.beginPath();
+    for (let k = 0; k < 5; k++) {
+      const a = k * 2*Math.PI/5 - Math.PI/2;
+      const px = cx + r*Math.cos(a), py = cy + r*Math.sin(a);
+      k ? x.lineTo(px, py) : x.moveTo(px, py);
+    }
+    x.closePath(); x.fillStyle = '#16181a'; x.fill();
+  };
+  for (let i = 0; i < 5; i++) put(26 + i*52, 40, 15);
+  for (let i = 0; i < 5; i++) put(52 + i*52, 92, 15);
+  put(0, 66, 13); put(256, 66, 13);
+  const t = new THREE.CanvasTexture(c);
+  t.minFilter = THREE.LinearFilter;
+  return t;
+}
+const ballGL = new THREE.Mesh(new THREE.SphereGeometry(9, 22, 16),
+  new THREE.MeshLambertMaterial({ map: ballTexture() }));
 scene.add(ballGL);
 const shadowGL = new THREE.Mesh(new THREE.CircleGeometry(9, 18),
   new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.34 }));
@@ -861,6 +903,26 @@ let drawGL = function drawGL(){
     if (b.pip.visible) b.pip.material.color.set(p.redCard ? 0xe11d2e : 0xffd166);
   });
   const z = Math.max(0, ball.z || 0);
+  // ROLLING. A ball travelling along the ground turns about the axis perpendicular to its
+  // heading, through an angle of distance/radius — that is what rolling IS, and getting it from
+  // the actual velocity rather than a fixed spin means it slows and stops when the ball does.
+  //
+  // Applied as a quaternion premultiplied onto whatever rotation it already had, so the spin
+  // accumulates rather than being reset each frame. Setting an Euler angle from speed would make
+  // it snap back to zero the moment the ball stopped.
+  {
+    const vx = ball.vx || 0, vy = ball.vy || 0;
+    const sp = Math.hypot(vx, vy);
+    if (sp > 0.02) {
+      const axis = new THREE.Vector3(vy, 0, -vx).normalize();   // perpendicular, in the ground
+      // Damped to 0.6 of the true rate, deliberately. A ball of radius 9 moving at 14 units a
+      // step turns 1.55 radians a frame, which at 60fps is nine rotations a second — past the
+      // point where a rendered wheel starts to look like it is standing still or going
+      // backwards. Physically honest and visually useless. Slower reads as faster here.
+      const spin = new THREE.Quaternion().setFromAxisAngle(axis, (sp * 0.6) / 9);
+      ballGL.quaternion.premultiply(spin);
+    }
+  }
   ballGL.position.set(ball.x, 9 + z, ball.y);
   shadowGL.position.set(ball.x, 0.5, ball.y);
   const k = 1 / (1 + z*0.012);
