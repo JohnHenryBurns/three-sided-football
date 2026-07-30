@@ -417,7 +417,7 @@ function kickoff(toTeam){
     p.x = CX + dx * k;
     p.y = CY + dy * k;
   });
-  ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
+  telPort('kickoff'); ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
   ball.touchT=0; ball.strayer=null; ball.strayF=0; ball.z=0; ball.zv=0;
   cornerTaker=null; cornerGoal=null; restartHold=0; pendingRestart=null; throwPending=null;
   const fwd=players.find(p=>p.team===toTeam&&p.role==="F"&&!p.out&&!p.sentOff)
@@ -1456,6 +1456,7 @@ function physics(dt){
       }
       ball.allyPass=false;
       if(ball.puntBy!==undefined){ GKSTAT.puntSeen++; if(best.team===ball.puntBy)GKSTAT.puntSame++; ball.puntBy=undefined; }
+      if(Math.hypot(ball.x-best.x,ball.y-best.y)>25) telPort('claim: ball snapped to the claimer');
       ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
       if(ball.flameShot&&best.role==="K") ENGINE_HOOKS.spawnNote(best.x,best.y-24,"🔥 extinguished!","#ffd166");
       ball.flameShot=false;
@@ -1763,19 +1764,29 @@ const TEL = {
   throwIns:0, corners:0, goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0,
   poss:[0,0,0], jumps:0, bigJumps:0, maxJump:0, lastX:null, lastY:null,
   claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
-  zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0,
+  zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{},
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
 function telReset(){
   Object.assign(TEL, { frames:0, loose:0, deadFrames:0, aerial:0, throwIns:0, corners:0,
     goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0, poss:[0,0,0], jumps:0,
     claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
-    zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0,
-  zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, behindGoal:0, behindOwn:0, behindOther:0,
+    zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, port:{},
+  zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
 }
 /** Called once a frame by whichever front end is driving. Cheap: one hypot and a few adds. */
+// ── WHO MOVED THE BALL ──────────────────────────────────────────────────────
+// TEL.bigJumps counts every frame-to-frame move over 25 units, which tells you THAT the ball
+// teleports and never WHICH restart did it. Four browser matches reported 314, 317, 321 and 325
+// as the largest, and I could not say what any of them was.
+//
+// Each place the engine moves the ball instantly now names itself, and the report prints the
+// tally. The goal is that every one of these becomes a journey instead — a player fetching it, or
+// the crowd throwing it back — and this is how we watch that number go to zero.
+function telPort(why){ TEL.port[why] = (TEL.port[why] || 0) + 1; }
+
 function telFrame(){
   TEL.frames++;
   if(ball.owner){ TEL.ownedFrames++; TEL.poss[ball.owner.team]++; if(ball.owner.role==="K") TEL.keeperFrames++; }
@@ -1849,6 +1860,9 @@ function buildMatchReport(){
   md+=`| stalls over 0.5s | ${TEL.stalls} | ${p90(TEL.stalls)} | |\n`;
   md+=`| longest stall | ${(TEL.worstStall/60).toFixed(1)}s | | |\n`;
   md+=`| ball jumps over 25 units | ${TEL.bigJumps} | ${p90(TEL.bigJumps)} | |\n`;
+  // WHICH restart moved it, so the gold standard has something to aim at.
+  const ports=Object.entries(TEL.port).sort((a2,b2)=>b2[1]-a2[1]);
+  for(const [why,n2] of ports) md+=`| \u2014 ${why} | ${n2} | ${p90(n2)} | should be 0 |\n`;
   md+=`| largest single jump | ${Math.round(TEL.maxJump)} | | pitch is 680 across |\n`;
   md+=`| possession | ${TEL.poss.map((x,i2)=>TEAMS[i2].short+" "+Math.round(100*x/ow)+"%").join(" \u00b7 ")} | | |\n`;
   md+=`\n*${Math.round(secs)}s of play across ${f} frames.*\n`;
@@ -2415,8 +2429,8 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
   const cands=players.filter(q=>q.team!==toucher&&q.role!=="K"&&!q.out&&!q.sentOff)
     .sort((a,b)=>dist(a,{x:sx,y:sy})-dist(b,{x:sx,y:sy}));
   const thr=cands[0];
-  if(!thr){ ball.x=CX; ball.y=CY; return; }
-  ball.owner=null; ball.x=sx; ball.y=sy;
+  if(!thr){ telPort('throw-in: nobody to take it'); ball.x=CX; ball.y=CY; return; }
+  telPort('throw-in'); ball.owner=null; ball.x=sx; ball.y=sy;
   pendingRestart={p:thr, x:sx, y:sy, team:thr.team, cap:nowMs()+2000, readyAt:nowMs()+1100};
   suppress={team:toucher,until:clockSec+0.8};
   ENGINE_HOOKS.spawnNote(sx,sy-24,"throw-in!",TEAMS[thr.team].color,TEAMS[thr.team].accent);
@@ -2429,7 +2443,7 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
 }
 function stageGoalKick(t){
   const gk=players.find(q=>q.team===t&&q.role==="K"&&!q.out);
-  if(!gk){ ball.x=CX; ball.y=CY; return; }
+  if(!gk){ telPort('goal kick: no keeper'); telPort('goal kick'); ball.x=CX; ball.y=CY; return; }
   ball.owner=gk; ball.lastTouch=t; ball.lastKicker=gk;
   ball.x=gk.x; ball.y=gk.y; ball.touchT=0.4;
   ENGINE_HOOKS.spawnNote(gk.x,gk.y-24,"goal kick",TEAMS[t].color,TEAMS[t].accent);
@@ -2444,7 +2458,7 @@ function stageCorner(ownerT,e,ex,ey){
   restartHold=Math.max(restartHold,nowMs()+2400);   // staging owns its hold
   const alive=[0,1,2].filter(x=>x!==ownerT&&!out[x]);
   const att=alive.find(x=>targets[x]===ownerT)??alive[0];
-  if(att===undefined){ ball.x=CX; ball.y=CY; return; }
+  if(att===undefined){ telPort('corner: nobody to take it'); ball.x=CX; ball.y=CY; return; }
   const vtx=dist({x:e.p1.x,y:e.p1.y},{x:ex,y:ey})<dist({x:e.p2.x,y:e.p2.y},{x:ex,y:ey})?e.p1:e.p2;
   const taker=players.filter(q=>q.team===att&&q.role!=="K"&&!q.out&&!q.sentOff)
     .sort((a,b)=>dist(a,vtx)-dist(b,vtx))[0];
@@ -2469,7 +2483,7 @@ function stagePenalty(){
   const e=EDGES[GOAL_EDGE[conceder]], g=goalCenter(conceder);
   const sx=g.x+e.nx*110, sy=g.y+e.ny*110;
   ball.owner=shooter; ball.lastTouch=shooter.team; ball.lastKicker=shooter;
-  ball.x=sx; ball.y=sy; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+  telPort('corner'); ball.x=sx; ball.y=sy; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
   ball.touchT=99;   // no dribble touches during the run-up
   shooter.x=sx+e.nx*16; shooter.y=sy+e.ny*16; shooter.vx=0; shooter.vy=0;
   const gk=players.find(q=>q.team===conceder&&q.role==="K"&&!q.out);
