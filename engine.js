@@ -371,6 +371,16 @@ function kickoff(toTeam){
     ||players.find(p=>p.team===toTeam&&p.role==="K"&&!p.out);
   if(!fwd) return;
   fwd.x=CX-8; fwd.y=CY; ball.owner=fwd; ball.lastTouch=toTeam;
+  // EVERYONE LOOKS AT THE BALL, and this has to come LAST — after the circle has been cleared
+  // and after the taker has been walked onto the spot, or the two players who move afterwards
+  // keep the heading they were given before they moved.
+  //
+  // Heading persists across a restart, so a line-up was previously twenty-two players in a neat
+  // formation all facing wherever they happened to be running when the last goal went in.
+  players.forEach(p => {
+    const dx = ball.x - p.x, dy = ball.y - p.y, d = Math.hypot(dx, dy);
+    if (d > 0.5) { p.hx = dx/d; p.hy = dy/d; }     // the taker is on top of it; leave his be
+  });
   if(performance.now()>resumeAt-2500)   // countdown in progress? the note waits for GO
     ENGINE_HOOKS.spawnNote(CX,CY-46,"kick-off!",TEAMS[toTeam].color,TEAMS[toTeam].accent);
 }
