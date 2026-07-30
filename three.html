@@ -422,7 +422,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=45"></script>
+<script src="engine.js?v=46"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2294,7 +2294,7 @@ document.addEventListener('fullscreenchange', () => {
 // happening behind it. Offering both is cheaper than choosing wrong.
 const CAMS = [
   { id:'follow',  glyph:'\u26BD', name:'Follow ball',
-    what:'three-quarter, chases the ball',      az:-Math.PI/2, rad:840,  el:0.52, follow:true },   // 1250 * 0.82^2: two steps in
+    what:'the camera goes where it goes',      az:-Math.PI/2, rad:840,  el:0.52, follow:true },   // 1250 * 0.82^2: two steps in
   { id:'broad',   glyph:'\u{1F4FA}', name:'Broadcast',
     what:'high and fixed \u00b7 the whole hex',  az:-Math.PI/2, rad:1177, el:0.62, follow:false },
   { id:'over',    glyph:'\u{1F53D}', name:'Overhead',
@@ -2304,7 +2304,7 @@ const CAMS = [
   { id:'goal',    glyph:'\u{1F945}', name:'Behind the goal',
     what:'from one end \u00b7 shots arriving',   az:Math.PI/2,  rad:706,  el:0.34, follow:false },
   { id:'free',    glyph:'\u{1F504}', name:'Free look',
-    what:'orbit, pinch, two-finger pan',      az:null,       el:null, rad:null, follow:false },
+    what:'stays where you put it \u00b7 pans',      az:null,       el:null, rad:null, follow:false },
 ];
 let camId = 'follow';
 const cmEl = document.getElementById('cm'), cmCard = document.getElementById('cmCard');
@@ -2314,10 +2314,17 @@ function useCam(id){
   const C = CAMS.find(c => c.id === id) || CAMS[0];
   camId = C.id;
   follow = C.follow;
-  // `free` keeps whatever the last drag left, which is the point of it — everything else snaps
-  // to its own angle so choosing a view actually changes what you see.
+  // Free look keeps EVERYTHING — angle, distance and the point you were looking at. Choosing it
+  // means "stop following", not "start again somewhere else": if you were watching a chase from
+  // a low angle behind the play, that is the shot you wanted to keep, and snapping to a default
+  // would throw away the thing you pressed the button to preserve.
+  //
+  // Every other preset snaps, because choosing one is choosing a whole view.
   if (C.az !== null) { az = C.az; el = C.el; rad = C.rad; }
-  if (!C.follow && C.id !== 'free') look.set(CX, 0, CY);   // free keeps where you panned to
+  // Free look touches the target not at all: if you were following, it stays wherever the ball
+  // just was, which is the frame you were looking at when you decided to stop. Everything else
+  // that does not follow recentres, because choosing it is choosing a whole view.
+  if (C.id !== 'free' && !C.follow) look.set(CX, 0, CY);
   // Behind the goal looks at that goal's mouth rather than the middle, or it is just Broadcast
   // from the other side.
   if (C.id === 'goal') { const e = EDGES[GOAL_EDGE[0]]; look.set(e.mx, 0, e.my); }
@@ -2425,11 +2432,18 @@ coEl.addEventListener('click', e => { if (e.target === coEl) coEl.classList.remo
 ENGINE_HOOKS.openCoachMenu = openCoach;
 cmEl.addEventListener('click', e => { if (e.target === cmEl) cmEl.classList.remove('on'); });
 
-// Dragging is always allowed, and it drops you into Free look — a camera you can move is one you
-// have taken over, and pretending you are still on Broadcast afterwards is a lie the button
-// would be telling.
-function wentFree(){ if (camId !== 'free') { camId = 'free'; follow = false;
-  camBtn.textContent = 'Free look'; camBtn.classList.remove('on'); } }
+// ── WHAT A CAMERA IS, AND WHAT A GESTURE IS ─────────────────────────────────
+// These are two different things and I had them tangled. A preset says WHAT THE CAMERA LOOKS AT
+// — the ball, the middle, a goal mouth. A gesture says HOW YOU LOOK AT IT. Turning and zooming
+// do not contradict "follow the ball"; they are the angle you want to follow it FROM.
+//
+// So dragging and pinching no longer break tracking. Only choosing another camera does, which is
+// the one action that means "look at something else" — and Free look is exactly the preset whose
+// answer to "what do you look at" is "wherever I left it".
+//
+// The old behaviour dropped you into Free look on any drag, which meant you could not adjust
+// your view of a chase without losing the chase, and the button lied about it afterwards.
+function panAllowed(){ return !follow; }   // following overwrites the target every frame
 
 
 // drag to orbit, wheel or pinch to pull back
@@ -2463,9 +2477,8 @@ function panBy(dx, dy){
 
 cv.addEventListener('pointermove', e => {
   if (!drag) return;
-  wentFree();
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-  if (drag.pan || e.shiftKey || e.buttons === 2) panBy(dx, dy);
+  if ((drag.pan || e.shiftKey || e.buttons === 2) && panAllowed()) panBy(dx, dy);
   else {
     az += dx * 0.006;
     el = Math.max(0.16, Math.min(1.42, el + dy * 0.005));
@@ -2505,7 +2518,10 @@ cv.addEventListener('touchmove', e => {
   if (pinch) { rad = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, rad * (pinch/d))); placeCam(); }
   // The midpoint between two fingers moving IS a pan, and it comes for free alongside the pinch:
   // people spread and slide in one gesture and expect both to happen.
-  if (twoMid) { wentFree(); panBy(mx - twoMid.x, my - twoMid.y); }
+  // Panning only means anything when nothing is overwriting the target. While following, two
+  // fingers still pinch — you just cannot drag the ball out of frame, which is the point of
+  // having asked to follow it.
+  if (twoMid && panAllowed()) panBy(mx - twoMid.x, my - twoMid.y);
   pinch = d; twoMid = { x: mx, y: my };
 }, { passive: false });
 cv.addEventListener('touchend', () => { pinch = 0; twoMid = null; });
