@@ -1114,7 +1114,16 @@ const PORTED = [
     coach:T => 0,
     can:p => !!(penaltyShooter===p && ball.owner===p),
     score:p => ripeness(p.restartSince||clockSec, 130),
-    act:p => { return false; } },   // the cascade's penalty body is elaborate; it moves at the flip
+    act:p => {
+      const gt=penaltyGoalTeam;
+      const e=EDGES[GOAL_EDGE[gt]], g=goalCenter(gt);
+      const off2=(RNG()*2-1)*e.len*GOAL_HALF*1.0;
+      stats.shots[p.team]++;
+      penaltyShooter=null;
+      kick(g.x+e.ux*off2, g.y+e.uy*off2, 10.8, true);
+      gkDiveCheck(gt, false);
+      return true;
+    } },
 
   // ── THE FREE KICK ─────────────────────────────────────────────────────────
   // Ripens too, but from the moment the wall is legal rather than from the award — waiting for
