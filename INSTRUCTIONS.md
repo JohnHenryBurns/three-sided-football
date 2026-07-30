@@ -127,6 +127,35 @@ seed 1007   loose 30%   ball held too long
 **Those three seeds are the next piece of work.** Two of the three are the ball being
 held, which is the signature the watchdog does not catch.
 
+## restartHold does not mean "pause"
+
+I moved the kick-off pause into the engine — right instinct, since a fixed 900ms in
+`index.html` is a fact about the game living where only one renderer can see it — and
+lengthened it to a sampled 1.6–3.4s, as planned for throws and corners.
+
+**4/6 usable, against a baseline of 6/6.**
+
+**The cause is that `restartHold` means *a restart is being staged*, not *play is
+paused*.** Nine instructions read it that way:
+
+```
+offering a lane        flooding the mouth      prowling
+an ally offers deep    packing the near zone   closing it down
+vultures with patience the second wave         sweeping
+```
+
+Setting it after a kick-off tells all nine that a throw or a corner is being set up when
+none is — so men prowl a ball nobody is taking and vultures wait at midfield for a
+restart that has already happened.
+
+**What the kick-off pause needs is its own state**, meaning "play has not begun yet", read
+by the loop and by nothing else. Two concepts sharing one variable, which is the same
+fault as `out` and `sentOff` and the same fault as `lastTouch` doing two jobs at the goal
+line.
+
+**Third instance today.** The shape is always: one flag, two meanings, and the bug appears
+only where the meanings diverge.
+
 ## Not everything is an instruction
 
 **John asked whether the back-pass rule is one. I tried it and it should not be.**
