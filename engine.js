@@ -1009,6 +1009,59 @@ const INSTRUCTIONS = [
       return true;
     } },
 
+  // ── THE CORNER, ALL THREE WAVES ───────────────────────────────────────────
+  // The same geometry three times with different depths, which is what a corner looks like from
+  // above: attackers flood 30-72 out, defenders pack 16-34 goal-side of them, and an ALLIED third
+  // side arrives as a second wave at 62-102, wider than either.
+  //
+  // COACH tier, all three — a routine. And now that a play is a weight rather than a wall, a man
+  // in the box who sees the ball break loose can leave his slot and go for it.
+  { name:'flooding the mouth', tier:TIER.COACH, base:120,
+    applies:p => !!(holdingPlay() && cornerTaker && pendingRestart
+                    && pendingRestart.p===cornerTaker && cornerGoal!==null
+                    && p!==cornerTaker && p.role!=='K' && p.team===pendingRestart.team),
+    score:p => 120,
+    act:p => {
+      const g4=goalCenter(cornerGoal), e4=EDGES[GOAL_EDGE[cornerGoal]];
+      const u4x=-e4.ny, u4y=e4.nx;
+      const lat4=((p.k1*883)%1-0.5)*e4.len*GOAL_HALF*1.5;
+      const dep4=30+((p.k2*577)%1)*42;
+      steer(p, g4.x+e4.nx*dep4+u4x*lat4, g4.y+e4.ny*dep4+u4y*lat4, 1.75);
+      return true;
+    } },
+
+  { name:'packing the near zone', tier:TIER.COACH, base:118,
+    applies:p => !!(holdingPlay() && cornerTaker && pendingRestart
+                    && pendingRestart.p===cornerTaker && cornerGoal!==null
+                    && p!==cornerTaker && p.role!=='K' && p.team===cornerGoal),
+    score:p => 118,
+    act:p => {
+      const g4=goalCenter(cornerGoal), e4=EDGES[GOAL_EDGE[cornerGoal]];
+      const u4x=-e4.ny, u4y=e4.nx;
+      const lat4=((p.k1*883)%1-0.5)*e4.len*GOAL_HALF*1.2;
+      const dep4=16+((p.k2*577)%1)*18;
+      steer(p, g4.x+e4.nx*dep4+u4x*lat4, g4.y+e4.ny*dep4+u4y*lat4, 1.45);
+      return true;
+    } },
+
+  // An ally turns up to somebody else's corner: wider and deeper than either side contesting it,
+  // there to profit from the mess rather than to make it.
+  { name:'the second wave', tier:TIER.COACH, base:116,
+    applies:p => !!(holdingPlay() && cornerTaker && pendingRestart
+                    && pendingRestart.p===cornerTaker && cornerGoal!==null
+                    && p!==cornerTaker && p.role!=='K' && p.team!==pendingRestart.team
+                    && p.team!==cornerGoal && allied(p.team, pendingRestart.team)),
+    score:p => 116,
+    act:p => {
+      const g4=goalCenter(cornerGoal), e4=EDGES[GOAL_EDGE[cornerGoal]];
+      const u4x=-e4.ny, u4y=e4.nx;
+      const lat4=((p.k1*733)%1-0.5)*e4.len*GOAL_HALF*1.9;
+      const dep4=62+((p.k2*541)%1)*40;
+      GKSTAT.allySiege=(GKSTAT.allySiege||0)+1;
+      steer(p, g4.x+e4.nx*dep4+u4x*lat4, g4.y+e4.ny*dep4+u4y*lat4, 1.2);
+      return true;
+    } },
+
   // ── OFFERING AFTER A RESTART ──────────────────────────────────────────────
   // NOT explicit: he has taken it and is choosing to make himself available rather than chase.
   // Released by POSSESSION — the moment anybody else has the ball he is a player again — with
