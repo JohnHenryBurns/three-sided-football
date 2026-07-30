@@ -765,6 +765,34 @@ function benchSpot(t){
 // He should sulk. Facing the pitch he is no longer allowed on, with a slump that deepens for a
 // few seconds and then settles into something more like sullen acceptance — because nobody stays
 // furious for ninety minutes, they just stay benched.
+// ── A RESTART THAT CANNOT FINISH MUST NOT HANG THE MATCH ────────────────────
+// Two harness matches in five come out broken in opposite ways — one with the ball owned 97% of
+// the time, one with it loose 81% and nobody chasing. Both look like a restart that never
+// completes: in the first the taker holds forever, in the second the ball sits dead.
+//
+// The free kick is the newest and the only one whose completion depends on OTHER PLAYERS moving
+// out of the way. If the taker is sent off, or benched, or the wall never clears because
+// somebody is stuck, nothing ever sets freeKick.done and the match never restarts.
+//
+// Eight seconds and it is void, whatever the state. A watchdog is not a fix for the underlying
+// fault, and it is written down as such — but a match that cannot restart is worse than a free
+// kick that gets abandoned.
+function stepRestartWatchdog(){
+  if(freeKick && !freeKick.done){
+    const t=freeKick.taker;
+    const gone = !t || t.out || t.sentOff;
+    if(gone || clockSec-freeKick.at>8){
+      TEL.restartVoid++;
+      freeKick=null;
+      if(ball.owner && ball.owner.role!=='K') ball.owner=null;
+    }
+  }
+  if(pendingRestart && pendingRestart.p && (pendingRestart.p.out||pendingRestart.p.sentOff)){
+    TEL.restartVoid++;
+    pendingRestart=null; ball.fetch=null;
+  }
+}
+
 function stepBench(){
   players.forEach(p=>{
     if(!p.benched) return;
@@ -2418,6 +2446,7 @@ function physics(dt){
   ball.px=ball.x; ball.py=ball.y; ball.pz=ball.z;
   stepJumps(S);          // heads move before anybody reaches with one
   stepBench();           // and the disgraced watch from the side
+  stepRestartWatchdog(); // and no restart may hang the match
   players.forEach(p=>{
     if(p.out)return;
     const pv=Math.hypot(p.vx,p.vy);
@@ -3058,7 +3087,7 @@ const TEL = {
   claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
-  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0,
+  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0,
   unattributed:0, unattMax:0, portFrame:-1,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
@@ -3068,16 +3097,16 @@ function telReset(){
     claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
     jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
-    jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0,
-  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, freeKicks:0,
+    jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, restartVoid:0,
+  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, freeKicks:0,
     unattributed:0, unattMax:0, portFrame:-1,
   unattributed:0, unattMax:0, portFrame:-1, deflected:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
-  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0,
+  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0,
   unattributed:0, unattMax:0, portFrame:-1, woodwork:0, bars:0, posts:0, port:{},
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
-  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0,
+  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0,
   unattributed:0, unattMax:0, portFrame:-1, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
@@ -3170,6 +3199,7 @@ function buildMatchReport(){
   const p90=x=>Math.round(x*(5400/Math.max(1,secs)));
   md+=`| throw-ins | ${TEL.throwIns} | ${p90(TEL.throwIns)} | ~40 |\n`;
   md+=`| free kicks | ${TEL.freeKicks} | ${p90(TEL.freeKicks)} | ~22 |\n`;
+  md+=`| **restarts voided by the watchdog** | ${TEL.restartVoid} | | should be 0 |\n`;
 
   // ── INSTRUCTIONS ──────────────────────────────────────────────────────────
   // Whether the list is being used, and whether players stick with what they are told.
