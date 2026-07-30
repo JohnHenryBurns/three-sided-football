@@ -453,7 +453,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=62"></script>
+<script src="engine.js?v=63"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2411,10 +2411,13 @@ ENGINE_HOOKS.crownChampion = (t, how) => {
   say('<span class="goal">\u{1F3C6} ' + T.name + ' ARE CHAMPIONS OF THE HEX!</span>', true);
 };
 
+// Purely the announcement now. The engine's knockOut() has already set out[t], marked every one
+// of their players out, dropped the ball if one of them held it and released their coach — which
+// this hook used to be expected to do, and never did.
 ENGINE_HOOKS.eliminateTeam = t => {
   const T = TEAMS[t];
-  showCard(T.color, 'ELIMINATED', T.name, 'Down to two', 2000, false);
-  say(T.name + ' are out');
+  showCard(T.color, '\u{1F480} ELIMINATED', T.name + ' are out',
+           aliveTeams().length + ' left', 2200, false);
 };
 
 // A card against a team flashes that team's chip, which is where the eye already is when

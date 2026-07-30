@@ -1643,7 +1643,7 @@ function goalScored(concederTeam){
     }
     // three left: the conceder is eliminated, survivors play golden goal
     ENGINE_HOOKS.say(`<span class="goal">💀 ELIMINATED!</span> ${tm(concederTeam)} concede in overtime and they're OUT!`,true);
-    ENGINE_HOOKS.eliminateTeam(concederTeam);
+    knockOut(concederTeam);          // the RULE, not just the announcement
     otGolden=true;
     const survivors=aliveTeams();
     ENGINE_HOOKS.showCelebration(TEAMS[concederTeam].color,"💀 ELIMINATED!",
@@ -1731,6 +1731,28 @@ function buildMatchReport(){
   md+=`\n## Full play-by-play\n\n`+matchLog.map(l=>`- ${l}`).join("\n")+"\n";
   return md;
 }
+// ── ELIMINATION IS A RULE, NOT A PICTURE ────────────────────────────────────
+// This was done entirely inside the front end's `eliminateTeam` hook — the flat page set out[t],
+// marked every player out, dropped the ball if an eliminated player held it, and cleared the
+// coach. The 3D page's hook showed a card and did NONE of it.
+//
+// So on that page nobody was ever actually eliminated. aliveTeams() still returned three, which
+// made otGolden false, which meant a match went to three-way overtime with a team on -1 that
+// should have been knocked out on the tiebreak — and then overtime concessions eliminated
+// nobody either, because the same hook was doing the same nothing.
+//
+// A hook is for DRAWING. If the rules depend on it, it is not a hook, and this one was carrying
+// the whole elimination rule on the assumption that both front ends would implement it
+// identically. They did not, and there was nothing to make them.
+function knockOut(t){
+  if(out[t]) return;
+  out[t]=true;
+  coached[t]=false; coachTarget[t]=null; if(activeCoach===t) activeCoach=null;
+  players.forEach(p=>{ if(p.team===t){ p.out=true; if(ball.owner===p) ball.owner=null; }});
+  if(ball.lastKicker&&ball.lastKicker.out) ball.isShot=false;
+  ENGINE_HOOKS.eliminateTeam(t);        // now purely the announcement
+}
+
 function resolveFullTime(){
   // rank by mode metric, tiebreak on goals scored (FIFA-style)
   const order=[0,1,2].sort(rankCmp);
@@ -1740,7 +1762,7 @@ function resolveFullTime(){
   phase="overtime";
   [0,1,2].filter(t=>!leaders.includes(t)).forEach(t=>{
     ENGINE_HOOKS.say(`Full time — ${tm(t)} are eliminated on the tiebreak.`,true);
-    ENGINE_HOOKS.eliminateTeam(t);
+    knockOut(t);
   });
   otGolden=(aliveTeams().length===2);
   if(otGolden){
