@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// THE SIMULATION.
+// THE ENGINE.
 //
 // Three-sided football, without a screen. Nothing here touches the DOM: it keeps the pitch
 // geometry, the teams, the players, the ball, the rules, the AI and the commentary text, and it
@@ -16,7 +16,7 @@
 // The simulation announces; it does not render. Every hook defaults to a no-op, so the sim runs
 // headless -- which is what makes it testable without a browser, and what stops a missing hook
 // being a crash rather than a silence.
-const SIM_HOOKS = {
+const ENGINE_HOOKS = {
   say: () => {},
   spawnNote: () => {},
   spawnPing: () => {},
@@ -36,7 +36,7 @@ const SIM_HOOKS = {
   clearMarks: () => {},
 };
 
-// Every call below goes through SIM_HOOKS explicitly. An earlier version declared shim
+// Every call below goes through ENGINE_HOOKS explicitly. An earlier version declared shim
 // functions with the same names as the front end's, which worked only because the front end's
 // script ran second and its declarations won. Two functions with one name, and script order
 // deciding which is real, is a bug that happens to behave.
@@ -50,18 +50,18 @@ function resetMatch(){
     teamATK[t]=TEAMS[t].id.atk; teamDEF[t]=TEAMS[t].id.def; teamAGG[t]=TEAMS[t].id.agg;
     applyPresets(t);
   }
-  menuTeam=null; SIM_HOOKS.closeCoachMenu();   // the page shuts its own menu
+  menuTeam=null; ENGINE_HOOKS.closeCoachMenu();   // the page shuts its own menu
   stats={shots:[0,0,0],saves:[0,0,0],tackles:[0,0,0],poss:[0,0,0]};
   goalsLog=[]; goldenScorer=null; matchLog=[]; gkHolder=null; gkHoldUntil=-1;
   matchStadium=pick(STADIUMS);
   GKSTAT.lastThrowAt=-99; GKSTAT.lastClaimAt=-99;   // metrics never bleed across matches
-  SIM_HOOKS.resetGoals();   // the page puts its own goal frames back
-  SIM_HOOKS.drawBoards();   // fresh sponsors every match, drawn by whoever is drawing
+  ENGINE_HOOKS.resetGoals();   // the page puts its own goal frames back
+  ENGINE_HOOKS.drawBoards();   // fresh sponsors every match, drawn by whoever is drawing
   suppress=null; pendingPenalty=null; penaltyShooter=null; penaltyGoalTeam=null;
   stoppageAnnounced=false;
   stoppageLen=Math.min(55,matchLen*0.2)*(0.85+Math.random()*0.3);
   notes.forEach(n=>n.e.remove()); notes=[];
-  SIM_HOOKS.clearMarks();   // the page throws away its own pings and notes
+  ENGINE_HOOKS.clearMarks();   // the page throws away its own pings and notes
   boostUntil=[0,0,0]; lastPossessTeam=null; lastPossessComment=-99; lastFatigueComment=0; lastColorComment=0;
   for(let t=0;t<3;t++) formation(t).forEach((f,i)=>players.push(
     {team:t,role:f.role,name:TEAMS[t].roster[i],x:f.x,y:f.y,vx:0,vy:0,stamina:1,burst:1,sprint:null,deniedLatch:false,sprintMin:0,sprintCd:0,
@@ -72,8 +72,8 @@ function resetMatch(){
   computeTargets();
   const first=Math.floor(Math.random()*3);
   kickoff(first);
-  SIM_HOOKS.say(`We're underway at ${matchStadium}! ${tm(0)}, ${tm(1)} and ${tm(2)} — one ball, two enemies each. ${tm(first)} get us started.`,true);
-  SIM_HOOKS.renderScore();
+  ENGINE_HOOKS.say(`We're underway at ${matchStadium}! ${tm(0)}, ${tm(1)} and ${tm(2)} — one ball, two enemies each. ${tm(first)} get us started.`,true);
+  ENGINE_HOOKS.renderScore();
 }
 
 
@@ -260,7 +260,7 @@ function kickoff(toTeam){
   if(!fwd) return;
   fwd.x=CX-8; fwd.y=CY; ball.owner=fwd; ball.lastTouch=toTeam;
   if(performance.now()>resumeAt-2500)   // countdown in progress? the note waits for GO
-    SIM_HOOKS.spawnNote(CX,CY-46,"kick-off!",TEAMS[toTeam].color,TEAMS[toTeam].accent);
+    ENGINE_HOOKS.spawnNote(CX,CY-46,"kick-off!",TEAMS[toTeam].color,TEAMS[toTeam].accent);
 }
 
 // ---------- Diplomacy & ranking ----------
@@ -289,13 +289,13 @@ function computeTargets(){
     for(let a2=0;a2<3;a2++) for(let b2=a2+1;b2<3;b2++)
       if(changed(a2)&&changed(b2)&&targets[a2]===b2&&targets[b2]===a2){
         mutualDone[a2]=mutualDone[b2]=true;
-        SIM_HOOKS.say(pick([
+        ENGINE_HOOKS.say(pick([
           `${tm(a2)} and ${tm(b2)} turn on EACH OTHER — no more pretending!`,
           `It's personal now: ${tm(a2)} and ${tm(b2)} set their sights on each other.`,
           `The hex delivers a grudge match — ${tm(a2)} and ${tm(b2)}, eye to eye.`]),true,"lowvoice");
       }
     for(let t=0;t<3;t++) if(changed(t)&&!mutualDone[t])
-    SIM_HOOKS.say(pick([
+    ENGINE_HOOKS.say(pick([
       `Tactical switch — ${tm(t)} turn their guns on ${tm(targets[t])}!`,
       `The alliance shifts: ${tm(t)} now hunting ${tm(targets[t])}.`,
       `${tm(t)} smell blood — they're going after ${tm(targets[t])} now.`,
@@ -305,7 +305,7 @@ function computeTargets(){
       `The hex has no loyalty: ${tm(t)} pivot onto ${tm(targets[t])}.`,
       `${tm(t)} redraw the map. ${tm(targets[t])} are the enemy now.`]),true,"lowvoice");
   }
-  SIM_HOOKS.renderScore();
+  ENGINE_HOOKS.renderScore();
 }
 let retargetTimer=0;
 
@@ -319,7 +319,7 @@ const RAINBOW=["#ff5aa7","#ff9f1c","#ffe14d","#5ad66f","#5ab9ff","#b58ae0"];
 function firePal(t9){ return TEAMS[t9]&&TEAMS[t9].she?RAINBOW:FLAME3; }
 function superSay(p2){
   if(Math.random()>0.6)return;
-  SIM_HOOKS.say(pick([
+  ENGINE_HOOKS.say(pick([
     `${p2.name} loads one with John Wick focus — absolute commitment!`,
     `FLAME SHOT! ${p2.name} puts the whole tank behind it!`,
     `${p2.name} with sudden, terrible intent — that ball is SMOKING!`,
@@ -334,15 +334,15 @@ function gkDiveCheck(defT,flame){
   if(gk.burst>0.6&&(flame||Math.random()<0.12)){
     gk.burst-=0.6; gk.diveUntil=clockSec+1.2;
     GKSTAT.diveBurns=(GKSTAT.diveBurns||0)+1;
-    SIM_HOOKS.flamePop(gk);
+    ENGINE_HOOKS.flamePop(gk);
     if(flame){
       GKSTAT.duels=(GKSTAT.duels||0)+1;
-      SIM_HOOKS.say(pick([
+      ENGINE_HOOKS.say(pick([
         `FIRE MEETS FIRE — both tanks emptied in one heartbeat!`,
         `${gk.name} answers the flame with a flame of ${PRN(gk).his} own!`,
         `A duel! Burning shot, burning dive — somebody's fire dies here!`]),true,"lowvoice");
     } else if(Math.random()<0.4){
-      SIM_HOOKS.say(pick([
+      ENGINE_HOOKS.say(pick([
         `${gk.name} EXPLODES across the goal!`,
         `A flame dive — ${gk.name} pays for it from the tank!`]),true,"lowvoice");
     }
@@ -351,7 +351,7 @@ function gkDiveCheck(defT,flame){
 function blazeCall(p2){
   if(clockSec-lastBlazeSay<6) return;                // one eruption at a time
   lastBlazeSay=clockSec;
-  SIM_HOOKS.say(pick([
+  ENGINE_HOOKS.say(pick([
     `${p2.name} is ON FIRE — an absolute blazing run!`,
     `${p2.name} ERUPTS! There will be scorch marks on this hex!`,
     `Somebody check the grass — ${p2.name} just went FULL afterburner!`,
@@ -415,8 +415,8 @@ function kick(tx,ty,power,isShot){
   ball.noClaim=o; ball.noClaimF=14; ball.owner=null;
   ball.z=0; ball.zv=0;
   if(!isShot && d>235){ ball.zv=3.0; }   // long balls travel through the air
-  if(isShot){ stats.shots[o.team]++; SIM_HOOKS.spawnNote(ball.x,ball.y-18,"shot!","#ffd166");
-    if(typeof spawnPing==="function"&&ballHalo) SIM_HOOKS.spawnPing(ball.x,ball.y,TEAMS[o.team].color); }
+  if(isShot){ stats.shots[o.team]++; ENGINE_HOOKS.spawnNote(ball.x,ball.y-18,"shot!","#ffd166");
+    if(typeof spawnPing==="function"&&ballHalo) ENGINE_HOOKS.spawnPing(ball.x,ball.y,TEAMS[o.team].color); }
 }
 
 // ---------- AI ----------
@@ -756,7 +756,7 @@ function think(dt){
       kick(txc,tyc,6.8,false);
       ball.zv=2.8;                       // it swings in high, whatever the distance
       if(farPost){ GKSTAT.farPost=(GKSTAT.farPost||0)+1;
-        if(Math.random()<0.6) SIM_HOOKS.say(pick([
+        if(Math.random()<0.6) ENGINE_HOOKS.say(pick([
           `Coach Eric's voice carries clear across the pitch: FAR POST! FAR POST!`,
           `You can hear Coach Eric from here — "FAR POST!" — and the ball obeys.`,
           `Far post, just like Coach Eric drills it at 91 Bulldogs practice.`]),true,"lowvoice");
@@ -778,7 +778,7 @@ function think(dt){
       // THE GRAB: he's caught it — his ball, his moment, his name in lights
       if(gkHolder!==owner){
         gkHolder=owner; gkHoldUntil=clockSec+1.6; GKSTAT.holds++;
-        SIM_HOOKS.spawnNote(owner.x,owner.y-26,"🧤 secured!",TEAMS[owner.team].color,TEAMS[owner.team].accent);
+        ENGINE_HOOKS.spawnNote(owner.x,owner.y-26,"🧤 secured!",TEAMS[owner.team].color,TEAMS[owner.team].accent);
       }
       if(clockSec<gkHoldUntil){
         // stride off the line, survey the field
@@ -808,7 +808,7 @@ function think(dt){
         kick(far.x+far.vx*7, far.y+far.vy*7, pw, false);
         ball.zv=3.4;   // up into the lights — headers await on the far side
         GKSTAT.punts++; ball.puntBy=owner.team;
-        SIM_HOOKS.say(pick([
+        ENGINE_HOOKS.say(pick([
           `${owner.name} LAUNCHES it — a drop kick clearing the county line!`,
           `${owner.name} sends it to the MOON. Somebody on the far side has a decision to make.`,
           `A monster punt from ${owner.name} — the ball has its own weather now.`,
@@ -816,7 +816,7 @@ function think(dt){
       } else if(near&&nd2<180){
         GKSTAT.rolls++; if(fwdRoll)GKSTAT.rollsFwd++;
         kick(near.x+near.vx*8, near.y+near.vy*8, Math.min(6.5,nd2*0.04+3.5), false);
-        if(Math.random()<0.35) SIM_HOOKS.say(pick([
+        if(Math.random()<0.35) ENGINE_HOOKS.say(pick([
           `${owner.name} rolls it out calmly. Playing from the back.`,
           `${owner.name}, unhurried, feeds it short. Composure.`]),false);
       } else kick(CX,CY,9);
@@ -865,8 +865,8 @@ function think(dt){
           if(laneClear&&Math.random()<0.016*(0.4+1.2*RK)*dt*60){
             const scL=(0.6+0.8*RK)*(0.75+dGoal*0.0035);   // range punishes accuracy
             const offL=(Math.random()*2-1)*hw2*scL;
-            SIM_HOOKS.spawnNote(owner.x,owner.y-24,"from distance!",TEAMS[owner.team].accent);
-            if(Math.random()<0.4) SIM_HOOKS.say(pick([
+            ENGINE_HOOKS.spawnNote(owner.x,owner.y-24,"from distance!",TEAMS[owner.team].accent);
+            if(Math.random()<0.4) ENGINE_HOOKS.say(pick([
               `${owner.name} sees the lane and LETS FLY from range!`,
               `${owner.name} has a go from distance — dip and swerve!`,
               `No hesitation — ${owner.name} rips one from ${Math.round(dGoal/8)} yards!`,
@@ -940,7 +940,7 @@ function think(dt){
         *(0.4+1.2*T(o.team).press*(coalAlly[o.team]?0.7:1))*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
       if(Math.random()<fc*dt*60){
         const victim=owner;
-        SIM_HOOKS.spawnNote(victim.x,victim.y-24,"FOUL!","#ffd166");
+        ENGINE_HOOKS.spawnNote(victim.x,victim.y-24,"FOUL!","#ffd166");
         addStoppage(1.2);
         const r=Math.random();
         const redP=0.035*(0.5+0.5*foulMult);   // stricter referees reach for red
@@ -964,10 +964,10 @@ function think(dt){
           o.sentOff=true; o.redCard=true; walkPending=o;   // the walk follows the popup
           const left=players.filter(q=>q.team===o.team&&!q.out&&!q.sentOff).length;
           const leftTxt=left===1?`only the goalkeeper remains for ${tm(o.team)}!`:`${tm(o.team)} down to ${left} men.`;
-          SIM_HOOKS.showNotice(col, card==="second"?"🟨🟥 SECOND YELLOW":"🟥 RED CARD",
+          ENGINE_HOOKS.showNotice(col, card==="second"?"🟨🟥 SECOND YELLOW":"🟥 RED CARD",
             `${o.name} (${shortT})`,
             `${PRN(o).His} crime: ${PRN(o).he} ${off}.${penTag}<br>OFF! The walk of shame begins — ${leftTxt}`, 5200);
-          SIM_HOOKS.say(pick([
+          ENGINE_HOOKS.say(pick([
             `🟥 <b>RED CARD!</b> ${o.name} is off — ${PRN(o).he} ${off}. ${tm(o.team)} play on a ${PRN(o).man} short!`,
             `🟥 <b>RED CARD!</b> ${o.name} is EXCOMMUNICADO — ${PRN(o).he} ${off}. No services, no help, and ${tm(o.team)} play a ${PRN(o).man} short!`,
             `🟥 <b>RED CARD!</b> Hasta la vista, ${o.name} — ${PRN(o).he} ${off}. ${PRN(o).He}'ll be back next match. ${tm(o.team)} a ${PRN(o).man} short!`,
@@ -986,9 +986,9 @@ function think(dt){
             `🟥 <b>RED CARD!</b> ${o.name} ${off}. Grandma Bridget's review: "bold, but ultimately indefensible." RED.`]),true);
         } else if(card==="yellow"){
           addStoppage(3);
-          SIM_HOOKS.showNotice(col,"🟨 YELLOW CARD",`${o.name} (${shortT})`,
+          ENGINE_HOOKS.showNotice(col,"🟨 YELLOW CARD",`${o.name} (${shortT})`,
             `${PRN(o).His} crime: ${PRN(o).he} ${off}. Into the book ${PRN(o).he} goes.${penTag}`, 4200);
-          SIM_HOOKS.say(pick([
+          ENGINE_HOOKS.say(pick([
             `🟨 ${o.name} is booked — ${off}.`,
             `🟨 ${o.name} booked — ${off}. The High Table has been notified.`,
             `🟨 A citation for ${o.name} — ${off}. One more directive violation and it's over.`,
@@ -1010,12 +1010,12 @@ function think(dt){
             `🟨 ${o.name} booked — ${off}. Continental rules: none of THAT on hex grounds.`,
             `🟨 ${o.name} booked — ${off}. The hens on the fencepost all turned to look at once.`]),true);
         } else if(inBox){
-          SIM_HOOKS.showNotice(TEAMS[victim.team].color,"⚠️ PENALTY!",
+          ENGINE_HOOKS.showNotice(TEAMS[victim.team].color,"⚠️ PENALTY!",
             `${victim.name} is brought down in the box!`,
             `${o.name} ${off} — the referee points to the spot.`, 4600);
-          SIM_HOOKS.say(`<b style="color:${TEAMS[victim.team].color}">PENALTY to ${tm(victim.team)}!</b>`,true);
+          ENGINE_HOOKS.say(`<b style="color:${TEAMS[victim.team].color}">PENALTY to ${tm(victim.team)}!</b>`,true);
         } else if(Math.random()<0.5){
-          SIM_HOOKS.say(pick([
+          ENGINE_HOOKS.say(pick([
             `Free kick — ${o.name} ${off}.`,
             `The whistle goes. ${o.name} ${off}.`,
             `Referee's seen it: ${o.name} ${off}. Free kick.`]));
@@ -1036,13 +1036,13 @@ function think(dt){
         ball.owner=o; ball.lastTouch=o.team; ball.lastKicker=o; ball.isShot=false;
         if(o.role==="K"){
           // keeper smothering a dribbler is goalkeeping, not a tackle — no tackle credit
-          SIM_HOOKS.spawnNote(o.x,o.y-20,"smothered!",TEAMS[o.team].color,TEAMS[o.team].accent);
+          ENGINE_HOOKS.spawnNote(o.x,o.y-20,"smothered!",TEAMS[o.team].color,TEAMS[o.team].accent);
         } else {
           stats.tackles[o.team]++; o.tackles++;
-          SIM_HOOKS.spawnNote(o.x,o.y-20,"tackle!",TEAMS[o.team].color,TEAMS[o.team].accent);
+          ENGINE_HOOKS.spawnNote(o.x,o.y-20,"tackle!",TEAMS[o.team].color,TEAMS[o.team].accent);
         }
         stam(o,+0.10); stam(victim,-0.12);
-        if(o.role!=="K" && Math.random()<0.28) SIM_HOOKS.say(pick([
+        if(o.role!=="K" && Math.random()<0.28) ENGINE_HOOKS.say(pick([
           `${o.name} muscles ${victim.name} off the ball!`,
           `Crunching challenge — ${o.name} strips it from ${victim.name}.`,
           `${o.name} picks ${victim.name}'s pocket!`,
@@ -1130,7 +1130,7 @@ function physics(dt){
     if(o.team!==lastPossessTeam){
       if(clockSec-lastPossessComment>6 && lastPossessTeam!==null){
         lastPossessComment=clockSec;
-        SIM_HOOKS.say(pick([
+        ENGINE_HOOKS.say(pick([
           `${o.name} wins it for ${tm(o.team)}.`,
           `${tm(o.team)} on the ball — ${o.name} carries.`,
           `Turnover! ${o.name} takes charge for ${tm(o.team)}.`,
@@ -1159,8 +1159,8 @@ function physics(dt){
           near.forEach(p=>{const w=(1/(dist(p,ball)+8))*(0.6+0.8*Math.random()); if(w>wt){wt=w;win=p;}});
           const tgt2=goalCenter(targets[win.team]??win.team);
           ball.lastTouch=win.team; ball.lastKicker=win;
-          SIM_HOOKS.spawnNote(ball.x,ball.y-24,"header!",TEAMS[win.team].color,TEAMS[win.team].accent);
-          if(Math.random()<0.4) SIM_HOOKS.say(pick([
+          ENGINE_HOOKS.spawnNote(ball.x,ball.y-24,"header!",TEAMS[win.team].color,TEAMS[win.team].accent);
+          if(Math.random()<0.4) ENGINE_HOOKS.say(pick([
             `${win.name} rises highest!`,
             `Up goes ${win.name} — wins it in the air!`,
             `${win.name} climbs above the crowd!`,
@@ -1176,7 +1176,7 @@ function physics(dt){
             const ddx=tgt2.x+e2.ux*off2-ball.x, ddy=tgt2.y+e2.uy*off2-ball.y, dl2=Math.hypot(ddx,ddy)||1;
             ball.vx=ddx/dl2*8.5; ball.vy=ddy/dl2*8.5; ball.isShot=true;
             stats.shots[win.team]++;
-            SIM_HOOKS.spawnPing(ball.x,ball.y,TEAMS[win.team].color);
+            ENGINE_HOOKS.spawnPing(ball.x,ball.y,TEAMS[win.team].color);
           } else {
             const ddx=tgt2.x-ball.x, ddy=tgt2.y-ball.y, dl2=Math.hypot(ddx,ddy)||1;
             ball.vx=ddx/dl2*5; ball.vy=ddy/dl2*5;
@@ -1204,7 +1204,7 @@ function physics(dt){
       const strayer=(ball.strayF>0)?ball.strayer:null;
       if(ball.allyPass&&ball.lastKicker&&best.team!==ball.lastKicker.team&&allied(ball.lastKicker.team,best.team)
         &&Math.random()<0.5){
-        SIM_HOOKS.say(pick([
+        ENGINE_HOOKS.say(pick([
           `The alliance is real — ${ball.lastKicker.name} slips it to ${best.name}!`,
           `Enemy of my enemy: ${ball.lastKicker.name} finds ${best.name} across battle lines!`,
           `A pass BETWEEN teams! ${ball.lastKicker.name} to ${best.name} — the leader should worry.`,
@@ -1213,7 +1213,7 @@ function physics(dt){
       ball.allyPass=false;
       if(ball.puntBy!==undefined){ GKSTAT.puntSeen++; if(best.team===ball.puntBy)GKSTAT.puntSame++; ball.puntBy=undefined; }
       ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
-      if(ball.flameShot&&best.role==="K") SIM_HOOKS.spawnNote(best.x,best.y-24,"🔥 extinguished!","#ffd166");
+      if(ball.flameShot&&best.role==="K") ENGINE_HOOKS.spawnNote(best.x,best.y-24,"🔥 extinguished!","#ffd166");
       ball.flameShot=false;
       GKSTAT.claims=(GKSTAT.claims||0)+1;
       if(clockSec-(GKSTAT.lastClaimAt||-9)<0.45
@@ -1241,7 +1241,7 @@ function physics(dt){
           }
           kick(kx9, ky9, 7.6, false);
           ball.clearT=clockSec+0.4;                            // the escape guarantee: no claims, no headers, just OUT
-          if(Math.random()<0.18) SIM_HOOKS.say(pick([
+          if(Math.random()<0.18) ENGINE_HOOKS.say(pick([
             `${best.name} wants none of that scramble — hoofed clear!`,
             `No dwelling from ${best.name}. First time, out of the furnace.`,
             `${best.name} clears ${PRN(best).his} lines. Tidy is for open field.`]),false);
@@ -1253,10 +1253,10 @@ function physics(dt){
         // won it off the dribbler's touch — positional dispossession
         stam(best,+0.08); stam(strayer,-0.08);
         if(best.role==="K"){
-          SIM_HOOKS.spawnNote(best.x,best.y-20,"smothered!",TEAMS[best.team].color,TEAMS[best.team].accent);
+          ENGINE_HOOKS.spawnNote(best.x,best.y-20,"smothered!",TEAMS[best.team].color,TEAMS[best.team].accent);
         } else {
           stats.tackles[best.team]++; best.tackles++;
-          SIM_HOOKS.spawnNote(best.x,best.y-20,"poked away!",TEAMS[best.team].color,TEAMS[best.team].accent);
+          ENGINE_HOOKS.spawnNote(best.x,best.y-20,"poked away!",TEAMS[best.team].color,TEAMS[best.team].accent);
         }
       } else
       if(wasShot && best.role==="K" && kicker && best.team!==kicker.team && spd>5){
@@ -1275,8 +1275,8 @@ function physics(dt){
           ball.owner=null; ball.lastTouch=best.team; ball.lastKicker=best;
           ball.vx=dx3/dl3*spd*0.68; ball.vy=dy3/dl3*spd*0.68;
           ball.noClaim=best; ball.noClaimF=10; ball.isShot=false;
-          SIM_HOOKS.spawnNote(best.x,best.y-22,"tipped wide!","#ffd166");
-          if(Math.random()<0.6) SIM_HOOKS.say(pick([
+          ENGINE_HOOKS.spawnNote(best.x,best.y-22,"tipped wide!","#ffd166");
+          if(Math.random()<0.6) ENGINE_HOOKS.say(pick([
             `${best.name} can only parry it away!`,
             `Strong hands from ${best.name} — pushed wide, still live!`,
             `${best.name} tips it around... danger not cleared!`,
@@ -1286,8 +1286,8 @@ function physics(dt){
             `${best.name} gets SOMETHING on it — scramble on!`]),true);
           return;
         }
-        SIM_HOOKS.spawnNote(best.x,best.y-20,"SAVE!","#ffd166");
-        if(Math.random()<0.5) SIM_HOOKS.say(pick([
+        ENGINE_HOOKS.spawnNote(best.x,best.y-20,"SAVE!","#ffd166");
+        if(Math.random()<0.5) ENGINE_HOOKS.say(pick([
           `<span class="goal">SAVE!</span> ${best.name} denies ${kicker.name}!`,
           `What a stop by ${best.name} — ${kicker.name} can't believe it!`,
           `${kicker.name} lets fly... ${best.name} gets a strong hand to it!`,
@@ -1301,11 +1301,11 @@ function physics(dt){
         if(best.team===kicker.team){
           // completed pass: small lift for both
           stam(kicker,+0.05); stam(best,+0.03);
-          if(Math.random()<0.22) SIM_HOOKS.spawnNote(best.x,best.y-20,"pass ✓",TEAMS[best.team].color,TEAMS[best.team].accent);
+          if(Math.random()<0.22) ENGINE_HOOKS.spawnNote(best.x,best.y-20,"pass ✓",TEAMS[best.team].color,TEAMS[best.team].accent);
         } else if(!wasShot){
           // interception: passer punished, thief energized
           stam(kicker,-0.08); stam(best,+0.06);
-          SIM_HOOKS.spawnNote(best.x,best.y-20,"intercepted!",TEAMS[best.team].color,TEAMS[best.team].accent);
+          ENGINE_HOOKS.spawnNote(best.x,best.y-20,"intercepted!",TEAMS[best.team].color,TEAMS[best.team].accent);
         }
       }
     }
@@ -1321,13 +1321,13 @@ function physics(dt){
       if(inMouth){
         if(d<-6){
           if(ball.z<28){ goalScored(GOAL_EDGE.indexOf(k)); return; }
-          else if(ball.isShot){ SIM_HOOKS.spawnNote(ball.x,ball.y-20,"over the bar!","#ffd166"); ball.isShot=false; }
+          else if(ball.isShot){ ENGINE_HOOKS.spawnNote(ball.x,ball.y-20,"over the bar!","#ffd166"); ball.isShot=false; }
           if(oobRule){ outOfBounds(k,e); return; }
         }
       } else if(oobRule){
         if(d<2){
           if(ball.isShot && ball.lastKicker){
-            SIM_HOOKS.say(pick([
+            ENGINE_HOOKS.say(pick([
               `${ball.lastKicker.name} drags it wide!`,
               `Off target — ${ball.lastKicker.name} will want that one back.`,
               `${ball.lastKicker.name} leans back and it sails over!`,
@@ -1345,7 +1345,7 @@ function physics(dt){
         }
       } else {
         if(ball.isShot && ball.lastKicker){
-          SIM_HOOKS.say(pick([
+          ENGINE_HOOKS.say(pick([
             `${ball.lastKicker.name} drags it wide!`,
             `Off target — ${ball.lastKicker.name} will want that one back.`,
             `${ball.lastKicker.name} shoots... nowhere near it.`,
@@ -1427,21 +1427,21 @@ function goalScored(concederTeam){
       // two left: this goal settles it
       const champ=legit?scorerTeam:aliveTeams().find(t=>t!==concederTeam);
       if(legit&&scorer&&scorer.team===scorerTeam) goldenScorer=scorer;
-      SIM_HOOKS.say(`<span class="goal">⚽ GOLDEN GOAL!</span> ${name??tm(champ)} settles it!`,true);
-      SIM_HOOKS.crownChampion(champ, legit?`golden goal by ${name}`:`golden goal — own-goal heartbreak for ${TEAMS[concederTeam].name}`);
+      ENGINE_HOOKS.say(`<span class="goal">⚽ GOLDEN GOAL!</span> ${name??tm(champ)} settles it!`,true);
+      ENGINE_HOOKS.crownChampion(champ, legit?`golden goal by ${name}`:`golden goal — own-goal heartbreak for ${TEAMS[concederTeam].name}`);
       return;
     }
     // three left: the conceder is eliminated, survivors play golden goal
-    SIM_HOOKS.say(`<span class="goal">💀 ELIMINATED!</span> ${tm(concederTeam)} concede in overtime and they're OUT!`,true);
-    SIM_HOOKS.eliminateTeam(concederTeam);
+    ENGINE_HOOKS.say(`<span class="goal">💀 ELIMINATED!</span> ${tm(concederTeam)} concede in overtime and they're OUT!`,true);
+    ENGINE_HOOKS.eliminateTeam(concederTeam);
     otGolden=true;
     const survivors=aliveTeams();
-    SIM_HOOKS.showCelebration(TEAMS[concederTeam].color,"💀 ELIMINATED!",
+    ENGINE_HOOKS.showCelebration(TEAMS[concederTeam].color,"💀 ELIMINATED!",
       `${tm(concederTeam)} are out`,
       `${legit?name+" delivers the killing blow":"an own goal ends it"} — ${tm(survivors[0])} v ${tm(survivors[1])}, next goal wins`,"");
-    SIM_HOOKS.say(`Golden goal! ${tm(survivors[0])} against ${tm(survivors[1])} — next goal takes the title!`,true);
+    ENGINE_HOOKS.say(`Golden goal! ${tm(survivors[0])} against ${tm(survivors[1])} — next goal takes the title!`,true);
     computeTargets();
-    SIM_HOOKS.flash(concederTeam);
+    ENGINE_HOOKS.flash(concederTeam);
     pendingKickoff=survivors[Math.floor(Math.random()*2)];
     return;
   }
@@ -1460,7 +1460,7 @@ function goalScored(concederTeam){
         `${tm(scorerTeam)} climb to ${st2>0?"+":""}${st2}`,
         `${tm(scorerTeam)} +1, and ${tm(concederTeam)} pay the bill`,
         `${tm(scorerTeam)} +1, ${tm(concederTeam)} −1`]);
-    SIM_HOOKS.say(pick([
+    ENGINE_HOOKS.say(pick([
       `<span class="goal">⚽ GOOOAL!</span> ${name} beats ${keeper.name} — ${scoreline}!`,
       `<span class="goal">⚽ GOOOAL!</span> ${name} finds the net! ${scoreline}!`,
       `<span class="goal">⚽ IT'S IN!</span> ${keeper.name} rooted — ${name} scores! ${scoreline}!`,
@@ -1478,25 +1478,25 @@ function goalScored(concederTeam){
     if(momentumOn && wasTrailing){
       boostUntil[scorerTeam]=clockSec+20;
       caughtFire=true;
-      SIM_HOOKS.say(pick([
+      ENGINE_HOOKS.say(pick([
         `${tm(scorerTeam)} catch fire! 🔥 The underdogs are flying for the next 20 seconds.`,
         `🔥 Belief is a fuel — ${tm(scorerTeam)} are burning it! 20 seconds of fury!`,
         `The comeback spark! 🔥 ${tm(scorerTeam)} find another gear!`,
         `🔥 ${tm(scorerTeam)} down but never out — they're FLYING now!`,
         `Someone lit the touchpaper — ${tm(scorerTeam)} are ablaze! 🔥`]),true);
     }
-    SIM_HOOKS.showCelebration(TEAMS[scorerTeam].color, "⚽ GOOOAL!",
+    ENGINE_HOOKS.showCelebration(TEAMS[scorerTeam].color, "⚽ GOOOAL!",
       `<b>${name}</b> — ${tm(scorerTeam)}`,
       `beats ${keeper.name} · ${tm(concederTeam)} concede (${conceded[concederTeam]})`,
       caughtFire?`🔥 ${TEAMS[scorerTeam].name} catch fire — 20s boost!`:"");
   } else {
-    SIM_HOOKS.say(`<span class="goal">⚽ Own goal!</span> Chaos in the box and ${tm(concederTeam)} put it in their own net.`,true);
-    SIM_HOOKS.showCelebration(TEAMS[concederTeam].color, "😱 OWN GOAL!",
+    ENGINE_HOOKS.say(`<span class="goal">⚽ Own goal!</span> Chaos in the box and ${tm(concederTeam)} put it in their own net.`,true);
+    ENGINE_HOOKS.showCelebration(TEAMS[concederTeam].color, "😱 OWN GOAL!",
       `${tm(concederTeam)} concede`,
       `chaos in the box — it's in their own net (${conceded[concederTeam]} conceded)`, "");
   }
   computeTargets();
-  SIM_HOOKS.flash(concederTeam); if(legit) SIM_HOOKS.flash(scorerTeam);
+  ENGINE_HOOKS.flash(concederTeam); if(legit) ENGINE_HOOKS.flash(scorerTeam);
   pendingKickoff=concederTeam;   // kickoff happens after the celebration clears
 }
 function buildMatchReport(){
@@ -1525,22 +1525,22 @@ function resolveFullTime(){
   // rank by mode metric, tiebreak on goals scored (FIFA-style)
   const order=[0,1,2].sort(rankCmp);
   const leaders=[0,1,2].filter(t=>rankCmp(t,order[0])===0);
-  if(leaders.length===1){ SIM_HOOKS.crownChampion(order[0],"at full time"); return; }
+  if(leaders.length===1){ ENGINE_HOOKS.crownChampion(order[0],"at full time"); return; }
   // dead level at the top: golden-concession overtime
   phase="overtime";
   [0,1,2].filter(t=>!leaders.includes(t)).forEach(t=>{
-    SIM_HOOKS.say(`Full time — ${tm(t)} are eliminated on the tiebreak.`,true);
-    SIM_HOOKS.eliminateTeam(t);
+    ENGINE_HOOKS.say(`Full time — ${tm(t)} are eliminated on the tiebreak.`,true);
+    ENGINE_HOOKS.eliminateTeam(t);
   });
   otGolden=(aliveTeams().length===2);
   if(otGolden){
-    SIM_HOOKS.say(`<span class="goal">FULL TIME — dead level!</span> ${tm(leaders[0])} v ${tm(leaders[1])}: golden goal, next score wins the title!`,true);
-    SIM_HOOKS.showCelebration("#f7c948","⏱️ OVERTIME",
+    ENGINE_HOOKS.say(`<span class="goal">FULL TIME — dead level!</span> ${tm(leaders[0])} v ${tm(leaders[1])}: golden goal, next score wins the title!`,true);
+    ENGINE_HOOKS.showCelebration("#f7c948","⏱️ OVERTIME",
       `${tm(leaders[0])} v ${tm(leaders[1])}`,
       `Golden goal — next score wins the title`,"");
   } else {
-    SIM_HOOKS.say(`<span class="goal">FULL TIME — all three level!</span> Golden-concession overtime: concede and you're OUT.`,true);
-    SIM_HOOKS.showCelebration("#f7c948","⏱️ OVERTIME",
+    ENGINE_HOOKS.say(`<span class="goal">FULL TIME — all three level!</span> Golden-concession overtime: concede and you're OUT.`,true);
+    ENGINE_HOOKS.showCelebration("#f7c948","⏱️ OVERTIME",
       `All three teams level`,
       `Golden concession — CONCEDE AND YOU'RE OUT`,"");
   }
@@ -1589,7 +1589,7 @@ function colorCommentary(){
   // style & matchup color (~every 45s)
   if(clockSec-lastStyleAt>45&&Math.random()<0.4){
     const ls=styleLines();
-    if(ls.length){ lastStyleAt=clockSec; SIM_HOOKS.say(pick(ls)); }
+    if(ls.length){ lastStyleAt=clockSec; ENGINE_HOOKS.say(pick(ls)); }
   }
   // fatigue watch (~every 40s)
   if(clockSec-lastFatigueComment>40){
@@ -1600,7 +1600,7 @@ function colorCommentary(){
     }
     if(wv<0.55){
       lastFatigueComment=clockSec;
-      SIM_HOOKS.say(pick([
+      ENGINE_HOOKS.say(pick([
         `Legs are getting heavy for ${tm(worst)} — they're running on fumes.`,
         `${tm(worst)} look gassed out there. The pressing has taken its toll.`,
         `You can see ${tm(worst)} slowing down. Fatigue is real on the hex.`,
@@ -1617,7 +1617,7 @@ function colorCommentary(){
     const L=leaderIdx();
     const others=[0,1,2].filter(t=>t!==L);
     if(targets[others[0]]===L && targets[others[1]]===L){
-      SIM_HOOKS.say(pick([
+      ENGINE_HOOKS.say(pick([
         `The pincer is on — ${tm(others[0])} and ${tm(others[1])} are both hunting ${tm(L)}!`,
         `Nobody stays on top for long here: ${tm(L)} lead, so ${tm(others[0])} and ${tm(others[1])} have formed an alliance of convenience.`,
         `Two thieves who agree on the target: everyone wants a piece of ${tm(L)}.`,
