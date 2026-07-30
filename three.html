@@ -298,6 +298,18 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
 #fatal .where{font-family:var(--mono);font-size:.66rem;opacity:.75;margin-top:.3rem;
   word-break:break-all}
 #fatal .tap{font-family:var(--mono);font-size:.62rem;opacity:.5;margin-top:.35rem}
+
+/* Team names in the commentary carry their colour inline from the engine; the weight is the
+   page's job and this page was not doing it. */
+.tm{font-weight:600}
+
+/* The momentum flame, from the flat page's scorecards: a side on a boost gets a flame on its
+   chip. It is the only visible sign that underdog fire is doing anything, and without it the
+   setting is a checkbox with no consequence you can see. */
+.sc .fl{display:none;margin-left:.1rem;font-size:.78rem}
+.sc.hot .fl{display:inline-block;animation:flick .6s infinite alternate}
+@keyframes flick{from{transform:scale(1) rotate(-4deg)}to{transform:scale(1.25) rotate(5deg)}}
+@media (prefers-reduced-motion:reduce){ .sc.hot .fl{animation:none} }
 </style>
 
 <header>
@@ -379,14 +391,29 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=34"></script>
+<script src="engine.js?v=35"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
 // pickers, sponsor boards — and those stay no-ops rather than being invented. A hook that does
 // nothing is a decision; a hook that is missing is a crash.
 const feedEl = document.getElementById('feed');
+// ── THE COLOUR RULES OF THE COMMENTARY ──────────────────────────────────────
+// The engine writes team names already wrapped: <span class="tm" style="color:...">. It does NOT
+// wrap player names — the flat page colours those itself, from a map the engine builds, and this
+// page never did. So Spain was red and Lamine Yamal was plain white in the same sentence.
+//
+// NAME_COL is filled by the engine's refreshNameColors(); all that was missing here was the
+// half that reads it.
+function colorNames(html){
+  if (typeof NAME_COL === 'undefined' || !NAME_COL) return html;
+  for (const [n, c] of NAME_COL)
+    if (html.indexOf(n) >= 0) html = html.split(n).join('<b style="color:' + c + '">' + n + '</b>');
+  return html;
+}
+
 function say(html, big){
+  html = colorNames(html);
   announce(html, big);
   // THE CARD SITS ON TOP OF THE FEED, so a goal's flavour line — the good one, "HOLY HAND
   // GRENADE from Kane", "John Wick calm, one look one finish" — arrived in the feed at exactly
@@ -477,6 +504,24 @@ function announce(html, big){
 // standard workaround and costs nothing when it is unnecessary.
 setInterval(() => { try { if (sayAloud && speechSynthesis.speaking) speechSynthesis.resume(); } catch(e){} }, 4000);
 document.addEventListener('visibilitychange', () => { if (document.hidden) shutUp(); });
+
+// ── KEEP THE SCREEN ON ──────────────────────────────────────────────────────
+// A match you are watching rather than touching will put a phone to sleep in thirty seconds. The
+// flat page holds a wake lock for exactly this reason and this one did not — which matters more
+// here, not less, since there is even less reason to touch the screen.
+//
+// Re-acquired on visibility change, because the lock is released when a tab is backgrounded and
+// is NOT restored when it comes back.
+let wake = null;
+async function keepAwake(on){
+  try {
+    if (on && !wake && navigator.wakeLock) wake = await navigator.wakeLock.request('screen');
+    else if (!on && wake) { await wake.release(); wake = null; }
+  } catch (e) { /* refused or unsupported: the match still plays */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && running) keepAwake(true); else wake = null;
+});
 
 // ── THE SCENE ───────────────────────────────────────────────────────────────
 const cv = document.getElementById('gl');
@@ -1533,6 +1578,7 @@ let drawGL = function drawGL(){
                             (0.72 + 0.28 * Math.sin(nowMs / 42));
     } else fireLight.intensity = 0;
   }
+  markHot();
   drawPolish(nowMs);
   ren.render(scene, cam);
 };
@@ -1545,7 +1591,19 @@ function renderScore(){
   scoresEl.innerHTML = TEAMS.map((T, t) =>
     '<span class="sc' + (score[t] === best && best > 0 ? ' lead' : '') + (out[t] ? ' out' : '') + '">' +
     '<span class="sw" style="background:' + T.color + '"></span>' + T.short +
-    ' <b>' + score[t] + '</b></span>').join('');
+    ' <b>' + score[t] + '</b><span class="fl">\u{1F525}</span></span>').join('');
+  markHot();
+}
+
+// Underdog fire is a 20-second boost the engine grants on `boostUntil`. Read from there rather
+// than tracked here, and refreshed each frame because it expires on the match clock rather than
+// on anything the page knows about.
+function markHot(){
+  if (typeof boostUntil === 'undefined') return;
+  for (let t = 0; t < 3; t++) {
+    const el = scoresEl.children[t];
+    if (el) el.classList.toggle('hot', clockSec < boostUntil[t]);
+  }
 }
 function fmtClock(s){
   const m = Math.floor(s/60);
@@ -1758,6 +1816,7 @@ function startMatch(){
   buildBodies();          // the kits change with the teams, so the bodies are rebuilt
   running = true;
   setPlayIcon();
+  keepAwake(true);
   if (oobRule) say('Touchlines in play \u2014 throw-ins, goal kicks, and corners.');
   startCountdown();
 }
@@ -1835,11 +1894,14 @@ function setPlayIcon(){
   b.querySelector('path').setAttribute('d', running ? PAUSE_D : PLAY_D);
   b.setAttribute('aria-label', running ? 'Pause' : 'Play');
 }
-document.getElementById('play').addEventListener('click', () => { running = !running; setPlayIcon(); });
+document.getElementById('play').addEventListener('click', () => {
+  running = !running; setPlayIcon(); keepAwake(running);
+});
 // Reset opens the menu rather than restarting the same match: a reset is the moment you might
 // want different teams or a different length, and the flat page treats it the same way.
 function openSetup(){
   running = false;
+  keepAwake(false);
   hideCard(); celeUntil = 0;
   shutUp();                      // an announcer mid-sentence about a match you just ended
   renderTeamSlots();
