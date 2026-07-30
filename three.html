@@ -353,6 +353,146 @@ function drawPolish(now){
 }
 
 
+
+// ── THE GROUND ──────────────────────────────────────────────────────────────
+//
+// Everything outside the touchline. None of it is simulated — the engine does not know a stand
+// exists — but a pitch floating in black reads as a diagram, and this is meant to be a place.
+//
+// Built entirely from the engine's V and EDGES, so it cannot drift from the shape the ball
+// bounces off, and so it stays right if the pitch ever changes size.
+const SPONSORS = [
+  "CANBY HAZELNUTS","MAX FC","ATLAS K9 SECURITY","JORN & SONS","HEX\u2022COLA","THE THIRD SIDE",
+  "BURNS FAMILY FARMS","WILLAMETTE TURF CO.","TRAEGER SMOKE SIGNALS","PUMPKIN PATCH XXL",
+  "GRAMPY CLIFF'S TRACTOR PARTS","NANNY'S BAKING SHOP","FRESH EGGS DAILY","HOME GYM IRONWORKS",
+  "LONESOME DOVE OUTFITTERS","BLUEBERRY ROW","THE DIP STATION","REMUDA RENTALS",
+  "QUIRT SPORTING GOODS","GOLDEN CONCESSIONS","WALK OF SHAME INSURANCE","TACTICAL HUGS LLC",
+  "ROW Z AIRLINES","KEEPER WARS PPV","HORSECAMP","HELLFIRE CLUB",
+];
+const BOARD_INK = [["#c8102e","#ffd166"],["#0a2a66","#ffffff"],["#ffd166","#1a1a1a"],
+  ["#0b6e3f","#ffffff"],["#ffffff","#0a2a66"],["#5b2a86","#ffd166"],["#e8600a","#ffffff"]];
+
+/** Text on a coloured board, as a texture. Canvas rather than geometry because a hoarding is
+ *  writing on a flat thing, which is what a canvas is. */
+function boardTexture(text, bg, fg){
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 64;
+  const x = c.getContext('2d');
+  x.fillStyle = bg; x.fillRect(0, 0, 512, 64);
+  x.fillStyle = fg;
+  x.font = '700 40px "Barlow Condensed","Arial Narrow",sans-serif';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(text, 256, 34);
+  const t = new THREE.CanvasTexture(c);
+  t.minFilter = THREE.LinearFilter;
+  return t;
+}
+
+function buildGround(){
+  // ── THE SURROUND ─────────────────────────────────────────────────────────
+  // Grass beyond the touchline, out to the stands. A pitch that stops dead at its own line
+  // looks like a cut-out; real grounds have run-off, and the eye expects it.
+  {
+    const out = new THREE.Shape();
+    V.forEach((p, i) => {
+      const x = CX + (p.x - CX) * 1.34, y = CY + (p.y - CY) * 1.34;
+      i ? out.lineTo(x, y) : out.moveTo(x, y);
+    });
+    out.closePath();
+    const surround = new THREE.Mesh(new THREE.ShapeGeometry(out),
+      new THREE.MeshLambertMaterial({ color: 0x1b4f27, side: THREE.DoubleSide }));
+    surround.rotation.x = Math.PI/2;
+    surround.position.y = -0.4;                // under the pitch, so the touchline still reads
+    scene.add(surround);
+  }
+
+  // ── THE HOARDINGS ────────────────────────────────────────────────────────
+  // One board per edge, standing just outside the touchline and leaning back a little, the way
+  // they do — a board square to the ground is invisible from a raised camera.
+  EDGES.forEach((e, k) => {
+    const [bg, fg] = BOARD_INK[k % BOARD_INK.length];
+    const text = SPONSORS[(k * 7 + 3) % SPONSORS.length];
+    const board = new THREE.Mesh(
+      new THREE.PlaneGeometry(e.len * 0.92, 26),
+      new THREE.MeshBasicMaterial({ map: boardTexture(text, bg, fg), side: THREE.DoubleSide }));
+    board.position.set(e.mx - e.nx * 34, 13, e.my - e.ny * 34);
+    board.rotation.y = -Math.atan2(e.uy, e.ux);
+    board.rotation.x = -0.22;
+    scene.add(board);
+  });
+
+  // ── THE STANDS ───────────────────────────────────────────────────────────
+  // Three tiers of raked seating on each edge, rising away from the pitch. Boxes rather than a
+  // ramp because a rake made of steps reads as seating at a glance and a smooth slope does not.
+  const TIERS = 3;
+  EDGES.forEach(e => {
+    for (let t = 0; t < TIERS; t++) {
+      const depth = 34 + t * 30, h = 16 + t * 22;
+      const tier = new THREE.Mesh(
+        new THREE.BoxGeometry(e.len * 1.12, h, 28),
+        new THREE.MeshLambertMaterial({ color: t % 2 ? 0x232c33 : 0x2b353d }));
+      tier.position.set(e.mx - e.nx * (depth + 58), h/2, e.my - e.ny * (depth + 58));
+      tier.rotation.y = -Math.atan2(e.uy, e.ux);
+      scene.add(tier);
+      // a crowd: a band of speckled colour along the front of each tier, which at this distance
+      // is what a crowd IS. Individual figures would cost thousands of meshes to say the same.
+      const crowd = new THREE.Mesh(
+        new THREE.PlaneGeometry(e.len * 1.12, 15),
+        new THREE.MeshBasicMaterial({ map: crowdTexture(), side: THREE.DoubleSide }));
+      crowd.position.set(e.mx - e.nx * (depth + 44), h - 4, e.my - e.ny * (depth + 44));
+      crowd.rotation.y = -Math.atan2(e.uy, e.ux);
+      crowd.rotation.x = -0.34;
+      scene.add(crowd);
+    }
+  });
+
+  // ── THE BENCHES ──────────────────────────────────────────────────────────
+  // One per team, beside their own goal, where the 2D page puts them. A dugout roof and a row of
+  // seats; who is sitting on them is drawn each frame, because that changes.
+  GOAL_EDGE.forEach((k, t) => {
+    const e = EDGES[k], hw = e.len * GOAL_HALF;
+    const bx = e.mx - e.nx * 30 + e.ux * (hw + 62);
+    const by = e.my - e.ny * 30 + e.uy * (hw + 62);
+    benchAt[t] = { x: bx, y: by, ux: e.ux, uy: e.uy, nx: e.nx, ny: e.ny };
+    const dug = new THREE.Mesh(new THREE.BoxGeometry(78, 4, 26),
+      new THREE.MeshLambertMaterial({ color: 0x1a2229 }));
+    dug.position.set(bx, 30, by);
+    dug.rotation.y = -Math.atan2(e.uy, e.ux);
+    scene.add(dug);
+    for (const s of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 30, 6),
+        new THREE.MeshLambertMaterial({ color: 0x1a2229 }));
+      post.position.set(bx + e.ux * 37 * s, 15, by + e.uy * 37 * s);
+      scene.add(post);
+    }
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(74, 5, 12),
+      new THREE.MeshLambertMaterial({ color: new THREE.Color(TEAMS[t].color) }));
+    seat.position.set(bx, 8, by);
+    seat.rotation.y = -Math.atan2(e.uy, e.ux);
+    scene.add(seat);
+  });
+}
+
+/** A band of speckled colour: a crowd, at the distance a crowd is ever seen from here. */
+let crowdTex = null;
+function crowdTexture(){
+  if (crowdTex) return crowdTex;
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 32;
+  const x = c.getContext('2d');
+  x.fillStyle = '#161d22'; x.fillRect(0, 0, 256, 32);
+  const pal = ['#c8102e','#0a2a66','#ffd166','#f2f2f2','#6fb7e3','#3c4b55','#8a6a4a','#2b6b3f'];
+  for (let i = 0; i < 900; i++) {
+    x.fillStyle = pal[(Math.random() * pal.length) | 0];
+    x.globalAlpha = 0.5 + Math.random() * 0.5;
+    x.fillRect(Math.random() * 256, Math.random() * 32, 2.4, 2.4);
+  }
+  crowdTex = new THREE.CanvasTexture(c);
+  crowdTex.minFilter = THREE.LinearFilter;
+  return crowdTex;
+}
+const benchAt = [];
+
 // ── THE PLAYERS ─────────────────────────────────────────────────────────────
 const R_P = 11, H_P = 34;
 // How light a colour is, for deciding whether a number on it should be dark or pale. index.html
@@ -465,8 +605,25 @@ let drawGL = function drawGL(){
     const b = bodies[i]; if (!b) return;
     if (p.out && !p.benched) { b.g.visible = false; return; }
     b.g.visible = true;
-    b.g.position.set(p.x, 0, p.y);
-    b.g.rotation.y = -Math.atan2(p.hy, p.hx);
+    if (p.benched) {
+      // ON THE BENCH, not stacked at the origin. The engine keeps a sent-off player's own x,y
+      // wherever they were standing, so drawing them there leaves a ghost on the pitch.
+      const B = benchAt[p.team];
+      if (B) {
+        const seat = ((p.seat || 0) % 4) - 1.5;
+        b.g.position.set(B.x + B.ux * seat * 17, 11, B.y + B.uy * seat * 17);
+        b.g.rotation.y = -Math.atan2(B.ny, B.nx) + Math.PI;   // facing the pitch
+        b.g.scale.setScalar(0.72);
+      }
+    } else {
+      b.g.position.set(p.x, 0, p.y);
+      b.g.rotation.y = -Math.atan2(p.hy, p.hx);
+      b.g.scale.setScalar(1);
+    }
+    // ONLY WHOEVER HAS THE BALL IS NAMED. Fifteen labels over fifteen cylinders is a wall of
+    // text with a football behind it — and the name you actually want is the one the commentary
+    // is about, which is the one on the ball. The rest are legible by colour and number.
+    if (b.label) b.label.visible = (ball.owner === p);
     const s = Math.max(0, Math.min(1, p.stamina));
     b.ring.material.color.setRGB(1 - s*0.55, 0.32 + s*0.46, 0.3 + s*0.18);
     b.ring.material.opacity = 0.22 + s*0.6;
@@ -593,6 +750,7 @@ function boot(){
   if (!window.THREE) throw new Error('three.js did not load');
   if (typeof ENGINE_HOOKS === 'undefined') throw new Error('engine.js did not load');
   buildPitch();
+  buildGround();
   applyTeamSelection();
   resetMatch();
   kickoff(0);
