@@ -62,6 +62,29 @@ The two that did it are the two nobody was looking at:
   play compresses toward the target goal. **55 normally, up to 158 in the last 230** —
   width instead of pile-in, and the reason a crowded box is not a scrum.
 
+## What is actually left
+
+Twenty steer calls remain in the per-player loop. **Most are not work — they are dead
+copies.** Eight duplicate instructions that are already live: fetching, the corner
+waves, holding the line, prowling, closing it down, the back line, retreating from a
+free kick, offering after a restart.
+
+They are unreachable, because the list scores first and returns. But *unreachable* and
+*deleted* are different, and two copies of a decision is how they drift.
+
+**Genuinely unextracted, best guess: four or five.** A deep line at `og4 + (CX-og4)*0.85`,
+a slow chase at 1.5, the keeper's push-up at 250, and one or two around `mx,my` and
+`tx2,ty2` that I have not identified.
+
+### Deleting them safely
+
+`DEAD(name)` marks a duplicate branch and counts it. **Zero hits over 300 seconds means
+it is genuinely unreachable and safe to cut.** One is instrumented and proven dead; the
+other anchors did not match and want doing by hand.
+
+That is the method, and it matters because **I have broken this file twice deleting
+cascade blocks by eye.** Evidence first, then the knife.
+
 ## To investigate
 
 **The corner trio is duplicated.** The three waves are in the list *and* still in the
