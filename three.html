@@ -353,7 +353,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=22"></script>
+<script src="engine.js?v=23"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -809,16 +809,13 @@ const SPONSORS = [
 const BOARD_INK = [["#c8102e","#ffd166"],["#0a2a66","#ffffff"],["#ffd166","#1a1a1a"],
   ["#0b6e3f","#ffffff"],["#ffffff","#0a2a66"],["#5b2a86","#ffd166"],["#e8600a","#ffffff"]];
 
-/** Text on a coloured board. `mirror` draws it back-to-front, so that when the texture is applied
- *  to the FAR face of a box — which the viewer sees from behind — it still reads left to right.
- *  Without it, half the ground's advertising is written backwards, which is what a single
- *  double-sided plane gives you. */
-function boardTexture(text, bg, fg, mirror){
+/** Text on a coloured board. There is no mirror argument any more: BoxGeometry already orients
+ *  each face's UVs to read from outside it, so one plain texture serves both sides. */
+function boardTexture(text, bg, fg){
   const c = document.createElement('canvas');
   c.width = 512; c.height = 64;
   const x = c.getContext('2d');
   x.fillStyle = bg; x.fillRect(0, 0, 512, 64);
-  if (mirror) { x.translate(512, 0); x.scale(-1, 1); }
   x.fillStyle = fg;
   x.font = '700 40px "Barlow Condensed","Arial Narrow",sans-serif';
   x.textAlign = 'center'; x.textBaseline = 'middle';
@@ -854,21 +851,27 @@ function buildGround(){
     const text = SPONSORS[(k * 7 + 3) % SPONSORS.length];
     // A BOX, NOT A PLANE. A hoarding has a thickness and an edge that catches the light, and a
     // plane seen edge-on from a low camera simply vanishes. Six materials, one per face: the two
-    // long faces carry the advertisement — the outer one MIRRORED so it reads left to right from
-    // behind as well — and the rest are the board's own colour.
+    // long faces carry the advertisement and the rest are the board's own colour, darkened.
     //
     // three.js orders BoxGeometry materials +X, -X, +Y, -Y, +Z, -Z. The geometry is built
     // width-along-X and depth-along-Z, so the two faces to letter are +Z and -Z.
     const edgeMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(bg).multiplyScalar(0.72) });
+    // One texture, both lettered faces — see below.
+    const faceMat = new THREE.MeshLambertMaterial({ map: boardTexture(text, bg, fg) });
     const board = new THREE.Mesh(
       new THREE.BoxGeometry(e.len * 0.92, 26, 3.2),
-      // +Z carries the MIRRORED copy and -Z the plain one, which is the opposite of what I had.
-      // The board is placed outside the touchline and turned to face the pitch, so its -Z face
-      // is the one a viewer inside the ground sees; +Z faces out at the stands. Lettering them
-      // the other way round is why the text read backwards from the non-field side.
-      [edgeMat, edgeMat, edgeMat, edgeMat,
-       new THREE.MeshLambertMaterial({ map: boardTexture(text, bg, fg, true) }),
-       new THREE.MeshLambertMaterial({ map: boardTexture(text, bg, fg, false) })]);
+      // NO MIRRORING. Both previous attempts came out backwards on one side or the other, which
+      // was the tell: the fault was never WHICH face got the mirrored copy, it was that either
+      // face got one.
+      //
+      // BoxGeometry UV-maps every face so its texture reads upright when viewed from OUTSIDE
+      // that face. three.js has already done the flip. Mirroring one side undoes it, and there
+      // is no arrangement of one plain and one mirrored texture that reads correctly from both —
+      // which is exactly what the two failed attempts demonstrated between them.
+      //
+      // The same plain texture on both faces is right, and is what a real hoarding does anyway:
+      // printed once, seen from either side, legible from both.
+      [edgeMat, edgeMat, edgeMat, edgeMat, faceMat, faceMat]);
     board.position.set(e.mx - e.nx * 34, 13, e.my - e.ny * 34);
     // ORDER MATTERS. three.js applies Euler angles XYZ by default, so setting .x then .y leans
     // the board in WORLD space and only then swings it to face the pitch — which points the lean
@@ -1630,7 +1633,7 @@ const CAMS = [
   { id:'goal',    glyph:'\u{1F945}', name:'Behind the goal',
     what:'from one end \u00b7 shots arriving',   az:Math.PI/2,  rad:706,  el:0.34, follow:false },
   { id:'free',    glyph:'\u{1F504}', name:'Free look',
-    what:'drag and pinch \u00b7 stays put',      az:null,       el:null, rad:null, follow:false },
+    what:'orbit, pinch, two-finger pan',      az:null,       el:null, rad:null, follow:false },
 ];
 let camId = 'follow';
 const cmEl = document.getElementById('cm'), cmCard = document.getElementById('cmCard');
@@ -1643,7 +1646,7 @@ function useCam(id){
   // `free` keeps whatever the last drag left, which is the point of it — everything else snaps
   // to its own angle so choosing a view actually changes what you see.
   if (C.az !== null) { az = C.az; el = C.el; rad = C.rad; }
-  if (!C.follow) look.set(CX, 0, CY);
+  if (!C.follow && C.id !== 'free') look.set(CX, 0, CY);   // free keeps where you panned to
   // Behind the goal looks at that goal's mouth rather than the middle, or it is just Broadcast
   // from the other side.
   if (C.id === 'goal') { const e = EDGES[GOAL_EDGE[0]]; look.set(e.mx, 0, e.my); }
@@ -1678,14 +1681,44 @@ function wentFree(){ if (camId !== 'free') { camId = 'free'; follow = false;
 let drag = null, pinch = 0;
 cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); });
 cv.addEventListener('pointerup',   () => { drag = null; });
+// ── PANNING ─────────────────────────────────────────────────────────────────
+// Free look can move the point it is looking AT, not just orbit around it. Without that, "free"
+// only meant free to circle the centre spot — which is not much freedom on a pitch where the
+// interesting thing is rarely in the middle.
+//
+// Two fingers pans, one orbits. That is the gesture people already know from every map, and it
+// needs no modifier key on a phone that has none. On a mouse, shift-drag or the right button.
+//
+// The pan is in the CAMERA's frame rather than the world's: dragging right moves the view right
+// as it appears on screen, whichever way the camera happens to be facing. A world-space pan
+// sends the pitch sideways in a direction that depends on where you last orbited to, which feels
+// broken even though it is consistent.
+function panBy(dx, dy){
+  const right = new THREE.Vector3(Math.sin(az), 0, -Math.cos(az));
+  const fwd   = new THREE.Vector3(-Math.cos(az), 0, -Math.sin(az));
+  const k = rad * 0.0016;                       // further out, faster — the same screen distance
+  look.addScaledVector(right, -dx * k);
+  look.addScaledVector(fwd,   -dy * k);
+  // Kept near the ground so the pitch cannot be pushed entirely off screen and lost.
+  look.x = Math.max(CX - 900, Math.min(CX + 900, look.x));
+  look.z = Math.max(CY - 900, Math.min(CY + 900, look.z));
+  look.y = 0;
+  placeCam();
+}
+
 cv.addEventListener('pointermove', e => {
   if (!drag) return;
   wentFree();
-  az += (e.clientX - drag.x) * 0.006;
-  el = Math.max(0.16, Math.min(1.42, el + (e.clientY - drag.y) * 0.005));
-  drag = { x: e.clientX, y: e.clientY };
-  placeCam();
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (drag.pan || e.shiftKey || e.buttons === 2) panBy(dx, dy);
+  else {
+    az += dx * 0.006;
+    el = Math.max(0.16, Math.min(1.42, el + dy * 0.005));
+    placeCam();
+  }
+  drag = { x: e.clientX, y: e.clientY, pan: drag.pan };
 });
+cv.addEventListener('contextmenu', e => e.preventDefault());   // so right-drag can pan
 // ── ZOOM ────────────────────────────────────────────────────────────────────
 // Independent of the presets, and deliberately so. A preset fixes the ANGLE — overhead, behind
 // the goal, pitchside — and `rad` is a separate axis, so pulling back from Overhead is still
@@ -1707,15 +1740,20 @@ cv.addEventListener('wheel', e => {
   rad = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, rad + e.deltaY * 0.9));
   placeCam();
 }, { passive: false });
+let twoMid = null;
 cv.addEventListener('touchmove', e => {
   if (e.touches.length !== 2) return;
   e.preventDefault();
-  const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
-                       e.touches[0].clientY - e.touches[1].clientY);
+  const [a, b] = e.touches;
+  const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+  const mx = (a.clientX + b.clientX) / 2, my = (a.clientY + b.clientY) / 2;
   if (pinch) { rad = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, rad * (pinch/d))); placeCam(); }
-  pinch = d;
+  // The midpoint between two fingers moving IS a pan, and it comes for free alongside the pinch:
+  // people spread and slide in one gesture and expect both to happen.
+  if (twoMid) { wentFree(); panBy(mx - twoMid.x, my - twoMid.y); }
+  pinch = d; twoMid = { x: mx, y: my };
 }, { passive: false });
-cv.addEventListener('touchend', () => { pinch = 0; });
+cv.addEventListener('touchend', () => { pinch = 0; twoMid = null; });
 
 // ── BOOT, OUT LOUD ──────────────────────────────────────────────────────────
 // The first version of this ran bare. When it failed the page showed its buttons, an empty
