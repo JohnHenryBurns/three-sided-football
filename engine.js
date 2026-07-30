@@ -1997,7 +1997,11 @@ function telReset(){
 // Each place the engine moves the ball instantly now names itself, and the report prints the
 // tally. The goal is that every one of these becomes a journey instead — a player fetching it, or
 // the crowd throwing it back — and this is how we watch that number go to zero.
-function telPort(why){ TEL.port[why] = (TEL.port[why] || 0) + 1; TEL.portFrame = TEL.frames; }
+// telPort fires during think() and physics(), which run BEFORE telFrame() increments the counter
+// — so recording TEL.frames here records the PREVIOUS frame's number, and the check below never
+// matched. Every declared teleport was counted as undeclared and `unattributed` came back exactly
+// equal to the total, which is the signature of an off-by-one rather than of missing sources.
+function telPort(why){ TEL.port[why] = (TEL.port[why] || 0) + 1; TEL.portFrame = TEL.frames + 1; }
 
 // ── THE CATCH-ALL ───────────────────────────────────────────────────────────
 // Naming sources one at a time is a hunt, and a hunt ends when you stop finding things rather
@@ -2009,7 +2013,9 @@ function telPort(why){ TEL.port[why] = (TEL.port[why] || 0) + 1; TEL.portFrame =
 // nothing declared itself gets counted as unattributed. If that number is zero, the list is
 // complete — not because I looked hard, but because nothing else can move the ball.
 function telUnattributed(dist2){
-  if(TEL.portFrame===TEL.frames) return;      // something owned up this frame
+  // Within one frame either way: a restart can declare itself on the frame the ball moves or on
+  // the one before, depending on whether the move happens in think() or in physics().
+  if(TEL.portFrame>=TEL.frames-1) return;     // something owned up
   TEL.unattributed++;
   if(dist2>TEL.unattMax) TEL.unattMax=dist2;
 }
