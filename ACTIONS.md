@@ -299,6 +299,51 @@ should hurry it.**
 and the 900ms kick-off pause. Four constants, each of which made every instance of its
 restart identical.
 
+## The deletion, scoped properly
+
+**The flip fails on a guard, and the reason is structural.** `gkDiveCheck(targets[owner.team])`
+sits at line 2891 — **outside the per-player loop**, in a block that captured `owner` at
+the top of the frame. An action releasing the ball leaves that stale, and no guard inside
+the loop can reach code that runs after it.
+
+So step 2 is load-bearing, not tidiness. But measuring it changed the estimate:
+
+```
+the owner-decision block   495 lines, 12 kick sites
+```
+
+**And it is not only kicks.** Interleaved with them:
+
+```
+gkHolder / gkHoldUntil     the keeper's hold state
+stats.tackles / o.tackles  tackling — not an action at all
+owner.noChase, the hop     the thrower's follow-through
+ball.puntBy                possession tracking the ally rules read
+```
+
+**None of those was ported, because the port was looking for `kick()`.** They are
+bookkeeping that happens to live beside kicks.
+
+### What the deletion actually is
+
+Not a deletion. **A separation**: pull the bookkeeping out of the block, leave it running,
+and remove only the decision-and-kick pairs the actions now own. The block shrinks rather
+than vanishes.
+
+**Three things must survive it:**
+
+1. `gkHolder` — the keeper's hold is read by four instructions
+2. tackling — an entire mechanic with no action equivalent
+3. `ball.puntBy` and the ally-pass flags — the three-sided rules depend on them
+
+**And `gkDiveCheck` needs an owner that is still valid**, which means either passing the
+team explicitly or moving the call into the shot actions where the shooter is known.
+
+### Estimate
+
+Larger than a flip and smaller than a rewrite. **The organ is ready and the cavity needs
+preparing** — and knowing that precisely is worth more than another attempt at the boolean.
+
 ## Order
 
 1. find the common shape, or establish that there isn't one
