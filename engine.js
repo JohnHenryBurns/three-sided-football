@@ -701,6 +701,11 @@ function kick(tx,ty,power,isShot){
 // So the counting compares against the job he had at the END OF THE LAST FRAME, not against
 // whatever was set a microsecond ago. Intra-frame reconsideration is not indecision — it is the
 // cascade arriving at an answer.
+// `holdActive` is a local inside think(), so an instruction cannot see it — and an instruction
+// that cannot see the world it is deciding about is not much of an instruction. The same question,
+// asked where anything can ask it.
+function holdingPlay(){ return nowMs() < restartHold; }
+
 function job(p, what){
   TEL.jobFrames[what] = (TEL.jobFrames[what]||0) + 1;
   p.job = what;
@@ -931,6 +936,53 @@ const INSTRUCTIONS = [
     score:p => 570,
     act:p => { steer(p,CX,CY,0.9); return true; } },
 
+  // ── RECEIVING LANES AT A THROW ────────────────────────────────────────────
+  // The taker's own side while play is held. Staggered infield: a per-player lateral spread of
+  // 260 and a depth between 70 and 165, both from stable hashes — so five men offer five
+  // DIFFERENT options rather than shuffling along the line together.
+  //
+  // This is the same trick as lane-covering. Two hashes, no communication, and a shape.
+  // NOT explicit. Offering yourself is a CHOICE — the same call I made for "showing for a throw"
+  // and then contradicted here. Marked explicit these outranked the gkHolding family by a
+  // thousand points during any hold, and the measurements said so immediately: loose 50-61% ->
+  // 61-68%, crowding 2.0-2.2 -> 1.5-1.9. Players were abandoning useful positions to go and
+  // offer for a throw that had not happened yet.
+  { name:'offering a lane', explicit:false, base:840,
+    applies:p => !!(holdingPlay() && pendingRestart && pendingRestart.p
+                    && pendingRestart.p!==cornerTaker && pendingRestart.p.role!=='K'
+                    && p.team===pendingRestart.team && p!==pendingRestart.p && p.role!=='K'),
+    score:p => 840,
+    act:p => {
+      const rx=pendingRestart.x, ry=pendingRestart.y;
+      const inx=CX-rx, iny=CY-ry, il=Math.hypot(inx,iny)||1;
+      const nix=inx/il, niy=iny/il, pux=-niy, puy=nix;
+      GKSTAT.laneSteer=(GKSTAT.laneSteer||0)+1;
+      const lat2=((p.k1*997)%1-0.5)*260;
+      const dep2=70+((p.k2*613)%1)*95;
+      steer(p, rx+nix*dep2+pux*lat2, ry+niy*dep2+puy*lat2, 1.35);
+      return true;
+    } },
+
+  // ── AN ALLY OFFERS FROM DEEPER ────────────────────────────────────────────
+  // Three-sided again, and a nice piece of design: an allied side offers too, but from 140-230
+  // rather than 70-165 and spread wider. They are supplementary outlets ACROSS a battle line —
+  // available without crowding the ally whose throw it is.
+  { name:'an ally offers deep', explicit:false, base:830,
+    applies:p => !!(holdingPlay() && pendingRestart && pendingRestart.p
+                    && pendingRestart.p!==cornerTaker && pendingRestart.p.role!=='K'
+                    && p.team!==pendingRestart.team && p.role!=='K'
+                    && allied(p.team, pendingRestart.team)),
+    score:p => 830,
+    act:p => {
+      const rx=pendingRestart.x, ry=pendingRestart.y;
+      const inx=CX-rx, iny=CY-ry, il=Math.hypot(inx,iny)||1;
+      const nix=inx/il, niy=iny/il, pux=-niy, puy=nix;
+      const lat5=((p.k1*733)%1-0.5)*330;
+      const dep5=140+((p.k2*541)%1)*90;
+      steer(p, rx+nix*dep5+pux*lat5, ry+niy*dep5+puy*lat5, 1.15);
+      return true;
+    } },
+
   // ── OFFERING AFTER A RESTART ──────────────────────────────────────────────
   // NOT explicit: he has taken it and is choosing to make himself available rather than chase.
   // Released by POSSESSION — the moment anybody else has the ball he is a player again — with
@@ -1122,25 +1174,7 @@ function think(dt){
       const isThrow=pendingRestart&&pendingRestart.p&&pendingRestart.p!==cornerTaker&&pendingRestart.p.role!=="K";
       if(isThrow)GKSTAT.isThrowFrames=(GKSTAT.isThrowFrames||0)+1;
       const isCorner=cornerTaker&&pendingRestart&&pendingRestart.p===cornerTaker;
-      if(isThrow&&p.team===rteam&&p!==pendingRestart.p&&p.role!=="K"){
-        // receiving lanes: staggered infield options, not a shuffle on the line
-        const inx=CX-rx, iny=CY-ry, il=Math.hypot(inx,iny)||1;
-        const nix=inx/il, niy=iny/il, pux=-niy, puy=nix;
-        GKSTAT.laneSteer=(GKSTAT.laneSteer||0)+1;
-        const lat2=((p.k1*997)%1-0.5)*260;
-        const dep2=70+((p.k2*613)%1)*95;
-        steer(p, rx+nix*dep2+pux*lat2, ry+niy*dep2+puy*lat2, 1.35);
-        return;
-      }
-      if(isThrow&&p.team!==rteam&&p.role!=="K"&&allied(p.team,rteam)){
-        // allied third team: deep supplementary outlets across battle lines
-        const inx=CX-rx, iny=CY-ry, il=Math.hypot(inx,iny)||1;
-        const nix=inx/il, niy=iny/il, pux=-niy, puy=nix;
-        const lat5=((p.k1*733)%1-0.5)*330;
-        const dep5=140+((p.k2*541)%1)*90;
-        steer(p, rx+nix*dep5+pux*lat5, ry+niy*dep5+puy*lat5, 1.15);
-        return;
-      }
+      // The two throw-in offering branches moved to the instruction list.
       if(isThrow&&p.team!==rteam&&p.role!=="K"){
         // coached marking: pick a lane runner and shadow the passing line
         const recs=players.filter(m=>m.team===rteam&&m!==pendingRestart.p&&!m.out&&!m.sentOff&&m.role!=="K");
