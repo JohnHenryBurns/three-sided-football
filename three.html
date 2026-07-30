@@ -220,6 +220,11 @@ body.setup #bar{display:none}
 #caption{font-size:1.05rem;font-weight:600;line-height:1.3;
   text-shadow:0 2px 6px rgba(0,0,0,.95),0 0 14px rgba(0,0,0,.8)}
 @media (max-width:560px){ #caption{font-size:.98rem;bottom:38%} }
+
+/* Kick off sits in the header now. It is the only control that belongs to the MATCH rather than
+   to the view, and the bar was getting crowded enough that everything read as equally important.
+   It also stays reachable when the transport hides under the setup screen. */
+header #reset{font-size:.78rem;padding:.28rem .55rem;margin-left:.1rem}
 </style>
 
 <header>
@@ -228,6 +233,7 @@ body.setup #bar{display:none}
   <span class="spacer"></span>
   <div class="scores" id="scores"></div>
   <span id="clock">0:00</span>
+  <button id="reset" title="New match">Kick off</button>
 </header>
 
 <div id="stage">
@@ -282,8 +288,11 @@ body.setup #bar{display:none}
 <div id="bar">
   <button id="play" title="Pause / play" aria-label="Pause">
     <svg viewBox="0 0 24 24" class="ico"><path d="M8 5v14M16 5v14"/></svg></button>
-  <button id="reset">Kick off</button>
   <button id="cam" class="on" title="Camera">Follow ball</button>
+  <button id="zoomOut" title="Zoom out" aria-label="Zoom out">
+    <svg viewBox="0 0 24 24" class="ico"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M7.5 10.5h6M15.5 15.5L21 21"/></svg></button>
+  <button id="zoomIn" title="Zoom in" aria-label="Zoom in">
+    <svg viewBox="0 0 24 24" class="ico"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M7.5 10.5h6M10.5 7.5v6M15.5 15.5L21 21"/></svg></button>
   <button id="speed">1&times;</button>
   <button id="full">Full</button>
   <span class="hint">drag to orbit · pinch or wheel to zoom</span>
@@ -293,7 +302,7 @@ body.setup #bar{display:none}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=15"></script>
+<script src="engine.js?v=16"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1462,9 +1471,25 @@ cv.addEventListener('pointermove', e => {
   drag = { x: e.clientX, y: e.clientY };
   placeCam();
 });
+// ── ZOOM ────────────────────────────────────────────────────────────────────
+// Independent of the presets, and deliberately so. A preset fixes the ANGLE — overhead, behind
+// the goal, pitchside — and `rad` is a separate axis, so pulling back from Overhead is still
+// overhead. That is why zooming does NOT drop you into Free look the way dragging does: dragging
+// contradicts what the preset claims about the view, and zooming does not.
+//
+// The cost is that switching preset resets the distance, since a preset carries one. That is the
+// right way round: choosing a whole view should give you the whole view, and the zoom is one
+// button away again.
+const ZOOM_MIN = 420, ZOOM_MAX = 2400;
+function zoomBy(f){
+  rad = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, rad * f));
+  placeCam();
+}
+document.getElementById('zoomIn').addEventListener('click',  () => zoomBy(0.82));
+document.getElementById('zoomOut').addEventListener('click', () => zoomBy(1.22));
 cv.addEventListener('wheel', e => {
   e.preventDefault();
-  rad = Math.max(420, Math.min(2400, rad + e.deltaY * 0.9));
+  rad = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, rad + e.deltaY * 0.9));
   placeCam();
 }, { passive: false });
 cv.addEventListener('touchmove', e => {
@@ -1472,7 +1497,7 @@ cv.addEventListener('touchmove', e => {
   e.preventDefault();
   const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
                        e.touches[0].clientY - e.touches[1].clientY);
-  if (pinch) { rad = Math.max(420, Math.min(2400, rad * (pinch/d))); placeCam(); }
+  if (pinch) { rad = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, rad * (pinch/d))); placeCam(); }
   pinch = d;
 }, { passive: false });
 cv.addEventListener('touchend', () => { pinch = 0; });
