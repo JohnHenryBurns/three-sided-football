@@ -461,7 +461,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=69"></script>
+<script src="engine.js?v=70"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2069,27 +2069,26 @@ let drawGL = function drawGL(){
     const dx = CX - netFly.x, dz = CY - netFly.y, d = Math.hypot(dx, dz) || 1;
     netFly.returning = true;
     netFly.dead = false;
-    netFly.vx = dx/d; netFly.vy = dz/d;
-    netFly.speed = d / (60 * 1.6);      // arrives near the middle in about 1.6 seconds
+    netFly.x0 = netFly.x; netFly.y0 = netFly.y;   // the two ends, fixed
+    netFly.t = 0;
     netFly.z = 0;
-    netFly.arc = d;                     // remember the distance so it can rise and fall
-    netFly.travelled = 0;
+    netFly.vx = dx/d; netFly.vy = dz/d;           // still needed, so the ball rolls as it goes
   }
   if (netFly && netFly.returning) {
     const f = netFly;
-    if (!f.dead) {
-      f.x += f.vx * f.speed;
-      f.y += f.vy * f.speed;
-      f.travelled += f.speed;
-      // A big ol' kick: up and down over the run, so it reads as struck rather than slid.
-      const t2 = Math.min(1, f.travelled / (f.arc || 1));
-      f.z = Math.sin(t2 * Math.PI) * 42;
-      if (t2 >= 1) { f.dead = true; f.z = 0; f.vx = f.vy = 0; }
-    }
+    // INTERPOLATED, NOT INTEGRATED. Adding a velocity each frame and stopping when the distance
+    // travelled exceeded the distance to the target means any hitch in the frame rate overshoots
+    // — and it was sailing on toward the stands. A parameter that runs 0 to 1 between two fixed
+    // points cannot overshoot, whatever the frames do.
+    f.t = Math.min(1, (f.t || 0) + 1/96);          // 96 frames, about 1.6 seconds
+    const e2 = 1 - Math.pow(1 - f.t, 2);            // fast off the boot, easing as it arrives
+    f.x = f.x0 + (CX - f.x0) * e2;
+    f.y = f.y0 + (CY - f.y0) * e2;
+    f.z = Math.sin(f.t * Math.PI) * 26;             // 26, not 42: a pass back, not a clearance
+    if (f.t >= 1) { f.dead = true; f.z = 0; f.vx = f.vy = 0; }
     // and it is dropped the moment the ball is live again, whoever wins the race
     if (running && performance.now() >= resumeAt) netFly = null;
   }
-  if (netFly && !celeUntil && netFly.returning === undefined) netFly = null;
   if (netFly && !netFly.dead) {
     const f = netFly;
     f.x += f.vx * f.speed;
