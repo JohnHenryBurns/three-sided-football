@@ -1259,6 +1259,24 @@ function physics(dt){
     ball.vx+=(cpx-ball.x)*0.08*S; ball.vy+=(cpy-ball.y)*0.08*S;
     ball.vx*=Math.pow(0.90,S); ball.vy*=Math.pow(0.90,S);
     ball.x+=ball.vx*S; ball.y+=ball.vy*S;
+    // A KEEPER MAY NOT CARRY IT OUT OF HIS AREA. Measured over ten minutes: a keeper with the
+    // ball was outside his own arc on 97 per cent of the frames he held it, and got as far as
+    // 499 from his goal — most of the way to somebody else's. Nothing stopped him, because
+    // nothing in the chase logic knows a keeper is different once he has possession.
+    //
+    // He is held at the arc: he can move anywhere inside it, and the moment he would cross, he
+    // is placed back on it. Handing over is his job, and this makes him do it from where a
+    // keeper does it.
+    if(o.role==="K"){
+      const og=goalCenter(o.team);
+      const kx=o.x-og.x, ky=o.y-og.y, kd=Math.hypot(kx,ky);
+      const AREA=112;
+      if(kd>AREA){
+        const f=AREA/(kd||1);
+        o.x=og.x+kx*f; o.y=og.y+ky*f;
+        ball.x=o.x+(ball.x-o.x)*0.3; ball.y=o.y+(ball.y-o.y)*0.3;
+      }
+    }
     // KEEP IT OUT OF HIM. The carry point is 15 ahead, but the ball SPRINGS toward it — so on a
     // turn or a sudden acceleration it lags and passes through the carrier's body. Measured over
     // five minutes: 13 per cent of carried frames had the ball closer than a player's own radius,
