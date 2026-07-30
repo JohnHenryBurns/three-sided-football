@@ -369,7 +369,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=31"></script>
+<script src="engine.js?v=32"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -863,6 +863,16 @@ function boardTexture(text, bg, fg){
   t.minFilter = THREE.LinearFilter;
   return t;
 }
+
+// The stand pieces, so the near ones can be faded out. Declared HERE, above buildGround, because
+// buildGround fills it — and because it was not declared anywhere at all, which is what the page
+// meant by "stands is not defined".
+//
+// The symptom was a missing team selector, three functions downstream: boot() calls buildGround
+// before renderTeamSlots, buildGround threw, the guard caught it, and everything after it in
+// boot never ran. Worth remembering — a thing missing from the screen is often a thing that
+// threw somewhere earlier and quietly took the rest of the sequence with it.
+const stands = [];
 
 function buildGround(){
   // ── THE SURROUND ─────────────────────────────────────────────────────────
