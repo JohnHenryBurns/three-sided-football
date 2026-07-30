@@ -976,6 +976,47 @@ const ACTIONS = [
   // His head is at H_HEAD + his jump, so a man who has left the ground can reach a ball a
   // standing player cannot. That is the jump becoming worth something beyond the animation, which
   // is what John asked for when the jump was still cosmetic.
+  // ── SHIELD IT ─────────────────────────────────────────────────────────────
+  // A carrier with somebody on his shoulder and nowhere to go. He turns his back to the nearest
+  // opponent and holds the ball, which is a real thing footballers do constantly and the engine
+  // has never once done — a man under pressure here either loses it or runs into trouble.
+  //
+  // PREREQUISITES: he has the ball, somebody is close, and he is NOT already facing a way out.
+  // That last one is what stops it firing on every carry.
+  //
+  // It costs him: shielding is standing still, so it buys safety and gives up ground. That is
+  // the trade, and an action without a cost is a reflex.
+  { name:'shield it', tier:TIER.PLAYER, base:430,
+    can:p => {
+      if(ball.owner!==p || !onPitch(p)) return false;
+      let nd=1e9;
+      players.forEach(q=>{ if(q.team!==p.team && onPitch(q)) nd=Math.min(nd, dist(q,p)); });
+      if(nd>26) return false;                       // nobody on him: no reason
+      // is there an outlet? if a mate is open ahead, he should be passing, not shielding
+      const tgt=goalCenter(targets[p.team]!==null?targets[p.team]:p.team);
+      let openMate=false;
+      players.forEach(m=>{ if(m.team!==p.team||m===p||!onPitch(m)) return;
+        if(dist(m,tgt) < dist(p,tgt) - 20){
+          let cover=1e9;
+          players.forEach(q=>{ if(q.team!==p.team && onPitch(q)) cover=Math.min(cover, dist(q,m)); });
+          if(cover>45) openMate=true;
+        } });
+      return !openMate;
+    },
+    score:p => 430,
+    act:p => {
+      // back to the nearest opponent, ball on the far side of his body
+      let near=null,nd=1e9;
+      players.forEach(q=>{ if(q.team!==p.team && onPitch(q)){ const d=dist(q,p); if(d<nd){nd=d;near=q;} } });
+      if(!near) return false;
+      const ax=p.x-near.x, ay=p.y-near.y, al=Math.hypot(ax,ay)||1;
+      p.hx=-ax/al; p.hy=-ay/al;                     // facing him, body between
+      p.vx*=0.55; p.vy*=0.55;                       // the cost: he is not going anywhere
+      ball.x=p.x+ax/al*9; ball.y=p.y+ay/al*9;       // ball on the far side
+      TEL.shields++;
+      return true;
+    } },
+
   { name:'head it', tier:TIER.PLAYER, base:500,
     can:p => {
       if(!onPitch(p) || ball.owner) return false;
@@ -3294,7 +3335,7 @@ const TEL = {
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0,
+  actFrames:{}, headers:0, shields:0,
   unattributed:0, unattMax:0, portFrame:-1,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
@@ -3305,20 +3346,20 @@ function telReset(){
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
     jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
     jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-    actFrames:{}, headers:0, headers:0,
-  actFrames:{}, headers:0, backPass:0, restartVoid:0,
+    actFrames:{}, headers:0, shields:0, shields:0, headers:0,
+  actFrames:{}, headers:0, shields:0, backPass:0, restartVoid:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, freeKicks:0,
+  actFrames:{}, headers:0, shields:0, freeKicks:0,
     unattributed:0, unattMax:0, portFrame:-1,
   unattributed:0, unattMax:0, portFrame:-1, deflected:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0,
+  actFrames:{}, headers:0, shields:0,
   unattributed:0, unattMax:0, portFrame:-1, woodwork:0, bars:0, posts:0, port:{},
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0,
+  actFrames:{}, headers:0, shields:0,
   unattributed:0, unattMax:0, portFrame:-1, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
@@ -3413,6 +3454,7 @@ function buildMatchReport(){
   md+=`| free kicks | ${TEL.freeKicks} | ${p90(TEL.freeKicks)} | ~22 |\n`;
   md+=`| back-passes (keeper must kick) | ${TEL.backPass} | ${p90(TEL.backPass)} | |\n`;
   md+=`| **headers** | ${TEL.headers} | ${p90(TEL.headers)} | ~40 |\n`;
+  md+=`| shielding (frames) | ${TEL.shields} | | |\n`;
   md+=`| **restarts voided by the watchdog** | ${TEL.restartVoid} | | should be 0 |\n`;
 
   // ── INSTRUCTIONS ──────────────────────────────────────────────────────────
