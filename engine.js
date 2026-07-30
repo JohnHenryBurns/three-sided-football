@@ -330,6 +330,9 @@ for(let k=0;k<6;k++){
 // exactly "past the line, between the posts, under the bar" — three geometric facts and no
 // magic number. Change the bar and the rule follows, which is the property that was missing.
 const GOAL_EDGE=[0,2,4], GOAL_HALF=0.21, GOAL_H=54;
+// A player's height, which the renderer draws and the rules test against. Same reasoning as
+// GOAL_H: a number both sides need is a number neither side should own privately.
+const H_HEAD=34;
 const goalCenter=t=>{const e=EDGES[GOAL_EDGE[t]];return {x:e.mx,y:e.my};};
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
@@ -1453,7 +1456,17 @@ function physics(dt){
       let t=sl>0?((p.x-px0)*sx+(p.y-py0)*sy)/sl:0;
       t=Math.max(0,Math.min(1,t));
       const d=Math.hypot(p.x-(px0+sx*t), p.y-(py0+sy*t));
-      const reach=p.role==="K"?(p.diveUntil&&clockSec<p.diveUntil?23:17):13;
+      // A KEEPER CAN GO UP. He dives sideways for 23 and stands at 17, and a ball over his head
+      // was simply gone — which is wrong for the position and, now that punts reach 76 and the
+      // crossbar is a real thing to hit, wrong often.
+      //
+      // A high ball he is under gets him the same 23 he gets diving, because a jump and a dive
+      // are the same act of commitment aimed at different parts of the goal. He is not diving
+      // AND jumping: whichever the ball asks for.
+      const airborne = p.role==="K" && ball.z>H_HEAD && ball.z<GOAL_H+14;
+      const reach=p.role==="K"
+        ? ((p.diveUntil&&clockSec<p.diveUntil)||airborne ? 23 : 17)
+        : 13;
       if(d<reach&&d<bd){bd=d;best=p;}});
     if(best){
       const wasShot=ball.isShot, spd=Math.hypot(ball.vx,ball.vy), kicker=ball.lastKicker;
@@ -1609,7 +1622,15 @@ function physics(dt){
               `<span class="goal">OFF THE BAR!</span> ${nm} is on his knees.`,
               `<span class="goal">CROSSBAR!</span> ${nm} beat the keeper and lost to the woodwork.`,
               `${nm} rattles the bar \u2014 the whole hex heard that one.`,
-              `OFF THE UNDERSIDE! It bounces down and the scramble is ON.`]),true);
+              `OFF THE UNDERSIDE! It bounces down and the scramble is ON.`,
+              `<span class="goal">BAR!</span> An inch lower and ${nm} is a legend.`,
+              `${nm} finds the one part of the goal that fights back.`,
+              `Woodwork! The bar is still humming and so is ${nm}.`,
+              `${nm} hits the top of the frame \u2014 the groundskeeper flinches.`,
+              `CROSSBAR! Somewhere a physicist is nodding and ${nm} is not.`,
+              `The bar says no. ${nm} asks it politely to reconsider. It does not.`,
+              `${nm} strikes it perfectly and the frame strikes back harder.`,
+              `OFF THE BAR! Two inches of aluminium between ${nm} and the highlight reel.`]),true);
           } else {
             TEL.posts++;
             // off the post: the sideways component is reversed, so it comes back ACROSS the face
@@ -1624,7 +1645,15 @@ function physics(dt){
               `<span class="goal">OFF THE POST!</span> ${nm} cannot believe it.`,
               `<span class="goal">POST!</span> The width of the paint denies ${nm}.`,
               `${nm} hits the upright \u2014 and it stays live!`,
-              `WOODWORK! ${nm} is looking at the sky.`]),true);
+              `WOODWORK! ${nm} is looking at the sky.`,
+              `<span class="goal">POST!</span> ${nm} beat everyone except the geometry.`,
+              `It rattles across the face of the goal \u2014 ${nm} had it won.`,
+              `${nm} finds the upright, and the upright finds it back.`,
+              `POST! The margin was the diameter of a lamp post and ${nm} was on the wrong side of it.`,
+              `Off the stick! ${nm} turns away with both hands on his head.`,
+              `${nm} strikes it true and the paintwork disagrees.`,
+              `UPRIGHT! It stays in, it stays live, and nobody knows where it is going.`,
+              `The post. Of all the things ${nm} beat today, the post was not one of them.`]),true);
           }
           ball.isShot=false;
           ENGINE_HOOKS.spawnNote(ball.x,ball.y-24,hitBar?"\u{1F94A} CROSSBAR!":"\u{1F94A} POST!","#ffd166");
