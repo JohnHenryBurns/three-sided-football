@@ -462,7 +462,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=113"></script>
+<script src="engine.js?v=114"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2093,8 +2093,13 @@ let drawGL = function drawGL(){
     // sixty texture uploads a second per player
     if (b.jobLabel) {
       b.jobLabel.visible = showJobs;
-      if (showJobs && (p.job || '') !== b.jobText) {
+      // REDRAW ON TEXT *OR* TIER. The label was rebuilt only when the words changed, so a player
+      // who went from a green decision to a red script with — as far as this check was concerned
+      // — no change worth noticing kept his old colour. That is why scripts looked green: the
+      // sprite was correct when it was made and never remade.
+      if (showJobs && ((p.job || '') !== b.jobText || p.jobTier !== b.jobTierDrawn)) {
         b.jobText = p.job || '';
+        b.jobTierDrawn = p.jobTier;
         // b.g, not g. `g` is the group local to buildBodies() where the body was assembled;
         // in drawGL the only handle on it is b.g. It parsed because `g` is a legal identifier
         // and there is no `g` in scope here — which a linter would have said and a parse check
