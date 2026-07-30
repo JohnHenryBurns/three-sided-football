@@ -104,6 +104,27 @@ it. Same split.
 **What is now engine-owned:** who fetches after a goal, who takes the kick-off, where
 everybody stands during both a goal restart and a sending-off.
 
+## The degenerate match
+
+**Roughly one in ten, and it is not a fixed code path.** Instrumenting it consumes
+`Math.random()`, the sequence shifts, and the match comes out normal — so it is a state
+the sim occasionally falls into rather than a branch that is wrong.
+
+Three signatures seen:
+
+```
+nobody chasing        loose >75%, crowd <1.4
+ball held too long    loose <45%
+one side dominant     possession >60%
+```
+
+**Every match now reports `ok` and `why`.** A calibration sweep must discard and *count*
+the discards — because averaging one 87%-loose match in with nine good ones moved the
+goals mean from **25.0 to 19.8**, a 26% error with nothing in the result to say why.
+
+If the discard count climbs during a sweep, something has been broken rather than tuned.
+That is the alarm; the filter is not a fix.
+
 ## To investigate
 
 **The corner trio is duplicated.** The three waves are in the list *and* still in the
