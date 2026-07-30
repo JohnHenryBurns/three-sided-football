@@ -34,6 +34,7 @@ function play(opts){
              get goalsLog(){return goalsLog}, get phase(){return phase}, get speed(){return speed},
              get clockSec(){return clockSec}, set clockSec(v){clockSec=v},
              set matchLen(v){matchLen=v}, get matchLen(){return matchLen},
+             get stoppageLen(){return stoppageLen},
              set oobRule(v){oobRule=v}, set zoneRule(v){zoneRule=v}, set foulMult(v){foulMult=v},
              set momentumOn(v){momentumOn=v}, set scoreMode(v){scoreMode=v},
              get retargetTimer(){return retargetTimer}, set retargetTimer(v){retargetTimer=v},
@@ -86,7 +87,7 @@ function play(opts){
   E.kickoff(o.first);
 
   const own = [0,0,0], third = [0,0,0];
-  let loose = 0, aerial = 0, keeper = 0, crowd = 0, frames = 0, guard = 0, lastPhase = null;
+  let loose = 0, aerial = 0, keeper = 0, crowd = 0, frames = 0, guard = 0;
   const STEP = (1/60) * 0.75;                      // sim-seconds a frame advances the match clock
 
   while (E.phase !== 'over' && guard++ < 400000) {
@@ -112,12 +113,15 @@ function play(opts){
     // OT rather than ending it, so this re-arms on a phase change instead of firing once and
     // giving up — which is why matches ran 380,000 frames for a 24,000-frame match and never
     // finished.
-    if (E.clockSec >= E.matchLen && E.phase !== lastPhase) {
-      lastPhase = E.phase;
+    // FULL TIME, GATED ON THE PHASE — the same gate both front ends use, and the one my harness
+    // was missing. Calling resolveFullTime() on a match already in overtime is what made every
+    // match run forever, and I wrongly reported that as a possible finding about golden goals.
+    if (E.phase === 'regulation' && E.clockSec >= E.matchLen + E.stoppageLen) {
       try { E.resolveFullTime(); } catch (e) {}
     }
-    // And a hard stop, because an overtime that never resolves is not a match worth measuring.
-    if (E.clockSec > E.matchLen * 2.5) break;
+    // Overtime is golden-concession: it ends when somebody concedes. A generous ceiling in case
+    // nobody does, so a stalemate is reported rather than hanging.
+    if (E.clockSec > E.matchLen * 3) break;
     frames++;
 
     const b = E.ball;
@@ -137,7 +141,7 @@ function play(opts){
   const owned = own.reduce((a, c) => a + c, 0) || 1;
   const per90 = x => x * (90 / o.minutes);
   return {
-    minutes: o.minutes, frames, finished: E.phase === 'over',
+    minutes: o.minutes, frames, stoppage: E.stoppageLen, finished: E.phase === 'over', phase: E.phase, clock: E.clockSec,
     ev, per90: {
       goals: per90(ev.goals), shots: per90(ev.shots), fouls: per90(ev.fouls),
       cards: per90(ev.cards), throws: per90(ev.throws), corners: per90(ev.corners),
