@@ -706,9 +706,12 @@ function kick(tx,ty,power,isShot){
 // asked where anything can ask it.
 function holdingPlay(){ return nowMs() < restartHold; }
 
-function job(p, what){
+function job(p, what, tier){
   TEL.jobFrames[what] = (TEL.jobFrames[what]||0) + 1;
   p.job = what;
+  // The tier travels with the job so a reader can colour it. A name alone does not say whether
+  // he was told, forbidden, coached or deciding — and that is the thing worth seeing at a glance.
+  p.jobTier = tier || TIER.PLAYER;
 }
 
 /** Called once per player per frame, after think() has settled on something. */
@@ -1062,6 +1065,46 @@ const INSTRUCTIONS = [
       return true;
     } },
 
+  // ── THE KEEPER HOLDS HIS LINE ─────────────────────────────────────────────
+  // Open-field, and the one every match spends most of its time in. He tracks the ball ALONG his
+  // own goal line — clamped to 90% of the mouth so he never wanders past a post — and stands 20
+  // in front of it. Then, if the ball comes within 55 and is not his side's, he goes for it.
+  //
+  // Two behaviours in one branch, and the second is the interesting one: a keeper who leaves his
+  // line is making a decision, not holding a position.
+  { name:'holding the line', tier:TIER.PLAYER, base:400,
+    applies:p => p.role==='K' && !p.out && !p.sentOff
+              && !(dist(p,ball)<55 && (!ball.owner || ball.owner.team!==p.team)),
+    score:p => 400,
+    act:p => {
+      const e=EDGES[GOAL_EDGE[p.team]];
+      let along=(ball.x-e.mx)*e.ux+(ball.y-e.my)*e.uy;
+      const lim=e.len*GOAL_HALF*0.9; along=Math.max(-lim,Math.min(lim,along));
+      steer(p, e.mx+e.ux*along+e.nx*20, e.my+e.uy*along+e.ny*20, 1.9);
+      return true;
+    } },
+
+  { name:'coming for it', tier:TIER.PLAYER, base:410,
+    applies:p => p.role==='K' && !p.out && !p.sentOff
+              && dist(p,ball)<55 && (!ball.owner || ball.owner.team!==p.team),
+    score:p => 410,
+    act:p => {
+      const e=EDGES[GOAL_EDGE[p.team]];
+      let along=(ball.x-e.mx)*e.ux+(ball.y-e.my)*e.uy;
+      const lim=e.len*GOAL_HALF*0.9; along=Math.max(-lim,Math.min(lim,along));
+      steer(p, e.mx+e.ux*along+e.nx*20, e.my+e.uy*along+e.ny*20, 1.9);
+      steer(p, ball.x, ball.y, 2.3);
+      return true;
+    } },
+
+  // PROWLING IS NOT EXTRACTABLE YET. It needs `chaser[]`, which is a local inside think() — the
+  // same class of problem as holdActive, and that one I solved with a predicate because the
+  // question was cheap to re-ask. `chaser` is a computed assignment, not a question, so hoisting
+  // it properly is its own change and I am not doing it inside an extraction.
+  //
+  // Left in the cascade and written into INSTRUCTIONS.md. The general shape: an instruction can
+  // only be extracted once everything it reads is visible from outside think().
+
   // ── OFFERING AFTER A RESTART ──────────────────────────────────────────────
   // NOT explicit: he has taken it and is choosing to make himself available rather than chase.
   // Released by POSSESSION — the moment anybody else has the ball he is a player again — with
@@ -1095,7 +1138,7 @@ function runInstruction(p){
     if(sc>bestScore){ bestScore=sc; best=I; }
   }
   if(!best) return false;                        // the cascade won, fairly
-  job(p, best.name);
+  job(p, best.name, best.tier);
   return best.act(p)!==false;
 }
 
@@ -1355,7 +1398,7 @@ function think(dt){
       // yards, which is the only rule in football that exists purely to make a restart possible.
       if(runInstruction(p)) return;
       TEL.jobFallback++;
-      job(p, 'cascade');
+      job(p, 'cascade', 0);
 
       if(freeKick && !freeKick.done){
         if(p===freeKick.taker){ job(p,'standing over a free kick');

@@ -462,7 +462,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=110"></script>
+<script src="engine.js?v=111"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2100,7 +2100,14 @@ let drawGL = function drawGL(){
         // and there is no `g` in scope here — which a linter would have said and a parse check
         // cannot, since the file is syntactically perfect and semantically wrong.
         b.g.remove(b.jobLabel);
-        const nl = nameSprite(b.jobText || '\u2014', '#7ee787', 22, 'rgba(6,10,8,.92)');
+        // ── COLOURED BY TIER ────────────────────────────────────────────────
+        // A name alone does not say whether he was TOLD, FORBIDDEN, COACHED or DECIDING, and
+        // that is the thing worth seeing at a glance. Red compels, orange forbids, yellow
+        // advises, green chooses — and grey is the old cascade, which is none of those because
+        // nobody has named it yet. Watching for grey is watching for work left to do.
+        const TIER_COL = { 4000:'#ff5a5a', 3000:'#ff9f3d', 1300:'#ffe14d', 1000:'#7ee787' };
+        const col = TIER_COL[p.jobTier] || '#9aa8a0';
+        const nl = nameSprite(b.jobText || '\u2014', col, 22, 'rgba(6,10,8,.92)');
         nl.position.set(0, H_P + 40, 0);
         b.g.add(nl);
         b.jobLabel = nl;
