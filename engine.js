@@ -2652,6 +2652,14 @@ function ambientChatter(){
   speak(line,"low");
 }
 function outOfBounds(k,e){
+  // ONCE PER DEPARTURE. The ball used to be lifted inside the pitch the instant it went out, so
+  // this could not fire twice for the same ball. Now it STAYS where it stopped — which is
+  // outside — and the boundary check saw it there every frame and staged a fresh throw-in each
+  // time. 586 in five minutes against a browser's fifteen.
+  //
+  // That is the fetch change's own bug, and the rebuilt harness found it within a minute of
+  // being able to reach a throw-in at all.
+  if(pendingRestart||ball.fetch) return;
   const toucher=ball.lastTouch;
   const ex=ball.x, ey=ball.y;
   ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0; ball.owner=null; ball.noClaim=null; ball.isShot=false; ball.allyPass=false; ball.flameShot=false;
