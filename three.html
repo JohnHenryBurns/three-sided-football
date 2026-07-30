@@ -453,7 +453,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=57"></script>
+<script src="engine.js?v=58"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1007,8 +1007,19 @@ function nameSprite(text, colour, px, stroke){
   // the viewport rather than a size in the world, so it is set from the canvas's aspect and one
   // number that means "how tall on screen".
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: tex, transparent: true, depthTest: false, sizeAttenuation: false }));
-  const H = (size / 30) * 0.055;                 // ~5.5% of the viewport for a 30px label
+    map: tex, transparent: true, depthTest: false, depthWrite: false, sizeAttenuation: false }));
+  // ── DRAWN LAST, ON PURPOSE ───────────────────────────────────────────────
+  // depthTest:false only stops the depth BUFFER rejecting a pixel; it does not change draw
+  // ORDER. three.js sorts transparent objects by distance, and the touchline ribbon is
+  // transparent and frequently NEARER the camera than a label out in the middle — so it was
+  // painted afterwards, straight over the text.
+  //
+  // renderOrder is the thing that decides who goes last. 10 puts every label above every piece
+  // of scenery without needing to know what the scenery is.
+  sp.renderOrder = 10;
+  // 0.044 rather than 0.055: at a constant screen size the old figure was 20 per cent larger
+  // than it needed to be, which was only tolerable while it shrank with distance.
+  const H = (size / 30) * 0.044;
   sp.scale.set(H * (c.width / c.height), H, 1);
   sp.userData.h = H;                             // so callers can scale it without re-deriving
   return sp;
