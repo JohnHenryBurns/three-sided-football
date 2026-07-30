@@ -745,6 +745,39 @@ let goalRestart = null;   // { conceder, taker, fetcher, until }
 let walking = null;
 function setWalking(p){ walking = p || null; }
 
+// ── THE BENCH ───────────────────────────────────────────────────────────────
+// Derived entirely from engine geometry — the goal edge, its half-width, its normal — and yet it
+// lived in three.html, computed there and unavailable to anything else. index.html has its own.
+// Sixth instance of the same split today.
+//
+// Behind the goal line and off to one side, which is where a dugout goes.
+function benchSpot(t){
+  const e = EDGES[GOAL_EDGE[t]], hw = e.len * GOAL_HALF;
+  return { x: e.mx - e.nx*30 + e.ux*(hw+62),
+           y: e.my - e.ny*30 + e.uy*(hw+62),
+           ux: e.ux, uy: e.uy, nx: e.nx, ny: e.ny };
+}
+
+// ── AND WHAT HE DOES THERE ──────────────────────────────────────────────────
+// A sent-off player arrives at the bench and then simply stops existing: p.out is true, think()
+// skips him, and he is a cylinder parked on a seat for the rest of the match.
+//
+// He should sulk. Facing the pitch he is no longer allowed on, with a slump that deepens for a
+// few seconds and then settles into something more like sullen acceptance — because nobody stays
+// furious for ninety minutes, they just stay benched.
+function stepBench(){
+  players.forEach(p=>{
+    if(!p.benched) return;
+    if(p.satAt===undefined) p.satAt = clockSec;
+    const sat = clockSec - p.satAt;
+    // 0 to 1 over the first four seconds, then eases back to a resting slump of 0.55
+    p.sulk = sat<4 ? sat/4 : 0.55 + 0.45*Math.max(0, 1-(sat-4)/6);
+    // he watches the ball, because of course he does
+    const dx = ball.x-p.x, dy = ball.y-p.y, dl = Math.hypot(dx,dy)||1;
+    p.hx = dx/dl; p.hy = dy/dl;
+  });
+}
+
 /** Called when a goal is given. Names the parts; the instructions play them. */
 function stageGoalRestart(concederTeam, scorerTeam){
   const kicking = (scorerTeam!==null && scorerTeam!==undefined) ? concederTeam : concederTeam;
@@ -2266,6 +2299,7 @@ function physics(dt){
   // keeping one — which is why the woodwork could only ever ask "is it inside a band".
   ball.px=ball.x; ball.py=ball.y; ball.pz=ball.z;
   stepJumps(S);          // heads move before anybody reaches with one
+  stepBench();           // and the disgraced watch from the side
   players.forEach(p=>{
     if(p.out)return;
     const pv=Math.hypot(p.vx,p.vy);
