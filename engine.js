@@ -1235,6 +1235,67 @@ const INSTRUCTIONS = [
       return true;
     } },
 
+  // ── VULTURES WITH PATIENCE ────────────────────────────────────────────────
+  // The third side at somebody else's restart, when it is not their business at all. They hold a
+  // counter station 85% of the way from their own goal to the centre — near midfield, out of the
+  // mess, and perfectly placed for whatever comes loose.
+  //
+  // The comment in the cascade called them "vultures with patience" and I have kept the name,
+  // because it describes the tactic better than anything I would have written.
+  { name:'vultures with patience', tier:TIER.COACH, base:110,
+    applies:p => !!(holdingPlay() && pendingRestart && p.role!=='K' && !p.out && !p.sentOff
+                    && p.team!==pendingRestart.team
+                    && !allied(p.team, pendingRestart.team)
+                    && !(cornerGoal!==null && p.team===cornerGoal)),
+    score:p => 110,
+    act:p => {
+      const og4=goalCenter(p.team);
+      steer(p, og4.x+(CX-og4.x)*0.85, og4.y+(CY-og4.y)*0.85, 1.0);
+      return true;
+    } },
+
+  // ── SWEEPING ──────────────────────────────────────────────────────────────
+  // A keeper leaving his line for a loose ball — but only when he can genuinely get there first:
+  // 18 clear of the nearest opponent, or nobody within 120. That margin is the whole instruction,
+  // and it is why this does not read as a keeper wandering.
+  //
+  // He spends burst on it, which makes it a commitment rather than a drift.
+  { name:'sweeping', tier:TIER.PLAYER, base:415,
+    applies:p => {
+      if(p.role!=='K'||p.out||p.sentOff||ball.owner||holdingPlay()) return false;
+      const og2=goalCenter(p.team);
+      if(dist(ball,og2)>=190) return false;
+      let oppNear=1e9;
+      players.forEach(q=>{ if(q.team!==p.team&&!q.out&&!q.sentOff) oppNear=Math.min(oppNear,dist(q,ball)); });
+      return dist(p,ball)<oppNear-18 || oppNear>120;
+    },
+    score:p => 415,
+    act:p => {
+      if(!p.sprint&&p.burst>0.25){
+        p.sprint={why:'sweep',blaze:Math.random()<0.12};
+        GKSTAT.b_sweep=(GKSTAT.b_sweep||0)+1;
+        if(p.sprint.blaze) blazeCall(p);
+      }
+      steer(p,ball.x,ball.y,1.5);
+      return true;
+    } },
+
+  // ── PUSHING UP FOR THE KEEPER ─────────────────────────────────────────────
+  // His own keeper has the ball and is about to send it somewhere. They push away from their own
+  // goal — on a hex that is the only direction that means anything — so there is an outlet to
+  // aim at. Added inline this morning when I made keepers clear their lines; it belongs here.
+  { name:'pushing up', tier:TIER.PLAYER, base:360,
+    applies:p => !!(ball.owner && ball.owner.role==='K' && ball.owner.team===p.team
+                    && p!==ball.owner && !p.out && !p.sentOff
+                    && Math.hypot(p.x-goalCenter(p.team).x, p.y-goalCenter(p.team).y)<210),
+    score:p => 360,
+    act:p => {
+      const og9=goalCenter(p.team);
+      const ax=p.x-og9.x, ay=p.y-og9.y, al9=Math.hypot(ax,ay)||1;
+      steer(p, og9.x+ax/al9*250, og9.y+ay/al9*250, 1.9);
+      return true;
+    } },
+
   // ── OFFERING AFTER A RESTART ──────────────────────────────────────────────
   // NOT explicit: he has taken it and is choosing to make himself available rather than chase.
   // Released by POSSESSION — the moment anybody else has the ball he is a player again — with
