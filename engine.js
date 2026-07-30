@@ -341,9 +341,28 @@ function formation(t){
 function tm(t){return `<span class="tm" style="color:${TEAMS[t].color}">${TEAMS[t].name}</span>`;}
 function pick(a){return a[Math.floor(Math.random()*a.length)];}
 
+// The centre circle, which nothing used to respect. In two-goal football only the side kicking
+// off may stand inside it; the same rule here just has two sets of opponents to hold back rather
+// than one.
+const CIRCLE_R = 70;
+
 function kickoff(toTeam){
   let i=0;
   for(let t=0;t<3;t++){ formation(t).forEach(f=>{const p=players[i++]; p.x=f.x;p.y=f.y;p.vx=0;p.vy=0;}); }
+  // NOBODY BUT THE KICKING SIDE INSIDE THE CIRCLE. The formation puts each team's forward about
+  // 44 units from the centre spot, which is inside a circle of 70 — so all three forwards began
+  // every kick-off standing in it, including the two who had no business being there.
+  //
+  // Pushed straight out along their own line from the spot, so a team keeps the shape it was
+  // given and only the distance changes.
+  players.forEach(p => {
+    if (p.out || p.sentOff || p.team === toTeam) return;
+    const dx = p.x - CX, dy = p.y - CY, d = Math.hypot(dx, dy);
+    if (d >= CIRCLE_R + 4) return;
+    const k = (CIRCLE_R + 6) / (d || 1);
+    p.x = CX + dx * k;
+    p.y = CY + dy * k;
+  });
   ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
   ball.touchT=0; ball.strayer=null; ball.strayF=0; ball.z=0; ball.zv=0;
   cornerTaker=null; cornerGoal=null; restartHold=0; pendingRestart=null; throwPending=null;
@@ -1167,7 +1186,18 @@ function physics(dt){
   players.forEach(p=>{
     if(p.out)return;
     const pv=Math.hypot(p.vx,p.vy);
-    if(pv>0.15){ p.hx=p.hx*0.85+(p.vx/pv)*0.15; p.hy=p.hy*0.85+(p.vy/pv)*0.15; }
+    // A KEEPER WATCHES THE BALL. Heading came only from velocity, so anyone standing still kept
+    // whichever way they last walked — and a keeper stands still more than anybody on the pitch,
+    // which is why they always seemed to be staring off to one side while play came at them.
+    //
+    // Outfielders still take their heading from movement: they face where they are going, which
+    // is right, and a player who turns to watch the ball while running backwards looks wrong.
+    // The keeper is the one position whose job is to face the ball rather than the run.
+    if(p.role==="K"){
+      const bx=ball.x-p.x, by=ball.y-p.y, bl=Math.hypot(bx,by);
+      if(bl>1){ p.hx=p.hx*0.82+(bx/bl)*0.18; p.hy=p.hy*0.82+(by/bl)*0.18; }
+    }
+    else if(pv>0.15){ p.hx=p.hx*0.85+(p.vx/pv)*0.15; p.hy=p.hy*0.85+(p.vy/pv)*0.15; }
     p.x+=p.vx*S; p.y+=p.vy*S;
     const staging=(pendingRestart&&pendingRestart.p===p)||cornerTaker===p||throwPending===p;
     if(!p.sentOff&&!staging) clampInside(p, p.role==="K"?12:14);
