@@ -180,6 +180,12 @@ Each of these is a journey rather than a jump, and the pattern exists already: t
 fixed points, a parameter from 0 to 1, over a hold. It cannot overshoot and it cannot
 be raced by a dropped frame.
 
+**The list is now self-checking.** A catch-all counts any frame where the ball moved
+more than 25 units and *nothing declared itself*. If that reads 0, the list below is
+complete — not because the hunt went well, but because nothing else can move the
+ball. It currently reads **2 headless, largest 132**, so there are still unnamed
+sources.
+
 **Instrumented as of this session.** Every place the engine moves the ball instantly
 now names itself, and the report prints the tally by cause — kickoff, throw-in, corner,
 goal kick, and a claim that snapped the ball to the claimer. Eight sources.
