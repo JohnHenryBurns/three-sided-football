@@ -461,7 +461,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=78"></script>
+<script src="engine.js?v=79"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2099,6 +2099,37 @@ let drawGL = function drawGL(){
     netFly.z = 0;
     netFly.vx = dx/d; netFly.vy = dz/d;           // still needed, so the ball rolls as it goes
   }
+  // ── SOMEBODY WALKS OUT TO MEET IT ─────────────────────────────────────────
+  // Play is held for a celebration, so think() never runs and every player is frozen while the
+  // ball is booted back — including the man who is about to take the kick-off. He stood still,
+  // the ball arrived at the spot, and then he MATERIALISED on it when kickoff() ran. That is the
+  // snap that survived the ball's own journey being fixed.
+  //
+  // He walks. Same shape as the walk of shame: a hold-time behaviour that moves one named player
+  // while the simulation is paused, opposite direction.
+  if (netFly && netFly.returning && pendingKickoff !== null && typeof pendingKickoff !== 'undefined') {
+    // The same player kickoff() will choose, picked the same way, so the man who walks out is the
+    // man who takes it rather than a stand-in who gets replaced.
+    const t = pendingKickoff;
+    const taker = players.find(q => q.team === t && q.role === 'F' && !q.out && !q.sentOff)
+               || players.find(q => q.team === t && q.role !== 'K' && !q.out && !q.sentOff);
+    if (taker) {
+      const tx = CX - 8, tz = CY;                  // where kickoff() puts him
+      const dx = tx - taker.x, dz = tz - taker.y, d = Math.hypot(dx, dz);
+      if (d > 1.5) {
+        const step2 = Math.min(d, 2.4);
+        taker.x += dx/d * step2;
+        taker.y += dz/d * step2;
+        taker.hx = dx/d; taker.hy = dz/d;          // facing where he is going
+      } else {
+        // arrived: turn and face the ball coming back to him
+        const bx = netFly.x - taker.x, bz = netFly.y - taker.y, bd = Math.hypot(bx, bz) || 1;
+        taker.hx = bx/bd; taker.hy = bz/bd;
+      }
+      taker.vx = 0; taker.vy = 0;
+    }
+  }
+
   if (netFly && netFly.returning) {
     const f = netFly;
     // INTERPOLATED, NOT INTEGRATED. Adding a velocity each frame and stopping when the distance
