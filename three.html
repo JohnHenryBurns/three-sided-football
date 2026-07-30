@@ -353,7 +353,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=20"></script>
+<script src="engine.js?v=21"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -465,7 +465,7 @@ ren.setClearColor(0x0d1410, 1);
 // end to sit behind — every camera convention borrowed from two-goal football picks a side, and
 // picking a side here is picking a team. 30 degrees is low enough that players have height and
 // the ball's arc reads against the grass rather than only against its shadow.
-let az = -Math.PI/2, el = 0.52, rad = 1250, follow = true;
+let az = -Math.PI/2, el = 0.52, rad = 840, follow = true;
 const look = new THREE.Vector3(CX, 0, CY);
 function placeCam(){
   cam.position.set(look.x + rad*Math.cos(el)*Math.cos(az),
@@ -589,14 +589,41 @@ function buildPitch(){
     bar.rotation.z = Math.PI/2;
     bar.rotation.y = -Math.atan2(e.uy, e.ux);
     scene.add(bar);
-    // the net, in the defending team's colour — which is what tells you WHOSE goal it is, and
-    // three-sided football needs that far more than two-goal football does
-    const net = new THREE.Mesh(new THREE.PlaneGeometry(half*2, HGT),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color(TEAMS[t].color),
-        transparent: true, opacity: 0.13, side: THREE.DoubleSide }));
-    net.position.set(e.mx - e.nx*10, HGT/2, e.my - e.ny*10);
-    net.rotation.y = -Math.atan2(e.uy, e.ux);
-    scene.add(net);
+    // ── THE NET ──────────────────────────────────────────────────────────
+    // A real mesh of cords rather than a tinted pane. A translucent plane says "there is
+    // something there"; a net says what it is, and it is the thing that makes a goal read as a
+    // goal from any angle rather than only from the front.
+    //
+    // Drawn as LineSegments — one geometry, two loops, no per-cord objects. A net of individual
+    // meshes would be four hundred draw calls per goal for something that never moves.
+    const netMat = new THREE.LineBasicMaterial({
+      color: new THREE.Color(TEAMS[t].color).lerp(new THREE.Color(0xffffff), 0.55),
+      transparent: true, opacity: 0.38 });
+    const W = half*2, DEEP = 34, COLS = 13, ROWS = 7;
+    const pts = [];
+    // the back face, hanging behind the line and sloping in toward the ground
+    const backAt = (u, v) => new THREE.Vector3(
+      e.mx - e.nx*(DEEP*(0.35 + 0.65*(1-v))) + e.ux*(u - 0.5)*W,
+      HGT*v,
+      e.my - e.ny*(DEEP*(0.35 + 0.65*(1-v))) + e.uy*(u - 0.5)*W);
+    for (let i = 0; i <= COLS; i++) for (let j = 0; j < ROWS; j++) {
+      pts.push(backAt(i/COLS, j/ROWS), backAt(i/COLS, (j+1)/ROWS));
+    }
+    for (let j = 0; j <= ROWS; j++) for (let i = 0; i < COLS; i++) {
+      pts.push(backAt(i/COLS, j/ROWS), backAt((i+1)/COLS, j/ROWS));
+    }
+    // and the two side panels, from the posts back to the net's foot
+    for (const sgn of [-1, 1]) {
+      const sideAt = (u, v) => new THREE.Vector3(
+        e.mx + e.ux*sgn*half - e.nx*(DEEP*(0.35 + 0.65*(1-v))*u),
+        HGT*v*(1 - 0.35*u),
+        e.my + e.uy*sgn*half - e.ny*(DEEP*(0.35 + 0.65*(1-v))*u));
+      for (let i = 0; i <= 5; i++) for (let j = 0; j < 4; j++)
+        pts.push(sideAt(i/5, j/4), sideAt(i/5, (j+1)/4));
+      for (let j = 0; j <= 4; j++) for (let i = 0; i < 5; i++)
+        pts.push(sideAt(i/5, j/4), sideAt((i+1)/5, j/4));
+    }
+    scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), netMat));
   });
 }
 
@@ -1203,7 +1230,29 @@ let drawGL = function drawGL(){
       ballGL.quaternion.premultiply(spin);
     }
   }
-  ballGL.position.set(ball.x, 9 + z, ball.y);
+  // ── OFF THE HEAD ────────────────────────────────────────────────────────
+  // The engine's "too high to control" threshold is `ball.z > 34` and a player here is exactly
+  // 34 tall, so the two already agree about where a head is. What was missing is that the ball
+  // was drawn at its own height regardless — so a ball crossing at head height passed straight
+  // THROUGH whoever was under it.
+  //
+  // Render-only, and deliberately: the simulation decides who wins a header and this does not
+  // touch that. It only refuses to draw a ball inside a skull, lifting it to rest on top of the
+  // nearest one it would otherwise intersect. A ball that visibly sits on a head reads as having
+  // been headed, which is what the engine already decided happened.
+  let by = 9 + z;
+  {
+    const HEAD = H_P + 9;                 // the crown, plus the ball's own radius
+    if (by < HEAD + 4) {
+      for (const p of players) {
+        if (p.out && !p.benched) continue;
+        if (Math.hypot(p.x - ball.x, p.y - ball.y) > R_P + 8) continue;
+        by = Math.max(by, HEAD);
+        break;
+      }
+    }
+  }
+  ballGL.position.set(ball.x, by, ball.y);
   shadowGL.position.set(ball.x, 0.5, ball.y);
   const k = 1 / (1 + z*0.012);
   shadowGL.scale.setScalar(k);
@@ -1552,15 +1601,15 @@ document.addEventListener('fullscreenchange', () => {
 // happening behind it. Offering both is cheaper than choosing wrong.
 const CAMS = [
   { id:'follow',  glyph:'\u26BD', name:'Follow ball',
-    what:'three-quarter, chases the ball',      az:-Math.PI/2, el:0.52, rad:1250, follow:true },
+    what:'three-quarter, chases the ball',      az:-Math.PI/2, rad:840,  el:0.52, follow:true },   // 1250 * 0.82^2: two steps in
   { id:'broad',   glyph:'\u{1F4FA}', name:'Broadcast',
-    what:'high and fixed \u00b7 the whole hex',  az:-Math.PI/2, el:0.62, rad:1750, follow:false },
+    what:'high and fixed \u00b7 the whole hex',  az:-Math.PI/2, rad:1177, el:0.62, follow:false },
   { id:'over',    glyph:'\u{1F53D}', name:'Overhead',
-    what:'straight down \u00b7 shape and space', az:-Math.PI/2, el:1.42, rad:1500, follow:false },
+    what:'straight down \u00b7 shape and space', az:-Math.PI/2, rad:1009, el:1.42, follow:false },
   { id:'low',     glyph:'\u{1F3DF}', name:'Pitchside',
-    what:'low \u00b7 height and pace',           az:-Math.PI/2, el:0.16, rad:900,  follow:true },
+    what:'low \u00b7 height and pace',           az:-Math.PI/2, rad:605,  el:0.16, follow:true },
   { id:'goal',    glyph:'\u{1F945}', name:'Behind the goal',
-    what:'from one end \u00b7 shots arriving',   az:Math.PI/2,  el:0.34, rad:1050, follow:false },
+    what:'from one end \u00b7 shots arriving',   az:Math.PI/2,  rad:706,  el:0.34, follow:false },
   { id:'free',    glyph:'\u{1F504}', name:'Free look',
     what:'drag and pinch \u00b7 stays put',      az:null,       el:null, rad:null, follow:false },
 ];
