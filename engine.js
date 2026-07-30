@@ -201,7 +201,11 @@ function resetMatch(){
   for(let t=0;t<3;t++) formation(t).forEach((f,i)=>players.push(
     {team:t,role:f.role,name:TEAMS[t].roster[i],x:f.x,y:f.y,vx:0,vy:0,stamina:1,burst:1,sprint:null,deniedLatch:false,sprintMin:0,sprintCd:0,
      k1:0.64+Math.random()*0.10, k2:0.82+Math.random()*0.16,  // unique spring constants
-     hx:0,hy:0, goals:0,tackles:0,saves:0, yellows:0,sentOff:false}));                                             // smoothed heading for ball carry
+     hx:0,hy:0, goals:0,tackles:0,saves:0, yellows:0,sentOff:false,
+     // jz MUST START AT ZERO. Left undefined, `p.jz > 0` and `p.jz <= 0` are BOTH false — so
+     // tryJump's guard never blocked and the caller's gate never opened. The jump was counted
+     // 18,967 times in an 18,968-frame match and never once happened.
+     jz:0, jzv:0, jumpCd:0}));                                             // smoothed heading for ball carry
   ball={x:CX,y:CY,vx:0,vy:0,owner:null,lastTouch:null,lastKicker:null,isShot:false,noClaim:null,noClaimF:0,
     touchT:0,strayer:null,strayF:0,z:0,zv:0};
   computeTargets();
