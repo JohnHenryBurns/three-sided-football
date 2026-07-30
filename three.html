@@ -353,7 +353,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=21"></script>
+<script src="engine.js?v=22"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -660,6 +660,7 @@ for (let i = 0; i < TRAIL_N; i++) {
   trail.push(m);
 }
 const trailPts = [];
+let headPop = 0;      // the decaying lift off a header, see drawGL
 
 // ── WHO EACH ONE IS ─────────────────────────────────────────────────────────
 // Names as sprites, which always face the camera. A mesh label would need turning every frame
@@ -1242,15 +1243,33 @@ let drawGL = function drawGL(){
   // been headed, which is what the engine already decided happened.
   let by = 9 + z;
   {
-    const HEAD = H_P + 9;                 // the crown, plus the ball's own radius
-    if (by < HEAD + 4) {
+    // A BOUNCE, NOT A REST — and the first version was neither, it was a fault.
+    //
+    // The old test was `by < HEAD + 4`, which is true for a ball ON THE GROUND. So any ball
+    // within a player's radius got lifted to head height: a dribbled ball floated at the
+    // dribbler's crown. Measured over ten minutes, that clamp was firing for 78.8 PER CENT of
+    // the match. It was not a header effect, it was a ball that would not stay down.
+    //
+    // Two things wrong with the idea as well as the arithmetic. A clamp holds the ball up for as
+    // long as it overlaps, so even correctly gated it would have balanced the ball on a head for
+    // a third of a second at a time. A header is an IMPULSE: contact, then away.
+    //
+    // So: only when the ball is genuinely airborne in the head band, and then as a decaying kick
+    // rather than a floor. The simulation still owns who wins the header and where the ball
+    // goes; this only makes the contact visible.
+    const HEAD = H_P + 9;
+    const inBand = z > H_P * 0.55 && z < H_P + 16;   // airborne, around head height
+    if (inBand && by < HEAD) {
       for (const p of players) {
-        if (p.out && !p.benched) continue;
-        if (Math.hypot(p.x - ball.x, p.y - ball.y) > R_P + 8) continue;
-        by = Math.max(by, HEAD);
+        if (p.out) continue;
+        if (Math.hypot(p.x - ball.x, p.y - ball.y) > R_P + 7) continue;
+        headPop = Math.max(headPop, HEAD - by + 5);   // the kick off the skull
         break;
       }
     }
+    headPop *= 0.72;                     // gone in ~150ms: a contact, not a hover
+    if (headPop < 0.4) headPop = 0;
+    by += headPop;
   }
   ballGL.position.set(ball.x, by, ball.y);
   shadowGL.position.set(ball.x, 0.5, ball.y);
