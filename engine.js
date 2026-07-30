@@ -992,6 +992,33 @@ const PLAY_ON_WEIGHT = 2800;
  *  before it existed. Dormant code does not crash, so a parse check and six green matches said
  *  nothing was wrong. THAT IS THE COST OF THE SWITCH-OFF SPLIT — it buys safety on main and pays
  *  in latent faults that surface only on the flip. Better to know that now than during it. */
+/** The cascade's pass search, lifted whole. Both can() and act() need it, the same way the
+ *  keeper's outlets are needed by three of his four actions. */
+function bestPass(p){
+  const t9=targets[p.team];
+  if(t9===null||t9===undefined) return null;
+  const tgt=goalCenter(t9), TT=T(p.team);
+  let best=null, bs=-1e9;
+  players.forEach(m=>{
+    if(m.team!==p.team||m===p||!onPitch(m)||m.role==='K') return;
+    const d=dist(m,p);
+    if(d<60 || d>210+140*TT.direct) return;
+    const gain=dist(p,tgt)-dist(m,tgt);
+    let laneOk=true;
+    players.forEach(o=>{
+      if(o.team===p.team||!onPitch(o)||allied(p.team,o.team)) return;
+      const t=((o.x-p.x)*(m.x-p.x)+(o.y-p.y)*(m.y-p.y))/(d*d);
+      if(t>0.1&&t<0.9){
+        const lx=p.x+(m.x-p.x)*t, ly=p.y+(m.y-p.y)*t;
+        if(Math.hypot(o.x-lx,o.y-ly) < (30-12*TT.risk)+5*(T(o.team).press-0.5)*2) laneOk=false;
+      }
+    });
+    const sc=gain*(0.6+0.8*TT.direct)+(laneOk?0:-500)+RNG()*30;
+    if(sc>bs){ bs=sc; best=m; }
+  });
+  return (best && bs>-100) ? best : null;
+}
+
 function riskOf(p){
   const t=T(p.team);
   return (t && t.risk!==undefined) ? t.risk : 0.5;
@@ -1135,23 +1162,63 @@ const PORTED = [
     score:p => 100,
     act:p => { kick(CX,CY,9); return true; } },
 
+  // ── THE PASS ──────────────────────────────────────────────────────────────
+  // The cascade's candidate search, whole: every mate between 60 and 210+140*direct away, scored
+  // on ground gained toward the target goal, minus 500 if the lane is blocked, plus jitter, minus
+  // a treason penalty for passing to an ally when the scoreboard says not to.
+  //
+  // THE SEARCH LIVES IN A HELPER because can() and act() both need it — the same shape as the
+  // keeper's outlets. can() asks whether anybody scores above -100; act() takes the best.
   { name:'pass', tier:TIER.PLAYER, ported:true,
     coach:T => (1-T.direct)*50,
-    can:p => ball.owner===p && p.role!=='K',
+    can:p => ball.owner===p && p.role!=='K' && targets[p.team]!==null && !!bestPass(p),
     score:p => 320,
-    act:p => { return false; } },
+    act:p => {
+      const best=bestPass(p);
+      if(!best) return false;
+      kick(best.x+best.vx*8, best.y+best.vy*8, Math.min(9, dist(best,p)*0.045+4));
+      if(allied(p.team, best.team)) ball.allyPass=true;
+      return true;
+    } },
 
+  // ── OUT OF TROUBLE ────────────────────────────────────────────────────────
+  // Trapped: near a wall, under pressure, and not in a goal mouth. He finds whoever is nearest
+  // the middle and gives it to him. The cascade's rate was RNG()<0.22*dt*60, which is 13 a
+  // second — a score of about 460, and by far the most eager thing in the list. That is right:
+  // a man pinned on the touchline should be looking to escape almost immediately.
   { name:'pass-safe', tier:TIER.PLAYER, ported:true,
     coach:T => 0,
-    can:p => ball.owner===p && p.role!=='K',
-    score:p => 90,                      // the floor for an outfielder
-    act:p => { return false; } },
+    can:p => {
+      if(ball.owner!==p || p.role==='K') return false;
+      let wd=1e9, we=null;
+      for(const e2 of EDGES){
+        const d2=(p.x-e2.p1.x)*e2.nx + (p.y-e2.p1.y)*e2.ny;
+        if(d2<wd){ wd=d2; we=e2; }
+      }
+      if(wd>=34) return false;
+      const mouth = we && we.goal &&
+        Math.abs((p.x-we.mx)*we.ux + (p.y-we.my)*we.uy) < we.len*GOAL_HALF;
+      if(mouth) return false;
+      let pressure=1e9;
+      players.forEach(o=>{ if(o.team!==p.team && onPitch(o)) pressure=Math.min(pressure, dist(o,p)); });
+      return pressure<58;
+    },
+    score:p => 460,
+    act:p => {
+      let best=null, bs=1e9;
+      players.forEach(m=>{
+        if(m.team!==p.team||m===p||!onPitch(m)||m.role==='K') return;
+        const dc=dist(m,{x:CX,y:CY}); if(dc<bs){ bs=dc; best=m; }
+      });
+      if(best) kick(best.x+best.vx*8, best.y+best.vy*8, Math.min(9, dist(best,p)*0.045+4.5));
+      else kick(CX,CY,7);
+      return true;
+    } },
 
-  { name:'pass-alt', tier:TIER.PLAYER, ported:true,
-    coach:T => 0,
-    can:p => ball.owner===p && p.role!=='K',
-    score:p => 315,
-    act:p => { return false; } },
+  // pass-alt was a second copy of the same search in a different branch of the cascade. It is not
+  // a different action — it is the same one, reached another way. DELETED rather than ported,
+  // which is the first thing this port has removed rather than moved.
+
 
   { name:'shot', tier:TIER.PLAYER, ported:true,
     coach:T => T.direct*70,
