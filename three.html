@@ -453,7 +453,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=51"></script>
+<script src="engine.js?v=52"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2300,7 +2300,37 @@ function loop(now){
         q.out = true; q.sentOff = false; q.benched = true;
         q.seat = players.filter(o => o.team === q.team && o.benched).length - 1;
         walkOff = null;
-        say('<b>' + q.name + '</b> takes a seat on the bench, head in hands.');
+        // FIVE LINES, PICKED, not one fixed string. I had flattened this to a single sentence,
+        // which means the tenth sending-off of a match reads exactly like the first. The flat
+        // page has always picked, and the engine's pick() and pronoun helper are right here.
+        // PRN gives capitalised forms too — His, He — so a sentence can start with one without
+        // upper-casing by hand, which would have produced "Her teammates" correctly and "She
+        // knows" wrongly if I had done it the other way round.
+        const P = (typeof PRN === 'function') ? PRN(q)
+                : { his:'his', His:'His', him:'him', he:'he', He:'He', man:'man' };
+        const who = '<b>' + q.name + '</b>';
+        say(pick([
+          who + ' takes ' + P.his + ' seat on the bench, head in hands. ' +
+            tm(q.team) + ' regroup a ' + P.man + ' light.',
+          who + ' sits down in the dugout and studies ' + P.his + ' boots. ' +
+            tm(q.team) + ' play on without ' + P.him + '.',
+          'A towel over the head for ' + who + '. The bench is a lonely place tonight.',
+          who + ' takes the long seat. ' + P.His + ' teammates do not look over.',
+          'Down ' + P.he + ' sits \u2014 ' + who + '\u2019s evening is over, and ' + P.he +
+            ' knows exactly whose fault it is.']));
+
+        // ── DOWN TO THE KEEPER ──────────────────────────────────────────
+        // The two lines this page has never had. A side with no outfielders left is the funniest
+        // state the rules can reach, and all three at once is the punchline the whole format has
+        // been building toward — "Three goalkeepers enter. One lifts the cup."
+        //
+        // fieldersLeft() is in the engine and appeared ZERO times in this file.
+        if (typeof fieldersLeft === 'function') {
+          if (fieldersLeft(q.team) === 0)
+            say(tm(q.team) + ' are down to just the goalkeeper. He abandons his line \u2014 needs must.', true);
+          if ([0, 1, 2].every(tt => out[tt] || fieldersLeft(tt) === 0))
+            say('<b>Scenes. Three goalkeepers enter. One lifts the cup.</b>', true);
+        }
       }
     }
   }
