@@ -437,3 +437,60 @@ exactly as before, so both systems run side by side and nothing had to work firs
 5. watch it with `?jobs` and adjust
 
 Nothing here needs new physics. It is the same cascade, named, with a memory.
+
+
+---
+
+# What the cascade is doing
+
+Mapped properly rather than branch by branch. `think()` has four parts:
+
+**1. Preamble, before any per-player decision**
+- sprint and burst bookkeeping for everybody
+- coalition flags — who is allied with whom this instant
+- a `gkHolding()` block that moves opponents
+- a per-team pass that picks targets
+
+**2. The main loop, `players.forEach(p => ...)`** — 16 early returns before anything
+else gets a look:
+- `pendingRestart` — the taker's own walk
+- `gkHolding` × 4 — own side showing, opponents, an ally, defenders dropping
+- `holdActive` × 6 — throw and corner choreography, including ally variants
+- want-detection — should he chase, and how hard
+
+**3. `runInstruction(p)` — and this is the finding**
+
+It sits **13,651 characters into the loop, behind 16 early returns.** I have been
+describing it as "first refusal" and writing that into commit messages, and it has
+never been anything of the sort. **It is sixteenth refusal.**
+
+That is the whole explanation for 97% cascade / 3% list. The list is not losing to the
+cascade on merit — it is being handed the players nobody else wanted.
+
+**4. After it:** free kicks, no-chase, headers, landing runs, sprint decisions, the
+owner's own movement, and collision and wall avoidance.
+
+## What this means for the rebuild
+
+**Move the call to the top first, and change nothing else.** That one edit tells us
+what the ten instructions actually do when they get a real say — and it is reversible
+in a line if the answer is "chaos".
+
+Everything measured about the instruction system so far was measured through a
+bottleneck I put there and then forgot about. **The 3% coverage, the 95% pop rate and
+the 0.28s dwell are all numbers about sixteenth refusal**, not about the design.
+
+## What is worth preserving
+
+The tuning, and it is mostly in the parts that are not decisions at all:
+
+- **the preamble** — burst, coalitions, targets. Not branches; state everything else
+  reads. It should stay exactly where it is.
+- **want-detection** — the chase logic has real hysteresis (`sprintMin`, `deniedLatch`)
+  that stops players flapping. That is the same problem `COMMIT` solves, solved once
+  already, and better: it is worth reading before writing a second version.
+- **collision and wall avoidance** — runs *after* a decision and modifies it. Not an
+  instruction, a correction, and it should stay a correction.
+
+The decisions themselves are the part to rebuild. There are about thirty of them, they
+are mostly named now, and the ones already converted came across cleanly.
