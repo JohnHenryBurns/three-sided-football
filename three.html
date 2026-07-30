@@ -41,14 +41,19 @@
   --mono:ui-monospace,"SF Mono",Menlo,monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-/* CHROME PUTS THE CONTROLS BELOW THE FOLD WITH height:100%. On a phone that percentage resolves
-   against the LARGE viewport — the one you get with the URL bar hidden — so the bottom of the
-   page sits below what you can actually see, and #bar is exactly at the bottom. Firefox resolves
-   it against the visible box, which is why it looked fine there and not here.
-   `dvh` is the dynamic viewport height and means precisely "the part you can see right now". The
-   vh line before it is the fallback for anything too old to know the unit. */
-html{height:100%}
-body{height:100vh;height:100dvh;overflow:hidden}
+/* CHROME PUT THE CONTROLS BELOW THE FOLD, and it took two goes.
+   First fault: `height:100%` on a phone resolves against the LARGE viewport — the one you get
+   with the URL bar hidden — so the bottom of the page sat below what you can see, and #bar is
+   exactly at the bottom. `dvh` is the dynamic viewport height and means "the part you can see
+   right now"; the vh line is the fallback for anything too old to know the unit.
+   Second fault, which I introduced fixing the first: splitting `html,body{...overflow:hidden}`
+   into two rules, I kept the overflow on body and dropped it from html. The document root could
+   still scroll, so the page simply sat scrolled down past its own header.
+   Fixed by pinning the body to the viewport instead: `position:fixed; inset:0` IS the visible
+   box, tracks it as the URL bar comes and goes, and needs no dvh at all. An explicit height
+   alongside inset:0 would only have been two rules arguing about the same number. */
+html{height:100%;overflow:hidden}
+body{position:fixed;inset:0;overflow:hidden}
 body{background:var(--bg);color:var(--ink);font-family:var(--sans);
   display:flex;flex-direction:column}
 
@@ -448,7 +453,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=49"></script>
+<script src="engine.js?v=50"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
