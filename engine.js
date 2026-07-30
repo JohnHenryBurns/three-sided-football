@@ -853,6 +853,35 @@ const INSTRUCTIONS = [
     score:p => 480 - dist(p,ball)*0.4,           // the nearest man wants it most
     act:p => { steer(p, ball.x+ball.vx*6, ball.y+ball.vy*6, 2.3); return true; } },
 
+  // ── NO PRESSING A FRIEND'S KEEPER ─────────────────────────────────────────
+  // Three-sided-specific and it has no analogue in football: an ally's keeper is holding, so you
+  // drop into your own shape rather than harassing him. The comment above it already said this;
+  // the name just makes it visible.
+  { name:"an ally's keeper has it", explicit:false, base:600,
+    applies:p => !!(gkHolding() && ball.owner && p.team!==ball.owner.team && p.role!=='K'
+                    && allied(p.team, ball.owner.team)),
+    score:p => 600,
+    act:p => {
+      const og5=goalCenter(p.team), ax5=CX-og5.x, ay5=CY-og5.y;
+      steer(p, og5.x+ax5*0.55, og5.y+ay5*0.55, 0.9);
+      return true;
+    } },
+
+  // ── RETREAT FOR THE LONG BALL ─────────────────────────────────────────────
+  // A defender against an opposing keeper who has it: get depth, because what is coming is a
+  // punt. The lateral spread is per-player and stable so a back line does not stack.
+  { name:'getting depth', explicit:false, base:590,
+    applies:p => !!(gkHolding() && ball.owner && p.team!==ball.owner.team && p.role==='D'
+                    && !allied(p.team, ball.owner.team)),
+    score:p => 590,
+    act:p => {
+      const og5=goalCenter(p.team), ax5=CX-og5.x, ay5=CY-og5.y;
+      const pl5=Math.hypot(ax5,ay5)||1, px5=-ay5/pl5, py5=ax5/pl5;
+      const lat6=((p.k1*997)%1-0.5)*240;
+      steer(p, og5.x+ax5*0.34+px5*lat6, og5.y+ay5*0.34+py5*lat6, 1.15);
+      return true;
+    } },
+
   // ── OFFERING AFTER A RESTART ──────────────────────────────────────────────
   // NOT explicit: he has taken it and is choosing to make himself available rather than chase.
   // Released by POSSESSION — the moment anybody else has the ball he is a player again — with
@@ -1027,16 +1056,9 @@ function think(dt){
       // (the old 64-in/72-out ring fought the chase logic at its boundary: judder)
       const gk2=ball.owner, og5=goalCenter(p.team);
       const ax5=CX-og5.x, ay5=CY-og5.y;
-      if(allied(p.team,gk2.team)){
-        // no pressing a friend's keeper — drop into your own shape
-        steer(p, og5.x+ax5*0.55, og5.y+ay5*0.55, 0.9); return;
-      }
-      if(p.role==="D"){
-        // retreat: get depth to defend the long ball
-        const pl5=Math.hypot(ax5,ay5)||1, px5=-ay5/pl5, py5=ax5/pl5;
-        const lat6=((p.k1*997)%1-0.5)*240;
-        steer(p, og5.x+ax5*0.34+px5*lat6, og5.y+ay5*0.34+py5*lat6, 1.15); return;
-      }
+      // The allied-keeper and defender-depth branches moved to the instruction list, deleted
+      // rather than duplicated. What is left here is the M/F lane-covering below, which is a
+      // genuinely different job.
       // M/F: cover the roll lanes — stand between the keeper and his outlets
       const outs=players.filter(m=>m.team===gk2.team&&m.role!=="K"&&!m.out&&!m.sentOff);
       if(outs.length){
