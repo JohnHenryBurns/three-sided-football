@@ -1137,6 +1137,55 @@ const INSTRUCTIONS = [
       return true;
     } },
 
+  // ── THE BACK LINE ─────────────────────────────────────────────────────────
+  // Where a defender stands when he is not chasing: on the line from his own goal to the ball,
+  // at a fraction set by his side's LINE tactic — and the two centre-backs sit 34 either side of
+  // that point so they hold a width rather than stacking.
+  //
+  // The bunker variant is folded in rather than being its own instruction: it is the same act at
+  // a different depth, which is what a tactic should do to a position.
+  { name:'the back line', tier:TIER.PLAYER, base:380,
+    applies:p => p.role==='D' && !p.out && !p.sentOff && targets[p.team]!==null
+              && p!==chaser[p.team],
+    score:p => 380,
+    act:p => {
+      const own=goalCenter(p.team), TT=T(p.team);
+      const ds=players.filter(q=>q.team===p.team&&q.role==='D');
+      const idx=ds.indexOf(p), lineShift=(TT.line-0.5)*0.22;
+      let f=(idx===0?0.38:0.62)+lineShift;
+      if(TT.bunker>0.5) f=(idx===0?0.28:0.48)+lineShift*0.5;
+      const bx=own.x+(ball.x-own.x)*f, by=own.y+(ball.y-own.y)*f;
+      const e=EDGES[GOAL_EDGE[p.team]];
+      steer(p, bx+e.ux*(idx===0?34:-34), by+e.uy*(idx===0?34:-34), 2.0);
+      return true;
+    } },
+
+  // ── FINDING SPACE ─────────────────────────────────────────────────────────
+  // Everybody else: a point between the ball and the goal they are attacking, at a fraction set
+  // by role and by the DIRECT tactic — and then fanned sideways, midfielders one way and forwards
+  // the other.
+  //
+  // THE SPREAD IS THE GOOD PART. It grows as the ball nears the target goal: 55 normally, up to
+  // 158 when play compresses into the last 230. Width instead of pile-in, and it is the reason a
+  // crowded box does not become a scrum of everybody.
+  { name:'finding space', tier:TIER.PLAYER, base:370,
+    applies:p => (p.role==='M'||p.role==='F') && !p.out && !p.sentOff
+              && targets[p.team]!==null && p!==chaser[p.team]
+              && !(T(p.team).bunker>0.5),
+    score:p => 370,
+    act:p => {
+      const tgt=goalCenter(targets[p.team]), TT=T(p.team);
+      const f=p.role==='M'?0.45:(0.72+(TT.direct-0.5)*0.26);
+      let sx=ball.x+(tgt.x-ball.x)*f, sy=ball.y+(tgt.y-ball.y)*f;
+      const side=(p.role==='M'?1:-1);
+      const dBallGoal=dist(ball,tgt);
+      const spread=55+Math.max(0,(230-dBallGoal))*0.45;
+      const ang=Math.atan2(tgt.y-ball.y,tgt.x-ball.x)+Math.PI/2;
+      sx+=Math.cos(ang)*spread*side; sy+=Math.sin(ang)*spread*side;
+      steer(p,sx,sy,2.0);
+      return true;
+    } },
+
   // ── OFFERING AFTER A RESTART ──────────────────────────────────────────────
   // NOT explicit: he has taken it and is choosing to make himself available rather than chase.
   // Released by POSSESSION — the moment anybody else has the ball he is a player again — with
