@@ -89,6 +89,8 @@ button.on{border-color:#ff8a4c;color:#ff8a4c}
   line-height:1.05}
 #celeCard .who{font-size:1.15rem;font-weight:600;margin-top:.25rem}
 #celeCard .sub{font-size:.9rem;color:var(--dim);margin-top:.3rem}
+/* The flavour line, in the card's own colour — it is the bit with the joke in it. */
+#celeCard .fire{font-size:.92rem;font-weight:600;color:var(--cele,#ffd166);margin-top:.45rem}
 @media (max-width:560px){ #celeCard .big{font-size:1.5rem} }
 
 /* Confetti. Twenty-eight strips is enough to read as celebration and few enough
@@ -196,7 +198,7 @@ button.on{border-color:#ff8a4c;color:#ff8a4c}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=8"></script>
+<script src="engine.js?v=9"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -743,11 +745,16 @@ function buildBodies(){
       // are the numbers on them. This is a 90-degree slice of a cylinder at the shirt's own
       // radius, so the number wraps with the body and catches the light the same way.
       //
-      // openEnded, and rotated to sit on the BACK: theta starts at +X in three.js, so a quarter
-      // turn back from there puts the middle of the slice behind the player.
+      // ON THE BACK, WHICH IS 270 DEGREES AND NOT 180. three.js places cylinder vertices at
+      // x = r*sin(theta), z = r*cos(theta) — so theta is measured from +Z, not +X. A slice
+      // centred on 180 lands on -Z, which is the player's SIDE, and that is where the number
+      // was. The eyes face +X, so the back is -X, which is theta 270.
+      //
+      // Same shape of mistake as the boards leaning the wrong way: an assumption about which
+      // axis an angle starts from, invisible until something is drawn and looked at.
       const back = new THREE.Mesh(
         new THREE.CylinderGeometry(R_P * 1.005, R_P * 0.985, 15, 14, 1, true,
-                                   Math.PI * 0.75, Math.PI * 0.5),
+                                   Math.PI * 1.25, Math.PI * 0.5),
         new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
       back.position.y = H_P * 0.66;
       g.add(back);
@@ -854,12 +861,17 @@ const celeCard = document.getElementById('celeCard');
 const confettiBox = document.getElementById('confetti');
 let celeUntil = 0;
 
-function showCard(colour, big, who, sub, ms, confetti){
+function showCard(colour, big, who, sub, ms, confetti, fire){
   celeCard.style.setProperty('--cele', colour);
   celeCard.innerHTML =
     '<div class="big">' + big + '</div>' +
     (who ? '<div class="who">' + who + '</div>' : '') +
-    (sub ? '<div class="sub">' + sub + '</div>' : '');
+    (sub ? '<div class="sub">' + sub + '</div>' : '') +
+    // The fifth argument, which this page was dropping: the flavour line. "Spain catch fire —
+    // 20s boost", "the killing blow". It is the part that makes a goal card feel like a
+    // broadcast rather than a scoreline, and it was being thrown away because the hook took
+    // four parameters and the engine has always passed five.
+    (fire ? '<div class="fire">' + fire + '</div>' : '');
   confettiBox.innerHTML = '';
   if (confetti) {
     const pal = [colour, '#ffd166', '#ffffff'];
@@ -878,11 +890,15 @@ function showCard(colour, big, who, sub, ms, confetti){
 }
 function hideCard(){ celeEl.classList.remove('on'); confettiBox.innerHTML = ''; }
 
-ENGINE_HOOKS.showCelebration = (colour, big, who, sub) =>
-  showCard(colour || '#ffd166', big || 'GOAL', who || '', sub || '', 2600, true);
+ENGINE_HOOKS.showCelebration = (colour, big, who, sub, fire) =>
+  showCard(colour || '#ffd166', big || 'GOAL', who || '', sub || '', 2600, true, fire);
 
+// `dur` is already MILLISECONDS — the flat page does `performance.now() + dur` with it, and the
+// engine passes 4200 for a yellow card. Multiplying by a thousand, as this did, would have held
+// a card up for seventy minutes with the match frozen behind it. Nothing in a headless run can
+// catch that: the number is valid, the units are not.
 ENGINE_HOOKS.showNotice = (colour, big, who, sub, dur) =>
-  showCard(colour || '#ffd166', big || '', who || '', sub || '', (dur || 2.2) * 1000, false);
+  showCard(colour || '#ffd166', big || '', who || '', sub || '', dur || 2200, false);
 
 ENGINE_HOOKS.crownChampion = (t, how) => {
   const T = TEAMS[t];
