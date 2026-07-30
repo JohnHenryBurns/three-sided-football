@@ -39,7 +39,10 @@ function play(opts){
              set momentumOn(v){momentumOn=v}, set scoreMode(v){scoreMode=v},
              get retargetTimer(){return retargetTimer}, set retargetTimer(v){retargetTimer=v},
              get pendingRestart(){return pendingRestart}, get restartHold(){return restartHold},
-             get pendingKickoff(){return pendingKickoff}, set pendingKickoff(v){pendingKickoff=v} };`)();
+             get pendingKickoff(){return pendingKickoff}, set pendingKickoff(v){pendingKickoff=v},
+             get resumeAt(){return resumeAt}, set resumeAt(v){resumeAt=v},
+             get walkPending(){return walkPending}, set walkPending(v){walkPending=v},
+             get benchPos(){return benchPos}, dist };`)();
 
   // ── THE CLOCK ─────────────────────────────────────────────────────────────
   // Milliseconds of MATCH time, advanced by the loop. Everything the engine waits on now waits
@@ -99,9 +102,40 @@ function play(opts){
   let loose = 0, aerial = 0, keeper = 0, crowd = 0, frames = 0, guard = 0;
   const STEP = (1/60) * 0.75;                      // sim-seconds a frame advances the match clock
 
+  // ── THE BROWSER'S LOOP, NOT AN APPROXIMATION OF IT ────────────────────────
+  // This ignored `resumeAt` entirely — zero mentions — and the engine sets it after every single
+  // restart to pause play while somebody takes it. The browser waits; the harness ran straight
+  // through, so no restart ever completed and the ball state diverged from a real match
+  // immediately. Five minutes headless produced ZERO throw-ins against fifteen in a browser.
+  //
+  // That is almost certainly the sixty-times-too-quiet problem, and it is the ninth thing this
+  // harness has been wrong about. The others were the clock, the match length, the frame budget,
+  // the elimination rule, goals, throw-ins, corners, and the jump counter.
+  //
+  // The gates below are three.html's, in its order, with nothing left out.
+  let walkOff = null;
   while (E.phase !== 'over' && guard++ < 400000) {
     ms += 1000 / 60;                               // the fake clock runs at 60fps of MATCH time
     if (hold > 0) { hold--; ev.holdFrames++; continue; }
+
+    // the walk of shame owns the pitch while it runs, exactly as it does on both pages
+    if (E.walkPending) { walkOff = E.walkPending; E.walkPending = null; }
+    if (walkOff) {
+      const q = walkOff, B = E.benchPos && E.benchPos[q.team];
+      if (!B) { q.out = true; walkOff = null; }
+      else {
+        const dx = B.x - q.x, dy = B.y - q.y, bd = Math.hypot(dx, dy) || 1;
+        q.x += dx/bd * 1.5; q.y += dy/bd * 1.5; q.vx = 0; q.vy = 0;
+        if (E.ball.owner === q) E.ball.owner = null;
+        E.resumeAt = ms + 120;
+        if (bd < 12) { q.out = true; q.sentOff = false; q.benched = true; walkOff = null; }
+      }
+      ev.holdFrames++;
+      continue;
+    }
+
+    // AND THE GATE THAT WAS MISSING. Play does not advance until the engine says it may.
+    if (ms < E.resumeAt) { ev.holdFrames++; continue; }
     // THE RESTART AFTER A GOAL. The engine sets pendingKickoff and expects the front end to act
     // on it — both pages do, in their loops. Without it the ball simply stays in the net and
     // scores again on the next frame, which is where sixteen hundred goals a match came from.
