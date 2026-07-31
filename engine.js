@@ -3791,11 +3791,43 @@ function physics(dt){
     // Outfielders still take their heading from movement: they face where they are going, which
     // is right, and a player who turns to watch the ball while running backwards looks wrong.
     // The keeper is the one position whose job is to face the ball rather than the run.
-    if(p.role==="K"){
-      const bx=ball.x-p.x, by=ball.y-p.y, bl=Math.hypot(bx,by);
-      if(bl>1){ p.hx=p.hx*0.82+(bx/bl)*0.18; p.hy=p.hy*0.82+(by/bl)*0.18; }
+    // ── WHERE A MAN LOOKS, AND HOW FAST HE CAN TURN ───────────────────────
+    // Two faults John saw. First: players JERK when the ball is close and quick — the heading
+    // came from a normalised vector to the ball, and when that vector is short its DIRECTION
+    // swings wildly for a small movement. A ball passing two units away spins a man on the spot.
+    //
+    // Second: outfielders faced their run and nothing else, so a man standing still or drifting
+    // sideways stared off into the middle distance while the game happened beside him.
+    //
+    // Now: he faces the ball unless he is actively moving AWAY from it, in which case he faces
+    // his run — a defender retreating should be looking where he is going. And the turn is
+    // RATE-LIMITED, so nothing spins.
+    const bx=ball.x-p.x, by=ball.y-p.y, bl=Math.hypot(bx,by)||1;
+    const toBall = { x:bx/bl, y:by/bl };
+    let want = null;
+    if(p.role==="K") want = toBall;                          // a keeper always watches it
+    else if(pv>0.15){
+      // is he running away from the ball? dot < -0.25 means meaningfully away
+      const away = (p.vx/pv)*toBall.x + (p.vy/pv)*toBall.y;
+      want = (away < -0.25) ? { x:p.vx/pv, y:p.vy/pv } : toBall;
     }
-    else if(pv>0.15){ p.hx=p.hx*0.85+(p.vx/pv)*0.15; p.hy=p.hy*0.85+(p.vy/pv)*0.15; }
+    else want = toBall;                                      // standing still: watch the ball
+
+    if(want){
+      // ── THE TURN RATE CAP ───────────────────────────────────────────────
+      // 4.2 radians a second is a brisk but human turn — a full about-face takes about 0.75s.
+      // Without it a normalised vector to a nearby ball can reverse in one frame and the model
+      // snaps through 180 degrees, which is the jerk.
+      const cur = Math.atan2(p.hy, p.hx);
+      let d = Math.atan2(want.y, want.x) - cur;
+      while(d >  Math.PI) d -= Math.PI*2;
+      while(d < -Math.PI) d += Math.PI*2;
+      const maxTurn = 4.2 * S;
+      if(d >  maxTurn) d =  maxTurn;
+      if(d < -maxTurn) d = -maxTurn;
+      const a = cur + d;
+      p.hx = Math.cos(a); p.hy = Math.sin(a);
+    }
     p.x+=p.vx*S; p.y+=p.vy*S;
     const staging=(pendingRestart&&pendingRestart.p===p)||cornerTaker===p||throwPending===p;
     if(!p.sentOff&&!staging) clampInside(p, p.role==="K"?12:14);
