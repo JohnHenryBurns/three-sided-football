@@ -1559,6 +1559,29 @@ function shotLaneClear(p, tgt){
  *
  *  Before this existed the drop rule ran without it: a keeper outside his area claimed the ball,
  *  was told to drop it, and claimed it again 236 times a match. */
+/** Is the ball already over a goal line, inside the mouth and under the bar? Then it is a goal
+ *  and nothing that happens in the same frame changes that.
+ *
+ *  JOHN'S RULE, and it settles a real injustice. The claim tests the ball's PATH this frame — a
+ *  swept segment — while the goal tests its POSITION. So a ball moving eleven units a frame can
+ *  cross the line AND have passed within a keeper's reach earlier in the same frame, and because
+ *  the claim runs 240 lines earlier he grabs a ball that is already in.
+ *
+ *  Worst exactly where it is most visible: fast shots, close range, keeper nearby. A slow ball
+ *  never triggers it because it does not travel far enough in a frame for the sweep to matter. */
+function ballIsIn(){
+  if(ball.z >= GOAL_H) return false;
+  for(let k=0;k<EDGES.length;k++){
+    const e=EDGES[k];
+    if(!e.goal) continue;
+    const d=(ball.x-e.p1.x)*e.nx + (ball.y-e.p1.y)*e.ny;
+    if(d >= -6) continue;
+    const along=(ball.x-e.mx)*e.ux + (ball.y-e.my)*e.uy;
+    if(Math.abs(along) < e.len*GOAL_HALF) return true;
+  }
+  return false;
+}
+
 function mayGather(p){
   if(p.role!=='K') return false;
   return dist(p, goalCenter(p.team)) <= 112;
@@ -4173,6 +4196,11 @@ function physics(dt){
     if(ball.clearT&&clockSec<ball.clearT) return;            // a clearance in flight escapes the furnace
     players.forEach(p=>{ if(p.out||p.sentOff)return; if(p===ball.noClaim&&ball.noClaimF>0)return;
       if(suppress&&suppress.team===p.team&&clockSec<suppress.until)return;
+    // ── A BALL OVER THE LINE IS A GOAL, AND NOBODY MAY CLAIM IT ───────────
+    // The claim runs 240 lines before the goal test, so without this a keeper takes a ball that
+    // has already crossed — the one-frame injustice John kept seeing and calling a goal.
+    if(ballIsIn()) return;
+
     if(ball.z>(p.role==="K"?28:12))return;   // sailing over their heads
 
     // ── AND A KEEPER CANNOT PICK IT UP OUTSIDE HIS AREA ───────────────────
