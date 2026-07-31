@@ -3254,12 +3254,22 @@ const INSTRUCTIONS = [
   // His own keeper has the ball and is about to send it somewhere. They push away from their own
   // goal — on a hex that is the only direction that means anything — so there is an outlet to
   // aim at. Added inline this morning when I made keepers clear their lines; it belongs here.
+  // ── IT DEFEATED ITS OWN PREDICATE ─────────────────────────────────────────
+  // 70,250 flips a match — 41% of ALL predicate churn in the game, and the largest single
+  // source by a factor of three.
+  //
+  // It applies while a man is within 210 of his own goal, and its act() PUSHES HIM UP, away from
+  // his own goal. So he crosses 210, the instruction stops, he drifts back, and it starts again.
+  // An instruction whose effect switches off its own cause.
+  //
+  // Hysteresis, and the flag is cleared the moment the keeper no longer has the ball — the whole
+  // instruction only exists while a keeper is holding, so that is its natural reset.
   { name:'pushing up', tier:TIER.PLAYER, base:360,
     applies:p => !!(ball.owner && ball.owner.role==='K' && ball.owner.team===p.team
                     && p!==ball.owner && !p.out && !p.sentOff
-                    && Math.hypot(p.x-goalCenter(p.team).x, p.y-goalCenter(p.team).y)<210),
+                    && Math.hypot(p.x-goalCenter(p.team).x, p.y-goalCenter(p.team).y) < (p.__pushed?250:210)),
     score:p => 360,
-    act:p => {
+    act:p => { p.__pushed=true;
       const og9=goalCenter(p.team);
       const ax=p.x-og9.x, ay=p.y-og9.y, al9=Math.hypot(ax,ay)||1;
       steer(p, og9.x+ax/al9*250, og9.y+ay/al9*250, 1.9);
@@ -4382,6 +4392,10 @@ function telUnattributed(dist2){
 }
 
 function telFrame(){
+  // the push-up flag lives only while a keeper holds; when he lets go, everybody is free to be
+  // near their own goal again without the instruction fighting them
+  if(!(ball.owner && ball.owner.role==='K')) players.forEach(q=>{ q.__pushed=false; });
+
   // ── LOOSE IS FOUR DIFFERENT THINGS ────────────────────────────────────────
   // `loose` counted every frame with no owner, so a pass in flight — the ball doing exactly
   // what it should — read as the ball being lost. With a lot of passing that pushes the figure
