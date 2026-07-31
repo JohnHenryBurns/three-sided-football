@@ -374,7 +374,34 @@ a COACH weight on the existing *denying a throw*.
 four instructions and tuning them against an unseeded sim would produce weights that
 mean nothing.
 
-## The loose-ball chain, traced
+## The loose-ball chain was one seed
+
+**Retracted.** Every step below was measured on seed 2000 with neutral coaching, and
+across eight seeds it does not hold:
+
+```
+                  seed 2000 (what I reported)   across eight seeds   browser
+closing it down   1%                            4-16%                7%
+holdingPlay       86%                           10-52%               —
+```
+
+**The browser's 7% is mid-range.** The chase is not suspended, the game is not
+permanently mid-restart, and "fifteen players holding shape around a ball nobody may go
+for" describes one unrepresentative match.
+
+**What I did wrong is not the measurement, it is the sample.** Each individual number was
+correct for the seed it came from. I ran one seed, found a chain of six consequences that
+all agreed with each other, and never asked whether the seed was typical — because the
+internal consistency felt like corroboration. It was not: every link derived from the same
+run, so they could only agree.
+
+**The rule, which now applies to the harness's own diagnostics and not just to
+browser comparison:** *any figure quoted from fewer than about eight seeds is an anecdote.*
+Six mutually consistent anecdotes from one seed are still one anecdote.
+
+## Superseded: the original chain
+
+
 
 Each step ruled out the next-most-obvious cause:
 
