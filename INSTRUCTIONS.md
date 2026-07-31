@@ -490,6 +490,33 @@ per goal, and with 18–27 goals a match that is minutes of difference in what c
 That is the next thing to measure, and it is measurable: count held frames in each and
 compare.
 
+## From the 91B/BAN/SPK log — scoring, keeper, throw-in loop
+
+**A woodwork happened.** First one ever recorded, which matches the arithmetic: roughly
+one every 8–16 matches.
+
+**Scoring is down and it is real.** Eight seeds give 11.3 goals a match against the 18–29
+recorded right after the transplant. Not noise — a third of the scoring has gone.
+
+**The keeper hypothesis is wrong, and I tested it properly this time.** John's observation
+that keepers save balls that are not near them fits the claim being a SWEPT test —
+distance to the line the ball travelled that frame, not to the ball. With a dive reach of
+23 that is a 46-wide capsule on a 143-wide mouth, so a keeper covers 32% of goal standing
+still.
+
+**But requiring him to also end up within 26 of the ball changed nothing.** Identical
+goals, identical gloves, to one decimal. **He is already ending near the ball when he
+claims it** — the sweep is not what is catching these.
+
+So the effect John is seeing is real and the mechanism is something else. Candidates not
+yet tested: `gkDiveCheck` reach, the area clamp pulling him into the flight path, or the
+new `dive` action committing him early enough that he is already moving to the right spot.
+
+**Not investigated yet, and John saw it directly:** a throw-in loop where the fetcher did
+not carry the ball to the sideline and threw from too far out, which re-triggered the
+throw. That is a reproducible bug with a clear description and it should be next — an
+observed failure beats an inferred one every time.
+
 ## To investigate
 
 **The corner trio is duplicated.** The three waves are in the list *and* still in the
