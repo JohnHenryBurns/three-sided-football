@@ -452,6 +452,29 @@ function awardFreeKick(victim, offender){
 }
 
 /** Book a man. `red` sends him off. The walk itself is the front end's, as before. */
+/** An INCIDENTAL foul — the mistimed challenge. Not a decision: a consequence of an action that
+ *  went wrong. It can happen on a tackle, on a shot, or on a header, because all three put a boot
+ *  or a body where somebody else's is.
+ *
+ *  John's distinction: the professional foul is chosen and priced by aggression; this one is an
+ *  accident and priced by how clumsy the challenge was. A Clean side still commits these.
+ *
+ *  Returns true if it fouled, so the calling action can abandon what it was doing. */
+function incidentalFoul(p, victim, clumsiness){
+  if(!victim || !onPitch(p) || !onPitch(victim)) return false;
+  if(victim.team===p.team || allied(p.team,victim.team)) return false;
+  const agg = AGG_PRESETS[teamAGG[p.team]].f;
+  // fatigue makes a man clumsy, which is where late-match cards come from
+  const tired = 1 + (1-p.stamina)*0.8;
+  if(RNG() > clumsiness*agg*tired*0.05) return false;
+  TEL.incidental++;
+  const R=REF();
+  if(RNG() > R.sees){ TEL.foulMissed++; return true; }   // it happened; nobody called it
+  awardFreeKick(victim, p);
+  if(RNG() < 0.16*R.zeal) bookPlayer(p, RNG() < 0.14*R.zeal);
+  return true;
+}
+
 function bookPlayer(p, red){
   if(red || p.yellows>=1){
     p.yellows++;
@@ -1262,6 +1285,7 @@ const PORTED = [
       kick(f.near.x+f.near.vx*4, f.near.y+f.near.vy*4, pw, false);
       const throwD=dist(f.near,p);
       ball.zv=2.6 + Math.min(1.6, throwD/260*1.6);
+      gkHolder=null;   // he has let go of it
       if(allied(p.team,f.near.team)) ball.allyPass=true;
       return true;
     } },
@@ -1284,6 +1308,7 @@ const PORTED = [
       const pw=Math.min(11.5, Math.max(4.2, dTo/66 * 1.12));
       kick(f.far.x+f.far.vx*7, f.far.y+f.far.vy*7, pw, false);
       ball.zv=4.6;                       // up into the lights, as the cascade has it
+      gkHolder=null;   // he has let go of it
       GKSTAT.punts=(GKSTAT.punts||0)+1;
       return true;
     } },
@@ -1303,6 +1328,7 @@ const PORTED = [
       const spread=(RNG()-0.5)*0.5;
       kick(p.x+(ax/al)*300 + (-ay/al)*300*spread,
            p.y+(ay/al)*300 + ( ax/al)*300*spread, 11.5, false);
+      gkHolder=null;   // he has let go of it
       ball.zv=4.2;
       return true;
     } },
@@ -1424,6 +1450,9 @@ const PORTED = [
     act:p => {
       const victim=ball.owner;
       if(!victim) return false;
+      // HE MIGHT GET THE MAN INSTEAD. A tackle is the commonest way to give a foul away, and it
+      // is not a separate decision — it is this one going wrong.
+      if(incidentalFoul(p, victim, 1.0)) return false;
       ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.isShot=false;
       if(p.role==='K'){
         ENGINE_HOOKS.spawnNote(p.x,p.y-20,"smothered!",TEAMS[p.team].color,TEAMS[p.team].accent);
@@ -1432,6 +1461,10 @@ const PORTED = [
         ENGINE_HOOKS.spawnNote(p.x,p.y-20,"tackle!",TEAMS[p.team].color,TEAMS[p.team].accent);
       }
       stam(p,+0.10); stam(victim,-0.06);
+      // AND THE VICTIM'S SIDE CANNOT IMMEDIATELY ROB IT BACK. Without this a tackle is a
+      // coin-flip loop between two men standing on the ball — the cascade called it `suppress`
+      // and it is the one piece of its bookkeeping that is really a rule.
+      suppress={team:victim.team, until:clockSec+1.0};
       return false;    // he now HAS the ball; his frame continues so he can carry it
     } },
 
@@ -1699,6 +1732,11 @@ const ACTIONS = [
       // kick() reads ball.owner to know who struck it, so he owns it for the instant of contact.
       // A header is a touch, not a possession — he has it for one frame and it is gone, which is
       // exactly what the primitive expects and what I got wrong by nulling the owner first.
+      // AN ELBOW IN THE AIR. Whoever else was going for it is who he caught.
+      let rival=null, rd=1e9;
+      players.forEach(q=>{ if(q.team===p.team||!onPitch(q)) return;
+        const dd=dist(q,p); if(dd<26 && dd<rd){ rd=dd; rival=q; } });
+      if(rival && incidentalFoul(p, rival, 0.7)) return true;
       ball.owner=p;
       kick(p.x+dx/dl*140, p.y+dy/dl*140, far?5.2:4.0, dl<200);
       ball.owner=null;
@@ -2882,501 +2920,27 @@ function think(dt){
   // AND ONLY IF HE STILL HAS IT. `owner` is captured before the player loop; an action may have
   // taken the ball since. A block that reasons about a man in possession is wrong the moment he is
   // not in possession — that is the whole crash, in one condition.
-  if(owner && ball.owner===owner){
-    if(holdActive){ owner.vx*=0.85; owner.vy*=0.85; return; }
-    if(throwPending===owner){
-      throwPending=null;
-      // ── HE THROWS IT AND STAYS ────────────────────────────────────────────
-      // The general chase logic took over the instant the ball left him, so the thrower sprinted
-      // after his own throw and the two moved as one — which reads as carrying it in, not
-      // throwing it.
-      //
-      // A thrower does not chase. He steps back onto the pitch and offers himself for the return,
-      // which is what the man who took a throw-in is actually doing while you watch the ball.
-      // 1.4 seconds is long enough for the ball to get somewhere without him.
-      owner.noChase=clockSec+1.4;
-      owner.jz=Math.max(owner.jz||0, 0.01); owner.jzv=1.6;   // the hop off the line
-      const mates=players.filter(m=>m.team===owner.team&&m!==owner&&!m.out&&!m.sentOff);
-      let pickM=null,bs=-1e9;
-      mates.forEach(m=>{
-        const d=dist(m,owner); if(d<40||d>240)return;
-        let open3=1e9;                              // the loft sails OVER the lane — score the landing, not the path
-        players.forEach(o2=>{ if(o2.team===owner.team||o2.out||o2.sentOff||o2.role==="K")return;
-          open3=Math.min(open3,dist(o2,m)); });
-        const sc=Math.min(open3,110)*0.9-d*0.25+RNG()*20;
-        if(sc>bs){bs=sc;pickM=m;}
-      });
-      if(!pickM&&mates.length) pickM=mates.sort((a,b)=>dist(a,owner)-dist(b,owner))[0];
-      if(!pickM){
-        const allies=players.filter(m=>allied(owner.team,m.team)&&!m.out&&!m.sentOff&&m.role!=="K"
-          &&dist(m,owner)>40&&dist(m,owner)<260)
-          .sort((a,b)=>dist(a,owner)-dist(b,owner));
-        if(allies.length){ pickM=allies[0]; }
-      }
-      // Crowded, and the only outlet is a short one in the same trouble? Clear it. A keeper does
-      // not pass into the scramble he just ended.
-      //
-      // Recomputed here rather than reused: `crowded` above is in the punt branch's scope, and
-      // reaching across for it is how a variable ends up undefined in one path and fine in the
-      // other. Two lines is cheaper than that bug.
-      let wolves2=0;
-      players.forEach(q=>{ if(q.team===owner.team||q.out||q.sentOff)return;
-        if(dist(q,owner)<95) wolves2++; });
-      if(wolves2>=2 && pickM && dist(pickM,owner)<110){ pickM=null; }
-      if(pickM){
-        // Same reasoning for the roll: 6.2 carries 387, and this is thrown at a man 40 to 260
-        // away. Distance-derived, floored so a short one still reaches him.
-        const throwPw=Math.min(6.2, Math.max(2.4, dist(pickM,owner)/66 * 1.15));
-        kick(pickM.x+pickM.vx*4, pickM.y+pickM.vy*4, throwPw, false);
-        // A KEEPER'S THROW LOFTS. 2.4 peaked at 21 — a flat skimmer that reached knee height and
-        // arrived before anybody could move for it. He is throwing it out to a teammate forty to
-        // two hundred and sixty away, and that is a lobbed ball with hang on it.
-        //
-        // Scaled to the distance: a short roll to a full-back stays low, a throw to the far side
-        // goes up and gives him time to come and meet it. 2.6 to 4.2, which is an apex of 24 to
-        // 63 — the far one clearing head height comfortably and hanging for a second.
-        const throwD=dist(pickM,owner);
-        ball.zv=2.6 + Math.min(1.6, throwD/260*1.6);
-        if(allied(owner.team,pickM.team)) ball.allyPass=true;
-        return;
-      }
-      // NO OUTLET IS NOT A REASON TO PUT IT DOWN. This returned, which left the ball a normal
-      // owned ball at the keeper's feet — in the middle of whatever scramble had just forced the
-      // save. He had secured it and then simply set it down among them.
-      //
-      // A keeper with no options does what every keeper does: he clears it. Away from his own
-      // goal, high, and long, so the game restarts somewhere other than six yards from where it
-      // nearly ended.
-      {
-        // `og` belongs to the branch above; this path never ran until the crowded keeper started
-        // reaching it, so the reference had been sitting there undefined and untested since the
-        // clearance was written. Computed here.
-        const og9=goalCenter(owner.team);
-        const away={x:owner.x-og9.x, y:owner.y-og9.y};
-        const al=Math.hypot(away.x,away.y)||1;
-        // straight out from his own goal, with a bit of lateral so three clearances in a row do
-        // not land on the same blade of grass
-        const spread=(RNG()-0.5)*0.5;
-        const cx2=owner.x+(away.x/al)*300 + (-away.y/al)*300*spread;
-        const cy2=owner.y+(away.y/al)*300 + ( away.x/al)*300*spread;
-        kick(cx2, cy2, 11.5, false);
-        ball.zv=4.2;                       // apex 63, a second of hang — time for anybody to read it
-        sayLogged(pick([
-          `${owner.name} has nobody to aim at \u2014 so he launches it and lets the hex sort it out.`,
-          `No options for ${owner.name}. Row Z it is, more or less.`,
-          `${owner.name} clears his lines with feeling.`,
-          `${owner.name} looks up, sees nothing he likes, and hoofs it.`]));
-      }
-      return;
-    }
-    if(cornerTaker===owner){
-      cornerTaker=null;
-      const e2=EDGES[GOAL_EDGE[cornerGoal]], g=goalCenter(cornerGoal);
-      GKSTAT.cornerDel=(GKSTAT.cornerDel||0)+1;
-      players.forEach(q=>{ if(q.out||q.sentOff||q.role==="K")return;
-        const dg=dist(q,g);
-        if(q.team===owner.team&&dg<150)GKSTAT.cornerAtk=(GKSTAT.cornerAtk||0)+1;
-        if(q.team===cornerGoal&&dg<110)GKSTAT.cornerDef=(GKSTAT.cornerDef||0)+1;
-        if(q.team!==owner.team&&q.team!==cornerGoal&&allied(q.team,owner.team)&&dg<170)GKSTAT.cornerAllyIn=(GKSTAT.cornerAllyIn||0)+1; });
-      const nearSign=Math.sign((owner.x-g.x)*e2.ux+(owner.y-g.y)*e2.uy)||1;
-      const farPost=RNG()<0.45;
-      const off2=farPost
-        ? -nearSign*e2.len*GOAL_HALF*(0.5+RNG()*0.25)   // whipped to the FAR stick
-        : (RNG()*2-1)*e2.len*GOAL_HALF*0.7;
-      const txc=g.x+e2.ux*off2+e2.nx*44, tyc=g.y+e2.uy*off2+e2.ny*44;
-      kick(txc,tyc,6.8,false);
-      // A corner should clear the defenders it is aimed over: 3.6 peaks at 46, above every
-      // head on the pitch, where 2.8 peaked at 28 and arrived at chest height.
-      ball.zv=3.6;                       // it swings in high, whatever the distance
-      if(farPost){ GKSTAT.farPost=(GKSTAT.farPost||0)+1;
-        if(RNG()<0.6) sayLogged(pick([
-          `Coach Eric's voice carries clear across the pitch: FAR POST! FAR POST!`,
-          `You can hear Coach Eric from here — "FAR POST!" — and the ball obeys.`,
-          `Far post, just like Coach Eric drills it at 91 Bulldogs practice.`]),true,"lowvoice");
-      }
-      cornerGoal=null;
-      return;
-    }
-    if(penaltyShooter===owner){
-      penaltyShooter=null;
-      const e=EDGES[GOAL_EDGE[penaltyGoalTeam]], g=goalCenter(penaltyGoalTeam);
-      const off2=(RNG()*2-1)*e.len*GOAL_HALF*1.0;
-      stats.shots[owner.team]++;
-      kick(g.x+e.ux*off2, g.y+e.uy*off2, 10.8, true);
-      gkDiveCheck(penaltyGoalTeam,false);
-      return;
-    }
-    if(owner.role==="K"){
-      const og=goalCenter(owner.team);
-      // THE GRAB: he's caught it — his ball, his moment, his name in lights
-      if(gkHolder!==owner){
-        gkHolder=owner; gkHoldUntil=clockSec+1.6; GKSTAT.holds++;
-        ENGINE_HOOKS.spawnNote(owner.x,owner.y-26,"🧤 secured!",TEAMS[owner.team].color,TEAMS[owner.team].accent);
-      }
-      // A back-pass cannot be held: he distributes at once, which is what the rule forces.
-      if(clockSec<gkHoldUntil && !owner.mustKick){
-        // stride off the line, survey the field
-        const adv={x:og.x+(CX-og.x)*0.22, y:og.y+(CY-og.y)*0.22};
-        steer(owner,adv.x,adv.y,1.1);
-        return;
-      }
-      gkHolder=null;
-      // DISTRIBUTION: roll it short, or launch it across the county
-      let near=null,nd2=1e9, far=null,fd=-1,fs=-1e9, anyNear=null,anyD=1e9;
-      players.forEach(m=>{ if(m.team!==owner.team||m===owner||m.out||m.sentOff||m.role==="K")return;
-        const d=dist(m,owner);
-        const adv2=dist(m,og);
-        if(adv2>dist(owner,og)+15){ if(d<nd2){nd2=d;near=m;} }   // forward outlets first
-        if(d<anyD){anyD=d;anyNear=m;}
-        let open2=1e9;
-        players.forEach(q=>{ if(q.team!==owner.team&&!q.out&&!q.sentOff&&q.role!=="K")
-          open2=Math.min(open2,dist(q,m)); });
-        const sc3=adv2+Math.min(open2,140)*1.5;                  // deep AND alone
-        if(sc3>fs){fs=sc3;far=m;fd=adv2;}});
-      const fwdRoll=!!near;
-      if(!near){ near=anyNear; nd2=anyD; }                       // backwards only if truly alone
+  // ── THE CASCADE IS GONE ─────────────────────────────────────────────────────
+    //
+    // 495 lines. Every kick, every shot, every keeper decision, every foul — all of it now lives
+    // in ACTIONS, decided by can/score/act and weighted by the coach.
+    //
+    // It was left in place through the whole port "in case", and that was the mistake: with
+    // something to fall through to, PLAY_ON_WEIGHT could sit at 60,000 and the actions could fire
+    // on 0.6% of frames while the game looked fine. Three hours of measurement went into the
+    // cascade while I believed it was going into the transplant.
+    //
+    // What moved out of here on the way:
+    //   the twelve kicks        -> the ported actions
+    //   gkDiveCheck             -> the keeper's own `dive`
+    //   the tackle              -> `tackle`, with incidental fouls inside it
+    //   gkHolder / gkHoldUntil  -> `secure it` sets, the distributions clear
+    //   suppress                -> `tackle`, which is the only thing that caused it
+    //   penaltyShooter=null     -> the `penalty` action
+    //
+    // Nothing falls through now. If an action does not fire, the ball sits — and that is visible
+    // in the first match rather than three hours later.
 
-      // ── HOW CROWDED IS IT? ────────────────────────────────────────────────
-      // A keeper who has just smothered a shot is standing in the middle of the people who took
-      // it. Rolling it five yards to a defender there is how you concede the same chance twice —
-      // he should be throwing it long or clearing it, and he was doing neither because the short
-      // outlet is always the nearest one.
-      let wolves=0;
-      players.forEach(q=>{ if(q.team===owner.team||q.out||q.sentOff)return;
-        if(dist(q,owner)<95) wolves++; });
-      const crowded=wolves>=2;
-      // CROWDED MEANS GO LONG. Two or more opponents inside 95 and the short roll is off the
-      // table: he finds the deepest man he can, and if there is nobody deep he clears it.
-      const wantPunt=far&&((fd>255&&(nd2>140||RNG()<0.11)) || (crowded&&fd>150));
-      if(wantPunt){
-        // ── POWER FOR THE DISTANCE, NOT A CONSTANT ────────────────────────
-        // The comment said "drop it TO the man, not past him" and the arithmetic did the
-        // opposite. At friction 0.985 a kick carries:
-        //
-        //   power  6.2  ->  387 units
-        //   power  9    ->  574
-        //   power 11.5  ->  740
-        //   power 13.5  ->  873      on a pitch 680 across
-        //
-        // So a punt aimed at a man 255 away travelled three times that and went out on the far
-        // side, which is exactly what John has been watching. The old formula reached 13.5 at
-        // any distance over 570 and was capped there — a cap that was never the problem, since
-        // even 9 overshoots.
-        //
-        // Solved rather than tuned: pick the power that CARRIES the distance. Sum of a geometric
-        // series, v0 = d*(1-f)/(1-f^n) with the flight time n≈220 frames, which reduces to
-        // roughly d/66 for this friction. A little over, because a ball he has to run onto is
-        // better than one he has to come back for.
-        const dTo=dist(owner,far);
-        const pw=Math.min(11.5, Math.max(4.2, dTo/66 * 1.12));
-        kick(far.x+far.vx*7, far.y+far.vy*7, pw, false);
-        // 4.6, not 3.4. A real match measured the ball ABOVE THE CROSSBAR for 0% of its
-        // airborne time, topping out at 45 against a bar of 54 — so nothing in the game ever
-        // cleared it, and "up into the lights" reached shoulder height. At 4.6 this punt peaks
-        // near 76, comfortably over, and hangs for 1.1s instead of 0.8 — long enough for the
-        // far side to actually get under it, which is what the comment always claimed.
-        ball.zv=4.6;   // up into the lights — headers await on the far side
-        GKSTAT.punts++; ball.puntBy=owner.team;
-        sayLogged(pick([
-          `${owner.name} LAUNCHES it — a drop kick clearing the county line!`,
-          `${owner.name} sends it to the MOON. Somebody on the far side has a decision to make.`,
-          `A monster punt from ${owner.name} — the ball has its own weather now.`,
-          `${owner.name} with the full field-flip. From ${PRN(owner).his} box to their problem.`]),true,"lowvoice");
-      } else if(near&&nd2<180){
-        GKSTAT.rolls++; if(fwdRoll)GKSTAT.rollsFwd++;
-        kick(near.x+near.vx*8, near.y+near.vy*8, Math.min(6.5,nd2*0.04+3.5), false);
-        if(RNG()<0.35) sayLogged(pick([
-          `${owner.name} rolls it out calmly. Playing from the back.`,
-          `${owner.name}, unhurried, feeds it short. Composure.`]),false);
-      } else kick(CX,CY,9);
-      return;
-    }
-    if(!owner.sprint&&owner.burst>0.65&&owner.role!=="K"&&!holdActive&&clockSec>owner.sprintCd){
-      const tg7=goalCenter(targets[owner.team]);
-      let blockers=0;
-      players.forEach(q=>{ if(q.team!==owner.team&&!q.out&&!q.sentOff&&q.role!=="K"&&dist(q,owner)<180
-        &&((q.x-owner.x)*(tg7.x-owner.x)+(q.y-owner.y)*(tg7.y-owner.y))>0) blockers++; });
-      if(blockers===0&&dist(owner,tg7)<520){ owner.sprint={why:"break",blaze:RNG()<0.12}; GKSTAT.b_break=(GKSTAT.b_break||0)+1;
-        if(owner.sprint.blaze) blazeCall(owner); }
-    }
-    if(owner.sprint&&owner.sprint.why==="break"&&ball.owner!==owner&&clockSec>owner.sprintMin){ owner.sprint=null; owner.sprintCd=clockSec+0.8; }
-    const tgt=goalCenter(targets[owner.team]);
-    const e=EDGES[GOAL_EDGE[targets[owner.team]]];
-    const dGoal=dist(owner,tgt);
-    let pressure=1e9; oppOf(owner.team).forEach(o=>pressure=Math.min(pressure,dist(o,owner)));
-    // pinned on the touchline under pressure: don't grind — play the outlet
-    {
-      let wd=1e9,we=null;
-      for(const e2 of EDGES){const d2=(owner.x-e2.p1.x)*e2.nx+(owner.y-e2.p1.y)*e2.ny;if(d2<wd){wd=d2;we=e2;}}
-      const mouth=we&&we.goal&&Math.abs((owner.x-we.mx)*we.ux+(owner.y-we.my)*we.uy)<we.len*GOAL_HALF*1.3;
-      if(wd<34&&pressure<58&&!mouth&&RNG()<0.22*dt*60){
-        let best=null,bs=1e9;
-        players.forEach(m=>{if(m.team===owner.team&&m!==owner&&!m.out&&!m.sentOff&&m.role!=="K"){
-          const dc=dist(m,{x:CX,y:CY}); if(dc<bs){bs=dc;best=m;}}});
-        if(best) kick(best.x+best.vx*8,best.y+best.vy*8,Math.min(9,dist(best,owner)*0.045+4.5));
-        else kick(CX,CY,7);
-        return;
-      }
-    }
-    {
-      const RK=T(owner.team).risk;
-      // THE LONG STRIKE: open lane + decent angle + space = have a go from range
-      if(dGoal>125&&dGoal<250&&pressure>42){
-        const hw2=e.len*GOAL_HALF;
-        const latOff=Math.abs((owner.x-tgt.x)*e.ux+(owner.y-tgt.y)*e.uy);
-        if(latOff<hw2*1.5){
-          let laneClear=true;
-          oppOf(owner.team).forEach(o=>{
-            const tt=((o.x-owner.x)*(tgt.x-owner.x)+(o.y-owner.y)*(tgt.y-owner.y))/(dGoal*dGoal);
-            if(tt>0.12&&tt<0.85){const lx=owner.x+(tgt.x-owner.x)*tt,ly=owner.y+(tgt.y-owner.y)*tt;
-              if(o.role!=="K"&&Math.hypot(o.x-lx,o.y-ly)<26)laneClear=false;}
-          });
-          if(laneClear&&RNG()<0.016*(0.4+1.2*RK)*dt*60){
-            const scL=(0.6+0.8*RK)*(0.75+dGoal*0.0035);   // range punishes accuracy
-            const offL=(RNG()*2-1)*hw2*scL;
-            ENGINE_HOOKS.spawnNote(owner.x,owner.y-24,"from distance!",TEAMS[owner.team].accent);
-            if(RNG()<0.4) sayLogged(pick([
-              `${owner.name} sees the lane and LETS FLY from range!`,
-              `${owner.name} has a go from distance — dip and swerve!`,
-              `No hesitation — ${owner.name} rips one from ${Math.round(dGoal/8)} yards!`,
-              `${owner.name} says why not, and unloads!`]),true);
-            const SSL=owner.burst>0.7&&RNG()<0.5;
-            if(SSL){ owner.burst-=0.6; GKSTAT.superShots=(GKSTAT.superShots||0)+1; }
-            kick(tgt.x+e.ux*offL*(SSL?0.75:1), tgt.y+e.uy*offL*(SSL?0.75:1), SSL?13.2:11.2, true);
-            if(SSL){ ball.flameShot=true; ball.flameShe=!!(TEAMS[owner.team]&&TEAMS[owner.team].she); superSay(owner); }
-            gkDiveCheck(targets[owner.team], SSL);
-            return;
-          }
-        }
-      }
-      if(dGoal<(150+50*RK) && RNG()<0.025*(0.5+1.0*RK)*dt*60){
-        let sc=0.6+0.8*RK;                                   // patience = precision
-        if(T(targets[owner.team]).bunker>0.5) sc*=1.35;      // packed boxes deflect
-        const off=(RNG()*2-1)*e.len*GOAL_HALF*sc;
-        const SS=owner.burst>0.7&&RNG()<0.4;
-        if(SS){ owner.burst-=0.6; GKSTAT.superShots=(GKSTAT.superShots||0)+1; }
-        kick(tgt.x+e.ux*off*(SS?0.75:1), tgt.y+e.uy*off*(SS?0.75:1), (9.5+RNG()*1.5)*(SS?1.3:1), true);
-        if(SS){ ball.flameShot=true; ball.flameShe=!!(TEAMS[owner.team]&&TEAMS[owner.team].she); superSay(owner); }
-        gkDiveCheck(targets[owner.team], SS);
-        return;
-      }
-    }
-    if(pressure<48 && RNG()<(0.05+0.10*T(owner.team).tempo)*dt*60){
-      let best=null,bs=-1e9;
-      const matesLeft=FL[owner.team]-(owner.role!=="K"?1:0);
-      let allyPen=null;   // computed once: identical for every allied candidate
-      {
-        const foe=targets[owner.team];
-        if(foe!==null){
-          const foeLead=score[foe]-score[owner.team];
-          const shortfall=FL[foe]-FL[owner.team];
-          let desp=Math.max(0,foeLead)*0.28+Math.max(0,shortfall)*0.4+(FL[owner.team]===0?0.45:0);
-          let pen=850*Math.max(0,1-desp);
-          if(matesLeft===0) pen-=80;
-          if(pressure>32) pen*=0.8;
-          allyPen=pen;
-        }
-      }
-      players.forEach(m=>{
-        const allyOk=allied(owner.team,m.team);
-        if((m.team!==owner.team&&!allyOk)||m===owner||m.role==="K"||m.out||m.sentOff)return;
-        const d=dist(m,owner); if(d<60||d>210+140*T(owner.team).direct)return;
-        const gain=dist(owner,tgt)-dist(m,tgt);
-        let laneOk=true;
-        oppOf(owner.team).forEach(o=>{
-          if(allied(owner.team,o.team))return;   // allies don't block the lane story
-          const t=((o.x-owner.x)*(m.x-owner.x)+(o.y-owner.y)*(m.y-owner.y))/(d*d);
-          if(t>0.1&&t<0.9){const lx=owner.x+(m.x-owner.x)*t, ly=owner.y+(m.y-owner.y)*t;
-            if(Math.hypot(o.x-lx,o.y-ly)<(30-12*T(owner.team).risk)+5*(T(o.team).press-0.5)*2) laneOk=false;}
-        });
-        let s=gain*(0.6+0.8*T(owner.team).direct)+(laneOk?0:-500)+RNG()*30;
-        if(allyOk&&allyPen!==null) s-=allyPen;   // scoreboard-priced treason, computed once above
-        if(s>bs){bs=s;best=m;}
-      });
-      if(best&&bs>-100){
-        kick(best.x+best.vx*8, best.y+best.vy*8, Math.min(9,dist(best,owner)*0.045+4));
-        if(allied(ball.lastKicker?ball.lastKicker.team:-1,best.team)) ball.allyPass=true;
-        return;
-      }
-    }
-    // FOULS: clumsy or cynical challenges — aggression is now a priced behavior
-    for(const o of oppOf(owner.team)){
-      if(o.role==="K"||o.out||o.sentOff)continue;
-      if(suppress&&suppress.team===o.team&&clockSec<suppress.until)continue;
-      if(dist(o,owner)>=28)continue;
-      const inBox=dist(owner,goalCenter(o.team))<110;
-      const fc=(holdActive?0:0.0022)*foulMult*AGG_PRESETS[teamAGG[o.team]].f
-        *(0.4+1.2*T(o.team).press*(coalAlly[o.team]?0.7:1))*(1.5-0.7*o.stamina)*(inBox?0.4:1.0);
-      if(RNG()<fc*dt*60){
-        const victim=owner;
-        ENGINE_HOOKS.spawnNote(victim.x,victim.y-24,"FOUL!","#ffd166");
-        addStoppage(1.2);
-        const r=RNG();
-        const redP=0.035*(0.5+0.5*foulMult);   // stricter referees reach for red
-        const yelP=0.20*(0.6+0.4*foulMult);
-        let card=null;
-        if(r<redP) card="red";
-        else if(r<redP+yelP) card=(o.yellows>=1)?"second":"yellow";
-        if(card==="yellow") o.yellows++;
-        let off=(card==="red"?pick(RED_OFFENSES):pick(YELLOW_OFFENSES)).replaceAll("{V}",victim.name);
-        if(AGG_PRESETS[teamAGG[o.team]].f>1.5&&coached[o.team]) off+=" — entirely on the manager's instructions";
-        const shortT=TEAMS[o.team].short, col=TEAMS[o.team].color;
-        if(inBox){
-          pendingPenalty={shooter:victim, conceder:o.team};
-          addStoppage(4);
-        } else {
-          // ── AND IT IS A FREE KICK ─────────────────────────────────────────
-          // Outside the box a foul did nothing but suppress the offender for a second. The
-          // commentary said "Free kick" and no free kick happened — play simply carried on with
-          // the victim still running.
-          //
-          // Now it is a real restart, using the same pin every other one uses: the ball is dead
-          // where the foul happened, the victim stands over it, and the offending side has to
-          // back off before he takes it. A free kick that nobody retreats from is a throw-in in
-          // the middle of the pitch.
-          suppress={team:o.team, until:clockSec+1.0};
-          ball.owner=null; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
-          // ── WHICH GOAL? ───────────────────────────────────────────────────
-          // A free kick on a hex is a CHOICE the offended side gets to make: two goals are
-          // available and nothing says it must be the one belonging to whoever fouled you.
-          //
-          // Four things decide it, and they are the four John named:
-          //
-          //   ANGLE      a goal you cannot see is not a target. Distance and how square you
-          //              are to the mouth dominate everything else, because a free kick is
-          //              only worth having if you can actually strike at something.
-          //   ALLIANCE   you do not shoot at a friend. Heavily discounted rather than
-          //              forbidden — alliances here are informal, and a good enough opening
-          //              is a good enough reason.
-          //   SCORE      hit the leader. Being third with two goals to make up is a reason to
-          //              aim somewhere other than the man who fouled you.
-          //   GRUDGE     all else equal, the side who gave the free kick away.
-          //
-          // The offender gets a modest bonus rather than an automatic claim, which is the whole
-          // point: revenge is a preference, not a rule.
-          let aim=null, aimBest=-1e9;
-          for(const g of [0,1,2]){
-            if(g===victim.team || out[g]) continue;
-            const gc=goalCenter(g);
-            const d9=Math.hypot(gc.x-ball.x, gc.y-ball.y);
-            const e9=EDGES[GOAL_EDGE[g]];
-            // how square he is to the mouth: 1 straight on, 0 from the side
-            const face=Math.max(0, -((ball.x-gc.x)*e9.nx + (ball.y-gc.y)*e9.ny)/(d9||1));
-            let sc = 300 - d9*0.5 + face*140;
-            if(allied(victim.team, g)) sc -= 260;          // not at a friend, unless it is open
-            sc += (score[g]-Math.min(score[0],score[1],score[2])) * 18;   // hit the leader
-            if(g===o.team) sc += 55;                        // and a grudge is worth something
-            if(sc>aimBest){ aimBest=sc; aim=g; }
-          }
-          freeKick={taker:victim, x:ball.x, y:ball.y, team:victim.team, at:clockSec,
-                    wall:o.team, aim:(aim!==null?aim:o.team)};
-          TEL.freeKicks++;
-          restartHold=Math.max(restartHold, nowMs()+1400);
-          addStoppage(0.6);
-        }
-        const penTag=inBox?` <b style="color:#ffd166">AND IT'S A PENALTY!</b>`:"";
-        if(card==="red"||card==="second"){
-          addStoppage(3);
-          o.sentOff=true; o.redCard=true; walkPending=o;   // the walk follows the popup
-          const left=players.filter(q=>q.team===o.team&&!q.out&&!q.sentOff).length;
-          const leftTxt=left===1?`only the goalkeeper remains for ${tm(o.team)}!`:`${tm(o.team)} down to ${left} men.`;
-          ENGINE_HOOKS.showNotice(col, card==="second"?"🟨🟥 SECOND YELLOW":"🟥 RED CARD",
-            `${o.name} (${shortT})`,
-            `${PRN(o).His} crime: ${PRN(o).he} ${off}.${penTag}<br>OFF! The walk of shame begins — ${leftTxt}`, 5200);
-          sayLogged(pick([
-            `🟥 <b>RED CARD!</b> ${o.name} is off — ${PRN(o).he} ${off}. ${tm(o.team)} play on a ${PRN(o).man} short!`,
-            `🟥 <b>RED CARD!</b> ${o.name} is EXCOMMUNICADO — ${PRN(o).he} ${off}. No services, no help, and ${tm(o.team)} play a ${PRN(o).man} short!`,
-            `🟥 <b>RED CARD!</b> Hasta la vista, ${o.name} — ${PRN(o).he} ${off}. ${PRN(o).He}'ll be back next match. ${tm(o.team)} a ${PRN(o).man} short!`,
-            `🟥 <b>RED CARD!</b> ${o.name}, that is a DIRECT violation — ${PRN(o).he} ${off}. ${PRN(o).He} has the right to remain benched.`,
-            `🟥 <b>RED CARD!</b> WITNESS ${o.name.toUpperCase()}! ${PRN(o).He} ${off}, and now rides shiny and chrome to the Valhalla of the bench!`,
-            `🟥 <b>RED CARD!</b> ${o.name} ${off}. "'Tis but a scratch," ${PRN(o).he} protests. The referee begs to differ — OFF!`,
-            `🟥 <b>RED CARD!</b> ${o.name} ${off}. As the family says: just do the next right thing. The next right thing is the bench.`,
-            `🟥 <b>RED CARD!</b> ${o.name} ${off} — and gets taken to the train station, hex edition. ${tm(o.team)} a ${PRN(o).man} short!`,
-            `🟥 <b>RED CARD!</b> ${o.name} ${off}. NOBODY expected the disciplinary inquisition. OFF!`,
-            `🟥 <b>RED CARD!</b> ${o.name} ${off}. The hex don't tolerate rude behavior. ${PRN(o).He} rides for the bench.`,
-            `🟥 <b>RED CARD!</b> ${o.name} ${off} — ELIMINATED! Back to the lobby, and ${tm(o.team)} face the storm a ${PRN(o).man} short.`,
-            `🟥 <b>RED CARD!</b> ${o.name} ${off}. Respawn point: the bench. Inventory: regret.`,
-            `🟥 <b>RED CARD!</b> ${o.name} ${off}. Orion, Morale Officer of the Baby Chaos Division, has reviewed it: unacceptable chaos, even by division standards.`,
-            `🟥 <b>RED CARD!</b> ${o.name} ${off}. Dampy rules it a catastrophic splash violation. Straight red.`,
-            `🟥 <b>RED CARD!</b> ${o.name} ${off}. Momo watched from the rafters and did not blink. The referee agrees. OFF!`,
-            `🟥 <b>RED CARD!</b> ${o.name} ${off}. Grandma Bridget's review: "bold, but ultimately indefensible." RED.`]),true);
-        } else if(card==="yellow"){
-          addStoppage(3);
-          ENGINE_HOOKS.showNotice(col,"🟨 YELLOW CARD",`${o.name} (${shortT})`,
-            `${PRN(o).His} crime: ${PRN(o).he} ${off}. Into the book ${PRN(o).he} goes.${penTag}`, 4200);
-          sayLogged(pick([
-            `🟨 ${o.name} is booked — ${off}.`,
-            `🟨 ${o.name} booked — ${off}. The High Table has been notified.`,
-            `🟨 A citation for ${o.name} — ${off}. One more directive violation and it's over.`,
-            `🟨 ${o.name} booked — ${off}. Judgment Day is exactly one more card away.`,
-            `🟨 ${o.name} into the book — ${off}. "MEDIOCRE!" shouts someone from the cheap seats.`,
-            `🟨 ${o.name} booked — ${off}. The physio's flesh-wound report is under review.`,
-            `🟨 ${o.name} booked — ${off}. Best to let this one go before it becomes two.`,
-            `🟨 ${o.name} running hot — ${off}. The referee attenuates the signal with a yellow.`,
-            `🟨 ${o.name} booked — ${off}. Coaches Eric and Dan teach cleaner timing than THAT.`,
-            `🟨 ${o.name} booked — ${off}. No instruments required — the whole stadium saw it.`,
-            `🟨 ${o.name} booked — ${off}. Ten thousand thundering typhoons of protest change nothing.`,
-            `🟨 ${o.name} booked — ${off}. To be precise: booked.`,
-            `🟨 ${o.name} booked — ${off}. Even Bandit would sit ${PRN(o).him} out for that one.`,
-            `🟨 ${o.name} booked — ${off}. The storm is closing on ${PRN(o).his} discipline.`,
-            `🟨 ${o.name} booked — ${off}. Half a heart of damage, minimum.`,
-            `🟨 ${o.name} booked — ${off}. One bonus item, deducted.`,
-            `🟨 ${o.name} booked — ${off}. Grandma Gloria lights a candle for ${PRN(o).his} discipline.`,
-            `🟨 ${o.name} booked — ${off}. Grampy Cliff logs it as improper equipment operation.`,
-            `🟨 ${o.name} booked — ${off}. Continental rules: none of THAT on hex grounds.`,
-            `🟨 ${o.name} booked — ${off}. The hens on the fencepost all turned to look at once.`]),true);
-        } else if(inBox){
-          ENGINE_HOOKS.showNotice(TEAMS[victim.team].color,"⚠️ PENALTY!",
-            `${victim.name} is brought down in the box!`,
-            `${o.name} ${off} — the referee points to the spot.`, 4600);
-          sayLogged(`<b style="color:${TEAMS[victim.team].color}">PENALTY to ${tm(victim.team)}!</b>`,true);
-        } else if(RNG()<0.5){
-          sayLogged(pick([
-            `Free kick — ${o.name} ${off}.`,
-            `The whistle goes. ${o.name} ${off}.`,
-            `Referee's seen it: ${o.name} ${off}. Free kick.`]));
-        }
-        return;
-      }
-    }
-    // tackles (fatigue and momentum affect steal odds; radius sits just outside body contact)
-    oppOf(owner.team).forEach(o=>{
-      if(suppress&&suppress.team===o.team&&clockSec<suppress.until) return;
-      let tc=holdActive?0:0.010*(0.6+0.8*T(o.team).press)*AGG_PRESETS[teamAGG[o.team]].t; // aggression bites harder; dead balls untouchable
-      tc*=(0.55+0.45*o.stamina);             // fresh tacklers bite harder
-      tc*=(1.35-0.5*owner.stamina);          // gassed carriers are easier to rob
-      if(momentumOn&&clockSec<boostUntil[o.team]) tc*=1.3;
-      if(owner.role==="K"&&gkHolding())return;
-      if(dist(o,owner)<26 && RNG()<tc*dt*60){   // MUST stay > body radius 23
-        const victim=owner;
-        ball.owner=o; ball.lastTouch=o.team; ball.lastKicker=o; ball.isShot=false;
-        if(o.role==="K"){
-          // keeper smothering a dribbler is goalkeeping, not a tackle — no tackle credit
-          ENGINE_HOOKS.spawnNote(o.x,o.y-20,"smothered!",TEAMS[o.team].color,TEAMS[o.team].accent);
-        } else {
-          stats.tackles[o.team]++; o.tackles++;
-          ENGINE_HOOKS.spawnNote(o.x,o.y-20,"tackle!",TEAMS[o.team].color,TEAMS[o.team].accent);
-        }
-        stam(o,+0.10); stam(victim,-0.12);
-        if(o.role!=="K" && RNG()<0.28) sayLogged(pick([
-          `${o.name} muscles ${victim.name} off the ball!`,
-          `Crunching challenge — ${o.name} strips it from ${victim.name}.`,
-          `${o.name} picks ${victim.name}'s pocket!`,
-          `${victim.name} dwells too long and ${o.name} makes him pay.`,
-          `Textbook from ${o.name} — shoulder in, ball won, no arguments.`,
-          `${o.name} reads it like a bedtime story. Possession stolen.`,
-          `Nothing gentle about that — ${o.name} simply takes it off ${victim.name}.`,
-          `${victim.name} had it on a plate and ${o.name} ate first.`,
-          `${o.name} arrives like a tax bill. ${victim.name} pays in full.`,
-          `${o.name} sends ${victim.name} straight back to the lobby.`,
-          `Dutton rules from ${o.name} — that's HIS grass ${victim.name} was standing on.`,
-          `${o.name} with a tackle Grampy Cliff would call proper equipment maintenance.`,
-          `${o.name} arrives with full Atlas-zoomies energy. ${victim.name} never stood a chance.`,
-          `${o.name} chops ${victim.name} down. 'Tis but a scratch, surely.`,
-          `RUN AWAY! ${victim.name} heeds the classic advice one moment too late.`]));
-      }
-    });
-  }
 }
 
 // ---------- Physics ----------
@@ -4079,7 +3643,7 @@ const TEL = {
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
@@ -4090,20 +3654,20 @@ function telReset(){
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
     jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
     jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-    actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, foulMissed:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
+    actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, incidental:0, incidental:0, foulMissed:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
     unattributed:0, unattMax:0, portFrame:-1,
   unattributed:0, unattMax:0, portFrame:-1, deflected:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, woodwork:0, bars:0, posts:0, port:{},
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
