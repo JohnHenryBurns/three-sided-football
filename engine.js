@@ -2510,6 +2510,38 @@ const INSTRUCTIONS = [
       return true;
     } },
 
+  // ── CARRYING IT TO THE MARK ───────────────────────────────────────────────
+  // THE MISSING HALF OF THE FETCH. `fetching the ball` walks him to a loose ball and sets
+  // `got` — and then stops applying. Nothing else did. He stood holding it until the 20-second
+  // cap voided the restart, and play was frozen for the whole time.
+  //
+  // That is John's throw-in freeze: 11.4 seconds measured on one seed, and he watched it happen
+  // in the browser and described it as stalling at the sideline. It was not stalling at the line;
+  // it was standing wherever the ball happened to be, with no next instruction.
+  //
+  // The ball rides with him — a fetched ball is carried, not dribbled — and goes down on the mark
+  // when he arrives. THE MARK IS THE ONE THING HE MUST GET RIGHT: put it down anywhere else and
+  // the throw is taken from the wrong place, which is the other half of what John saw.
+  { name:'carrying it to the mark', tier:TIER.SCRIPT, base:955,
+    applies:p => !!(pendingRestart && pendingRestart.p===p && pendingRestart.fetch
+                    && pendingRestart.got && !pendingRestart.placed),
+    score:p => 955,
+    act:p => {
+      const mx=pendingRestart.x, my=pendingRestart.y;
+      if(dist(p,{x:mx,y:my})>10){
+        steer(p, mx, my, 2.5);
+        ball.x=p.x; ball.y=p.y; ball.z=6; ball.vx=0; ball.vy=0; ball.zv=0;   // it rides with him
+        return true;
+      }
+      // ON THE MARK. Ball down, and the throw becomes available.
+      ball.x=mx; ball.y=my; ball.z=0; ball.vx=0; ball.vy=0; ball.zv=0;
+      pendingRestart.placed=true;
+      ball.fetch=null;
+      throwPending=p;
+      ENGINE_HOOKS.spawnNote(mx, my-22, "on the mark", TEAMS[p.team].color);
+      return true;
+    } },
+
   // ── OFFERING AFTER A RESTART ──────────────────────────────────────────────
   // NOT explicit: he has taken it and is choosing to make himself available rather than chase.
   // Released by POSSESSION — the moment anybody else has the ball he is a player again — with
