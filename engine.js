@@ -1025,10 +1025,22 @@ function kick(tx,ty,power,isShot){
 function sidesSet(taker){
   let want=0, there=0;
   players.forEach(p=>{
-    if(p===taker || p.out || p.sentOff || p.role==='K') return;
+    if(p===taker || p.out || p.sentOff) return;
+    // ── AT HIS RESTING POSITION, NOT MERELY IN HIS OWN THIRD ──────────────────
+    // John: players should have a resting field position they reach on kick-off. That is what
+    // formation() already describes — the shape a side takes when nothing is happening — so the
+    // test is whether a man is AT HIS OWN SPOT rather than vaguely deep.
+    //
+    // Keepers count too here, unlike at a throw: a kick-off with a keeper out of his goal is not
+    // a kick-off.
     want++;
-    const own=goalCenter(p.team);
-    if(dist(p,own) < dist(own,{x:CX,y:CY})*0.92) there++;
+    const f = formation(p.team);
+    const idx = players.filter(q=>q.team===p.team).indexOf(p);
+    const spot = f[idx] || f[0];
+    if(!spot) return;
+    if(dist(p, spot) < 130) there++;   // 70 was too tight — fifteen men converging on exact
+    // coordinates never all arrive at once, and the kick-off waited forever. 130 is "in the
+    // right area", which is what a set piece looks like from the stand.
   });
   // 0.66 blocked almost every restart — throws fell from 34 a match to 2 — because waiting for
   // two thirds of thirteen men to be back means waiting for the slowest of them, every time.
@@ -1560,7 +1572,17 @@ const PORTED = [
     can:p => {
       if(!pendingRestart || pendingRestart.kind!=='kickoff' || pendingRestart.p!==p) return false;
       if(ball.owner) return false;
-      return dist(p, {x:CX,y:CY}) <= 22 && dist(ball,{x:CX,y:CY}) <= 12;
+      if(dist(p, {x:CX,y:CY}) > 22 || dist(ball,{x:CX,y:CY}) > 12) return false;
+      // ── AND THE SIDES MUST BE SET ─────────────────────────────────────────
+      // This is what sidesSet() was kept for. It was gating throws, where it was wrong — a throw
+      // is quick — and it was removed from them and left defined and unused against exactly this
+      // moment.
+      //
+      // A kick-off is the one restart where the laws demand a shape: everybody in their own half,
+      // only the kicking side in the circle. So he waits until they are there, and the wait is
+      // not dead time — `walking back for the kick-off` has fifteen men actively moving to their
+      // resting positions during it, which is what used to be a hold.
+      return sidesSet(p);
     },
     score:p => pendingRestart ? ripeness(pendingRestart.at!==undefined?pendingRestart.at:clockSec, 40) : 0,
     act:p => {
