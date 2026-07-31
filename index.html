@@ -488,7 +488,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=215"></script>
+<script src="engine.js?v=216"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2205,6 +2205,37 @@ const ballGL = new THREE.Mesh(new THREE.SphereGeometry(9, 22, 16),
   new THREE.MeshLambertMaterial({ map: ballTexture() }));
 scene.add(ballGL);
 
+// ── EDIT MODE STATE, AND ITS GRAB RING ──────────────────────────────────────
+// All of it up here, ABOVE THE RENDER LOOP, because the loop reads `editMode`, `grabbed` and
+// `editHalo` on every frame to draw the ring.
+//
+// They were declared down with the pointer handlers, a thousand lines below. `let` and `const` do
+// not hoist a value, so every frame threw on the first reference and THE WHOLE SCENE WENT BLACK —
+// John got no 3D at all. A dead-zone error in a render loop does not degrade, it stops
+// everything, and it PARSES PERFECTLY, which is why the syntax check I run after every edit said
+// the page was fine.
+//
+// 13 to 17 across: the ball is 9, and a finger on a phone is a great deal wider than that.
+let editMode = false, grabbed = null;
+const editPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const editRay = new THREE.Raycaster();
+const editHit = new THREE.Vector3();
+// Beside the ball, because it belongs to the ball and because IT HAS TO EXIST BEFORE THE RENDER
+// LOOP RUNS. It was declared down with the pointer handlers, a thousand lines below the loop that
+// draws it — and `const` does not hoist a value, so every single frame threw on the reference and
+// the whole scene went black. A dead-zone error in a render loop does not degrade, it stops
+// everything.
+//
+// 13 to 17 across: the ball is 9, and a finger on a phone is a great deal wider than that.
+const editHalo = new THREE.Mesh(
+  new THREE.RingGeometry(13, 17, 28),
+  new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.85,
+                                side: THREE.DoubleSide, depthTest: false }));
+editHalo.rotation.x = Math.PI / 2;
+editHalo.visible = false;
+editHalo.renderOrder = 999;
+scene.add(editHalo);
+
 
 const shadowGL = new THREE.Mesh(new THREE.CircleGeometry(9, 18),
   new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.34 }));
@@ -3494,10 +3525,8 @@ function panAllowed(){ return !follow; }   // following overwrites the target ev
 //   A DROP MUST LEAVE A STATE THE ENGINE COULD HAVE REACHED ITSELF — so the ball lands still,
 //   unowned, on the floor, with a brief no-claim window. A ball that appears under a man's feet
 //   and is instantly his is not a placement, it is a gift.
-let editMode = false, grabbed = null;
-const editPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-const editRay = new THREE.Raycaster();
-const editHit = new THREE.Vector3();
+// The state lives up beside the halo, above the render loop — see the note there. Both were
+// declared down here and both were in the temporal dead zone.
 
 /** The button reflects the two things that matter: whether edit mode is ON, and whether it is
  *  even available. Disabled while the match runs, because phase one only moves a ball and a ball
@@ -3518,16 +3547,9 @@ function setEdit(on){
   if (editHalo) editHalo.visible = editMode;
 }
 
-// A ring under the ball while editing, so it is obvious what can be grabbed. 26 across, because
-// the ball is 9 and a finger is a great deal wider than that on a phone.
-const editHalo = new THREE.Mesh(
-  new THREE.RingGeometry(13, 17, 28),
-  new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.85,
-                                side: THREE.DoubleSide, depthTest: false }));
-editHalo.rotation.x = Math.PI / 2;
-editHalo.visible = false;
-editHalo.renderOrder = 999;
-scene.add(editHalo);
+// The halo is built beside the ball, far above — see the note there. Declaring it HERE, below the
+// render loop that uses it, put it in the temporal dead zone: `const` does not hoist a value, so
+// every frame threw on the reference and NOTHING DREW AT ALL.
 
 /** Where on the turf a screen point lands. Null if the ray misses the ground entirely, which it
  *  does when the camera is low and the pointer is above the horizon. */
