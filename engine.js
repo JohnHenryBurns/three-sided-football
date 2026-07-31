@@ -3621,6 +3621,12 @@ function physics(dt){
         const half=e.len*GOAL_HALF, R=4.2;
         const hitPost = Math.abs(Math.abs(aL)-half)<R && aZ<GOAL_H;
         const hitBar  = Math.abs(aZ-GOAL_H)<R && Math.abs(aL)<half+R;
+        // A COUNTER IN THE ENGINE, not in a patched copy. Three measurements today were built on
+        // string anchors that silently failed to match and reported zero — and a zero where zero
+        // is expected confirms whatever you already believe. This one cannot miss.
+        TEL.wwSeen++;
+        TEL.wwNear = Math.min(TEL.wwNear, Math.round(Math.abs(Math.abs(aL)-half)));
+        TEL.wwBar  = Math.min(TEL.wwBar,  Math.round(Math.abs(aZ-GOAL_H)));
         if(hitPost||hitBar){
           ball.woodT=clockSec;
           TEL.woodwork++; if(hitBar) TEL.bars++; else TEL.posts++;
@@ -3942,7 +3948,7 @@ const TEL = {
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0,
+  actFrames:{}, headers:0, shields:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
@@ -3953,20 +3959,20 @@ function telReset(){
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
     jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
     jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-    actFrames:{}, headers:0, shields:0, shields:0, headers:0,
-  actFrames:{}, headers:0, shields:0, backPass:0, restartVoid:0,
+    actFrames:{}, headers:0, shields:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
+  actFrames:{}, headers:0, shields:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, freeKicks:0,
+  actFrames:{}, headers:0, shields:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
     unattributed:0, unattMax:0, portFrame:-1,
   unattributed:0, unattMax:0, portFrame:-1, deflected:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0,
+  actFrames:{}, headers:0, shields:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, woodwork:0, bars:0, posts:0, port:{},
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0,
+  actFrames:{}, headers:0, shields:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
