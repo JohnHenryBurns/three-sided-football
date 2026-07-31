@@ -738,27 +738,44 @@ function stam(p,d){ p.stamina=Math.max(0,Math.min(1,p.stamina+d)); }
 //
 // This is the goalkeeping equivalent of the fetch having no end: the restart cleared, and nobody
 // put the ball back.
-function ballBackInPlay(){
-  if(pendingRestart || freeKick || cornerPending || throwPending || ball.fetch || goalRestart) return;
-  // NO restartHold GUARD. It was here and it blocked the recovery entirely: with nothing pending,
-  // `restartHold` is a stale clock from a restart that already finished, and 5027 frames of a
-  // single match had the ball outside with nothing pending and the hold still in the future.
+function ballOutOfPlayCheck(){
+  // ── OUT OF PLAY IS A STATE, NOT A CROSSING ────────────────────────────────
+  // The out-of-bounds test fires when the ball CROSSES a line. So a ball that is ALREADY
+  // outside — put there by a voided restart, a teleport, or anything that did not cross —
+  // sits in a state the rules do not cover: outside and live at the same time, which should
+  // not be expressible.
   //
-  // If nothing is being staged, the hold means nothing. A hold is for something.
-  
-  let worst=1e9, we=null;
-  for(const e of EDGES){
+  // John photographed it: two men chasing a ball on the sideline that none of them could reach,
+  // because every player is clamped inside the pitch and the ball was not.
+  //
+  // MY FIRST FIX WAS A PATCH — it nudged the ball back onto the field. This is the rule: if the
+  // ball is outside and nothing is being staged, then it is out of play and a restart is due.
+  // No special case, no recovery, and the thrower is assigned because that is what staging does.
+  //
+  // It is the same fault as the woodwork, which cost three sessions: a test asking about a
+  // TRANSITION when it should have asked about a STATE. Crossing tests miss everything that
+  // arrives by other means.
+  if(pendingRestart || freeKick || cornerPending || throwPending || ball.fetch || goalRestart) return;
+  if(ball.owner) return;                       // somebody has it; it is by definition in play
+
+  let worst=1e9, we=null, wk=-1;
+  for(let k=0;k<EDGES.length;k++){
+    const e=EDGES[k];
     const d=(ball.x-e.p1.x)*e.nx + (ball.y-e.p1.y)*e.ny;
-    if(d<worst){ worst=d; we=e; }
+    if(d<worst){ worst=d; we=e; wk=k; }
   }
-  if(worst >= 0 || !we) return;        // it is genuinely outside, however far
-  // ANY DISTANCE, not just a nudge. My first version only moved a ball within 2 of the line —
-  // so a ball fifty units out, which is the case that actually happens, was never recovered and
-  // three seeds got worse. The distance is exactly what has to be handled.
-  const push = (-worst) + 8;           // back inside, clear of the chalk
-  ball.x += we.nx*push; ball.y += we.ny*push;
-  ball.vx = 0; ball.vy = 0; ball.z = 0; ball.zv = 0;   // it stops where it is put
-  TEL.ballRecovered++;
+  if(worst >= 0 || !we) return;                // in play
+
+  TEL.oobState++;
+  // THE STATE MUST BE CLEARED, NOT JUST REPORTED. Calling outOfBounds() alone staged a restart
+  // and left the ball where it was — so the condition was still true next frame and it staged
+  // again, ten thousand times a match. A rule that detects a state has to end it.
+  //
+  // So: bring the ball to the line first, THEN stage from there. The restart gets a legal mark
+  // and the condition is false on the next frame whether the staging succeeded or not.
+  ball.x += we.nx*(-worst+2); ball.y += we.ny*(-worst+2);
+  ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+  if(oobRule) outOfBounds(wk, we);
 }
 
 function clampInside(p,margin){
@@ -3033,7 +3050,7 @@ function physics(dt){
   stepJumps(S);          // heads move before anybody reaches with one
   stepBench();           // and the disgraced watch from the side
   stepRestartWatchdog(); // and no restart may hang the match
-  ballBackInPlay();      // and a live ball may not sit where nobody can reach it
+  ballOutOfPlayCheck();  // outside is out of play, however it got there
   players.forEach(p=>{
     if(p.out)return;
     const pv=Math.hypot(p.vx,p.vy);
@@ -3725,7 +3742,7 @@ const TEL = {
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
@@ -3736,20 +3753,20 @@ function telReset(){
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
     jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
     jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-    actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, ballRecovered:0, intentional:0, incidental:0, incidental:0, foulMissed:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
+    actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, oobState:0, oobState:0, ballRecovered:0, intentional:0, incidental:0, incidental:0, foulMissed:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
     unattributed:0, unattMax:0, portFrame:-1,
   unattributed:0, unattMax:0, portFrame:-1, deflected:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, woodwork:0, bars:0, posts:0, port:{},
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
