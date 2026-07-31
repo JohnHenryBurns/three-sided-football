@@ -1597,6 +1597,36 @@ const PORTED = [
   // The cascade's outlet search, lifted whole. It runs in can() rather than act() because the
   // whole point of a scored list is that a candidate must be found BEFORE the action is chosen —
   // "is there somebody to punt to" is a prerequisite, not part of the punt.
+  // ── THE GOAL KICK ─────────────────────────────────────────────────────────
+  // SCRIPT, because it is a restart, and the machine had no way to END one for a goal kick —
+  // the ball was staged, made unclaimable, and then sat there because nothing could take it.
+  // Loose went to 94%: a ball on the six-yard line for the whole match.
+  { name:'goal-kick', tier:TIER.SCRIPT, ported:true,
+    coach:T => 0,
+    can:p => {
+      if(!pendingRestart || pendingRestart.kind!=='goalkick' || pendingRestart.p!==p) return false;
+      if(ball.owner) return false;
+      const m={x:pendingRestart.x, y:pendingRestart.y};
+      return dist(p,m) <= 20;
+    },
+    score:p => pendingRestart ? ripeness(pendingRestart.at!==undefined?pendingRestart.at:clockSec,
+                                        50 + 70*T(p.team).direct) : 0,
+    act:p => {
+      const f=gkOutlets(p);
+      ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p;
+      if(f.far && f.fd>200){
+        kick(f.far.x+f.far.vx*7, f.far.y+f.far.vy*7,
+             Math.min(9, Math.max(4.2, f.fd/108*1.1)), false);
+        ball.zv=4.6;
+      } else if(f.near){
+        kick(f.near.x+f.near.vx*4, f.near.y+f.near.vy*4,
+             Math.min(6.2, Math.max(2.4, f.nd/66*1.15)), false);
+      } else kick(CX, CY, 8);
+      ball.owner=null;
+      pendingRestart=null;
+      TEL.goalKicks=(TEL.goalKicks||0)+1;
+      return true;
+    } },
   { name:'gk-punt', tier:TIER.PLAYER, ported:true,
     coach:T => T.direct*80,
     can:p => {
@@ -2284,7 +2314,15 @@ const INSTRUCTIONS = [
     } },
 
   { name:'carrying it to the mark', tier:TIER.SCRIPT, base:958,
+    // ── AND ONLY IF THE BALL IS NOT ALREADY THERE ─────────────────────────
+    // Without this the goal kick loops: the ball is placed ON the mark, the keeper standing
+    // beside it claims it, THIS fires and carries it to where it already is, places it, releases
+    // it — and he claims it again. Loose fell to 3% because the ball was owned all match.
+    //
+    // A man carrying a ball to a mark has a reason to be carrying it. If the ball is on the mark
+    // there is nothing to carry.
     applies:p => !!(pendingRestart && pendingRestart.p===p && ball.owner===p
+                    && dist(ball, {x:pendingRestart.x, y:pendingRestart.y}) > 14
                     && !p.out && !p.sentOff),
     score:p => 958,
     act:p => {
@@ -3435,7 +3473,15 @@ function physics(dt){
     if(ball.clearT&&clockSec<ball.clearT) return;            // a clearance in flight escapes the furnace
     players.forEach(p=>{ if(p.out||p.sentOff)return; if(p===ball.noClaim&&ball.noClaimF>0)return;
       if(suppress&&suppress.team===p.team&&clockSec<suppress.until)return;
-      if(ball.z>(p.role==="K"?28:12))return;   // sailing over their heads
+    if(ball.z>(p.role==="K"?28:12))return;   // sailing over their heads
+
+    // ── A BALL ON A RESTART MARK IS NOT CLAIMABLE ─────────────────────────
+    // It is placed and waiting for its taker. Without this the nearest man picks it up — which
+    // for a goal kick is the keeper standing beside it — and the restart machine cycles him
+    // through carry-and-place forever.
+    //
+    // Only the taker may touch it, and he does so by taking the restart, not by claiming.
+    if(pendingRestart && dist(ball,{x:pendingRestart.x, y:pendingRestart.y}) < 16) return;
       const sx=ball.x-px0, sy=ball.y-py0, sl=sx*sx+sy*sy;
       let t=sl>0?((p.x-px0)*sx+(p.y-py0)*sy)/sl:0;
       t=Math.max(0,Math.min(1,t));
@@ -4787,11 +4833,20 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
 function stageGoalKick(t){
   const gk=players.find(q=>q.team===t&&q.role==="K"&&!q.out);
   if(!gk){ telPort('goal kick: no keeper'); ball.x=CX; ball.y=CY; return; }
-  ball.owner=gk; ball.lastTouch=t; ball.lastKicker=gk;
+  ball.owner=null; ball.lastTouch=t; ball.lastKicker=gk;
   // THE GOAL KICK. Untagged until now, which is a large part of the fourteen teleports the
   // report could see but not name: the ball is lifted from wherever it went out and placed on
   // the keeper, which from the far corner is most of the width of the pitch.
-  telPort('goal kick'); ball.x=gk.x; ball.y=gk.y; ball.touchT=0.4;
+  // ── THE LAST TELEPORT ─────────────────────────────────────────────────────
+  // This put the ball in the keeper's gloves wherever he stood. John: "he'll be on the right
+  // side of the goal, there's a shot wide of the left, and suddenly the keeper is holding it."
+  // A save that never happened.
+  //
+  // The ball goes on the six-yard line and he walks to it, like every other restart.
+  const og9=goalCenter(t);
+  const gkSpot={ x: og9.x + (CX-og9.x)*0.15, y: og9.y + (CY-og9.y)*0.15 };
+  ball.x=gkSpot.x; ball.y=gkSpot.y; ball.z=0; ball.vx=0; ball.vy=0; ball.zv=0; ball.touchT=0.4;
+  pendingRestart={ kind:'goalkick', at:clockSec, p:gk, x:gkSpot.x, y:gkSpot.y, team:t };
   ENGINE_HOOKS.spawnNote(gk.x,gk.y-24,"goal kick",TEAMS[t].color,TEAMS[t].accent);
   if(RNG_COS()<0.35) sayLogged(pick([
     `Behind for a goal kick — ${tm(t)} restart.`,
