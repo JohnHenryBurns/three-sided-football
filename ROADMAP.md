@@ -149,6 +149,46 @@ a second while a restart is being set up. A man who is walking somewhere should 
 walking there; flicker means two instructions are trading a player frame by frame, and it
 reads as indecision.
 
+### Unreachable targets and oscillating predicates — the full audit
+
+**John's distinction, and it is the one that matters:** a threshold that **completes**
+something must be reachable; a threshold that **classifies** a state needs hysteresis. Some
+need both, and applying the wrong one makes things worse — raising `standing over it` from
+8 to 16 moved the boundary he sits on and cost two goals a match.
+
+**Measured: 11,183 predicate flips a match across 28 instructions.**
+
+```
+7505  standing over it        <- ten times the next worst
+ 741  showing for a throw     (already hysteresised)
+ 682  pushing up
+ 348  chasing at pace
+ 331  closing it down
+```
+
+**Twenty-two bare distance thresholds exist in predicates.** By type:
+
+```
+COMPLETION — must be reachable
+  fetching the ball 12   carrying it to the mark 14   standing over it 12
+  corner-swing 12   throw-in 12   penalty 12/26   goal-kick 20   penalty guess 12
+
+CLASSIFICATION — needs hysteresis
+  denying a throw 150   intercepting 120   holding the line 55   coming for it 55
+  sweeping 190   gk-roll 110   gk-clear 110   clearing his lines 82
+  intentional foul 30   tackle 26   staying up 260   dive 260   head it 11
+```
+
+**Attempted and reverted:** making arrival a latched state (`p.__atSpot`, reachable at 18,
+cleared on a new restart). **Flips fell 41% and `standing over it` left the top four — and
+goals fell 6.5 → 2.2 with loose at 97%.** Once he has arrived the instruction stops applying
+and *nothing holds him there*, so he wanders off the mark and the restart never completes.
+
+**The missing piece: a latched arrival needs a `staying there` behaviour**, not just a
+predicate that goes quiet. Either the instruction keeps applying and its `act()` becomes a
+hold, or a lower-tier instruction has to be a sensible place to fall to. That is the design
+question to settle before trying again.
+
 **2. Too many throw-ins, and the cause is passing.** A pass that goes out is a pass that
 should not have been played. `bestPass` scores on ground gained, lane, and crowding — **it
 does not ask whether the ball will still be on the pitch when it arrives.** Adding a
