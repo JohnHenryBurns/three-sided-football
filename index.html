@@ -480,7 +480,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=204"></script>
+<script src="engine.js?v=205"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -620,7 +620,13 @@ function utter(text, cap, isGoal){
     // Only drain if nothing is already deferred: a cancelled utterance fires onend too, and
     // without this guard that ghost drains the queue ahead of the goal it was cancelled for.
     if (highQ.length && !pendingHigh) {
-      const nxt = highQ.shift();
+      // drop anything that has been waiting too long to still be true
+      let nxt = null;
+      while (highQ.length) {
+        const c = highQ.shift();
+        if (performance.now() - (c[3] || 0) < 4500) { nxt = c; break; }
+      }
+      if (!nxt) { speakingPrio = null; return; }
       highLockUntil = performance.now() + 2000;
       setTimeout(() => {
         try { speakingPrio = 'high'; speechSynthesis.speak(utter(nxt[0], nxt[1], nxt[2])); }
@@ -657,7 +663,17 @@ function announce(html, big){
   if (big) {
     highLockUntil = now + 2000;        // the mic belongs to the big calls
     if (speakingPrio === 'high' || pendingHigh || highQ.length) {
-      if (highQ.length < 4) highQ.push([text, cap, isGoal]);   // in order, never clobbered
+      if (highQ.length < 4) highQ.push([text, cap, isGoal, performance.now()]);   // in order, never clobbered
+        // ── AND A QUEUED CALL GOES STALE ──────────────────────────────────
+        // John asked whether blocked lines time out. They did not. A goal call takes about 3.4
+        // seconds to speak and the queue holds four, so the last one starts SEVEN AND A HALF
+        // SECONDS after it was queued and describes football that finished long ago.
+        //
+        // Nothing was wrong with the ordering — a goal should not be clobbered by its own
+        // follow-ups, which is why the queue exists. The fault is that it had no memory of WHEN.
+        //
+        // 4.5 seconds. Long enough that a goal call still lands behind a previous goal call,
+        // short enough that nobody hears about a shot from two possessions ago.
       return;
     }
     if (speechSynthesis.speaking || speechSynthesis.pending) {
