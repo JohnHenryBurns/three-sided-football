@@ -83,6 +83,40 @@ backwards**, which is the first thing a real side does when the front is blocked
 can receive them. **Measured on:** `contested` (the 56% figure), possession length, and
 goals — which should not fall.
 
+## The keeper's phantom save — diagnosed, not fixed
+
+**John:** *"the goalie grabs a ball he was nowhere near. He'll be on the right side of the
+goal, there's a shot wide of the left that wasn't going in anyway, and suddenly the keeper
+is holding the ball."*
+
+**It is not a save. It is the goal kick.**
+
+```js
+stageGoalKick:  ball.owner = gk;  ball.x = gk.x;  ball.y = gk.y;
+```
+
+A shot wide crosses the goal line, a goal kick is awarded, and **the ball appears in his
+gloves wherever he happens to be standing.** It reads as a save that never happened, and it
+is **the last teleport in the game** — throws and corners were put on the state machine,
+goal kicks never were.
+
+**The fix is obvious and did not work.** Placing the ball on the six-yard line and letting
+him walk to it gave:
+
+```
+              goals   loose
+before          2.7     60%
+placed          1.2     24%
+```
+
+**Loose at 3–8% on four seeds means the ball is owned almost always** — the keeper reaches
+it, picks it up, and the carry/place cycle loops. Same class of fault the throw had before
+its trace, and it wants the same treatment: **trace one goal kick stage by stage** rather
+than reason about it.
+
+**Reverted.** The teleport stays until the replacement works, because a phantom save is
+better than a keeper holding the ball for the whole match.
+
 ## Still owed, in order
 
 **1. The loose ball.** Above. Everything else waits.
