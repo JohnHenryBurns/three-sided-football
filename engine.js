@@ -1785,7 +1785,16 @@ const PORTED = [
       //
       // Every other restart action was aligned to 22 when this fault appeared at the throw. This
       // one was missed because no goal kick had completed yet to expose it.
-      return dist(p,m) <= 22;
+      // ── MEASURE THE SAME THING `pending the kick` MEASURES ────────────────
+      // This measured to the MARK while pending holds him at his SPOT — and restartSpot() puts a
+      // taker 22 units FROM the mark. So pending parked him exactly on this boundary and he sat
+      // at 23: held in position by one rule, one unit too far for the other.
+      //
+      // The goal kick ran 40,110 frames in a 10,800-frame match. Four times the length of the
+      // game, on a two-unit disagreement about what to measure.
+      //
+      // Both now measure the distance to his spot, which is the thing that is actually held.
+      return dist(p, restartSpot(p)) <= 22;
     },
     score:p => pendingRestart ? ripeness(pendingRestart.at!==undefined?pendingRestart.at:clockSec,
                                         50 + 70*T(p.team).direct) : 0,
