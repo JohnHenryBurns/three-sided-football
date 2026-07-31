@@ -45,6 +45,44 @@ competing against `finding space` and `the back line`, which are also PLAYER tie
 holding its shape outscores a side going for the ball. That is a weight question and the
 first honest one available, now that nothing is hiding behind a cascade.
 
+## Next: less passing, better passing
+
+**John, watching:** *too much passing, and too much bad passing into contested territory.
+Players bunch up and kick into a scrum. I want more space and smarter play.*
+
+**Three incremental adjustments — not a redesign.**
+
+### 1. Dribbling weighted up
+
+`carrying it` is a positional instruction and the no-op is what lets it run. So the lever
+is the **pass weights**, not the dribble: `pass` at 320 and `pass-safe` at 460 against
+`PLAY_ON_WEIGHT` 2800 means a carrier passes on ~10% and ~14% of frames respectively. **A
+possession lasts about eight frames before he lets go.**
+
+Lower them and he carries longer. That is the whole of "weight dribbling higher".
+
+### 2. A pass must not go into a scrum
+
+`bestPass` scores on ground gained toward the target goal, minus 500 for a blocked lane.
+**It does not ask how crowded the receiver is.** A man forty yards forward with three
+opponents around him scores well on gain and gets the ball.
+
+Add a crowding term: count opponents within ~45 of the candidate and penalise. **A pass to
+a covered man should lose to a pass to a free one, even if the free one is square.**
+
+### 3. `pass backwards` — a new action
+
+`can()` fires when **the way forward is crowded**: opponents in the forward arc, no
+open lane ahead. `act()` finds the best mate BEHIND the ball and plays it there.
+
+This is the option the engine has never had. A carrier under pressure today can shoot,
+hoof, shield, or pass forward into trouble — **there is no way to keep the ball by going
+backwards**, which is the first thing a real side does when the front is blocked.
+
+**Expected:** fewer passes, longer possessions, and the ones that happen going to men who
+can receive them. **Measured on:** `contested` (the 56% figure), possession length, and
+goals — which should not fall.
+
 ## Still owed, in order
 
 **1. The loose ball.** Above. Everything else waits.
