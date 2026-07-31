@@ -931,6 +931,14 @@ function restartSpot(p){
 }
 
 function holdingPlay(){
+  // A FETCH RECORD WITHOUT A RESTART IS RUBBISH, NOT A HOLD. corner-swing cleared
+  // pendingRestart and left ball.fetch set — and holdingPlay reads ball.fetch, so play was held
+  // for 175 SECONDS by a restart that had already been taken. The corner worked and the match
+  // stopped anyway.
+  //
+  // Clearing it here rather than at every site that ends a restart: there are five of those and
+  // this is the one place that cares.
+  if(ball.fetch && !pendingRestart) ball.fetch=null;
   if(nowMs() >= restartHold) return false;
   return !!(pendingRestart || freeKick || cornerPending || throwPending || goalRestart || ball.fetch);
 }
@@ -1329,7 +1337,7 @@ const PORTED = [
       kick(cx2, cy2, 11.5, false);
       ball.zv=3.6;                                              // it swings in high
       ball.owner=null;
-      pendingRestart=null; cornerPending=null; cornerTaker=null; // the corner is over
+      pendingRestart=null; cornerPending=null; cornerTaker=null; ball.fetch=null;  // over
       justDelivered={p, at:clockSec};
       return true;
     } },
@@ -1947,7 +1955,15 @@ function runAction(p){
   //
   // THE FETCHER IS UNLOCKED UNTIL HE HAS FETCHED. After that he locks like everybody else,
   // unless he is also taking it.
-  if(pendingRestart && !restartFree(p)) return false;
+  // ── AND THE TAKER MAY ONLY TAKE THE RESTART ──────────────────────────────
+  // He is free to ACT, but only to act on the restart. Being merely unlocked let his ordinary
+  // actions fire: he walked 146 units to the ball, picked it up, and PASSED IT 247 UNITS AWAY —
+  // then chased it again. That is the corner loop, and it is why four other fixes moved nothing.
+  //
+  // A man taking a corner is taking a corner. He is not choosing between that and a through
+  // ball.
+  const inRestart = !!pendingRestart;
+  if(inRestart && !restartFree(p)) return false;
   const list = ACTIONS_LIVE ? ACTIONS.concat(PORTED) : ACTIONS;
   const T9 = TACTICS(p.team);
 
@@ -1961,7 +1977,9 @@ function runAction(p){
   }
   if(!avail.length) return false;
 
-  const pool = avail.filter(x=>x.t===topTier);
+  // during a restart only SCRIPT actions are available — the restart itself, and nothing else
+  const pool = avail.filter(x=>x.t===topTier && (!inRestart || x.t===TIER.SCRIPT));
+  if(inRestart && !pool.length) return false;
   let total = 0;
   const weights = pool.map(x=>{
     // the coach weights every action rather than owning a tier, which is John's correction
