@@ -5585,7 +5585,18 @@ function ambientChatter(){
   const line=pick(fresh);
   recentChatter.push(line); if(recentChatter.length>8) recentChatter.shift();
   lastChatterAt=rt;
-  speak(line,"low");
+  // ── THE FILLER COMMENTARY WAS CALLING A FUNCTION THAT DOES NOT EXIST ──────
+  // `speak(line,"low")` lives in flat.html and dev.html. When the 3D page became the live one it
+  // brought the whole priority system with it under a different name — `say(html, big)` — and
+  // the chatter kept calling the old one. It has thrown on every attempt since.
+  //
+  // So the family lore, the stadium jokes, the wasteland riffs: all of it, silent, for as long
+  // as index.html has been the game.
+  //
+  // sayLogged routes through ENGINE_HOOKS.say, which is the page's priority machinery: a big
+  // call holds the microphone for two seconds, high calls queue in order rather than clobbering
+  // each other, and low speech never speaks in the shadow of a goal. `big` false is the low lane.
+  sayLogged(line, false);
 }
 function outOfBounds(k,e){
   // ── ONE STAGING PER BALL-OUT ──────────────────────────────────────────────
