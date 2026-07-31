@@ -485,7 +485,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=217"></script>
+<script src="engine.js?v=218"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -3563,6 +3563,21 @@ function overBall(clientX, clientY){
   return !!t && Math.hypot(t.x - ball.x, t.y - ball.y) < 34;
 }
 
+/** The nearest man to a screen point, or null. 30 units, slightly tighter than the ball's 34 so
+ *  that a finger between the two takes the ball — the ball is the smaller target and the one you
+ *  are more likely to be aiming at. */
+function playerAt(clientX, clientY){
+  const t = turfAt(clientX, clientY);
+  if (!t) return null;
+  let best = null, bd = 30;
+  for (const p of players) {
+    if (p.sentOff) continue;
+    const d = Math.hypot(t.x - p.x, t.y - p.y);
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best;
+}
+
 let drag = null, pinch = 0, touching = 0;
 cv.addEventListener('touchstart', e => { touching = e.touches.length; }, { passive: true });
 cv.addEventListener('touchend',   e => { touching = e.touches.length; }, { passive: true });
@@ -3570,10 +3585,18 @@ cv.addEventListener('pointerdown', e => {
   // ── EDIT MODE TAKES THE POINTER FIRST ─────────────────────────────────────
   // Only if the finger actually landed on the ball. Anywhere else on the pitch still orbits the
   // camera, because a mode that steals every gesture is a mode you cannot see out of.
-  if (!running && overBall(e.clientX, e.clientY)) {
-    grabbed = 'ball';
-    cv.setPointerCapture(e.pointerId);
-    return;
+  if (!running) {
+    if (overBall(e.clientX, e.clientY)) {
+      grabbed = 'ball';
+      cv.setPointerCapture(e.pointerId);
+      return;
+    }
+    const p = playerAt(e.clientX, e.clientY);
+    if (p) {
+      grabbed = p;
+      cv.setPointerCapture(e.pointerId);
+      return;
+    }
   }
   drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId);
 });
@@ -3586,6 +3609,23 @@ cv.addEventListener('pointerup', () => {
     ball.vx = 0; ball.vy = 0; ball.z = 0; ball.zv = 0;
     ball.owner = null; ball.isShot = false; ball.flameShot = false;
     ball.noClaim = null; ball.noClaimF = 20;
+    grabbed = null;
+  } else if (grabbed) {
+    // ── WHAT A DROP MEANS ─────────────────────────────────────────────────
+    // The question the plan left open, answered: A HELD OVERRIDE WITH A DECAY.
+    //
+    // A snapshot would have been honest and unsatisfying — the instruction list reclaims him
+    // within two seconds and he walks straight back to his line, so placing a man would look
+    // like it did nothing.
+    //
+    // Instead he STAYS WHERE HE WAS PUT for a few seconds, and gives it up early if the football
+    // demands it: the ball comes near, or he is the man his side needs. That is what a coach's
+    // instruction actually is — a strong suggestion with a shelf life, not a command.
+    //
+    // The engine reads `heldUntil`; index.html only writes it. Nothing here decides football.
+    grabbed.vx = 0; grabbed.vy = 0;
+    grabbed.heldX = grabbed.x; grabbed.heldY = grabbed.y;
+    grabbed.heldUntil = clockSec + 6;
     grabbed = null;
   }
   drag = null;
@@ -3619,9 +3659,12 @@ cv.addEventListener('pointermove', e => {
   // ── THE BALL FOLLOWS THE FINGER ───────────────────────────────────────────
   // Before the camera gets a look, and it returns rather than falling through: a drag that both
   // moved the ball and orbited the camera would be unusable.
-  if (grabbed === 'ball') {
+  if (grabbed) {
     const t = turfAt(e.clientX, e.clientY);
-    if (t) { ball.x = t.x; ball.y = t.y; ball.z = 0; ball.vx = 0; ball.vy = 0; }
+    if (t) {
+      if (grabbed === 'ball') { ball.x = t.x; ball.y = t.y; ball.z = 0; ball.vx = 0; ball.vy = 0; }
+      else { grabbed.x = t.x; grabbed.y = t.y; grabbed.vx = 0; grabbed.vy = 0; }
+    }
     return;
   }
   // the ball follows the finger, clamped to the stadium so it cannot be put in the car park
