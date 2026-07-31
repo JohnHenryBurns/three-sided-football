@@ -149,7 +149,44 @@ a second while a restart is being set up. A man who is walking somewhere should 
 walking there; flicker means two instructions are trading a player frame by frame, and it
 reads as indecision.
 
-### `pending the kick` — traced, one gate found, still not shipped
+### `pending the kick` — three attempts, and the blocker is now isolated
+
+**Not shipped.** Main runs without it: `standing over it` from 8, ripening in the action's
+`score()`, goals 7.0, throws 19.
+
+**What each attempt established:**
+
+```
+                                    flips/match   goals   throws
+baseline (no pending)                    11,183     7.0      19
+pending, standing at 18                  32,993     2.2       9
+pending + can() guard on standing        68,701     2.8       8
+pending + guard + no ball-chasing         6,396     2.5       5
+ball-chasing guard ALONE, no pending          —     2.5       5
+```
+
+**The last row is the finding.** John's ball-chasing guard — eleven instructions that follow
+the ball, none of which excluded a pending restart — **causes the damage on its own.**
+`pending the kick` is not the culprit and never was.
+
+**Why the guard starves the game:** during a restart nobody may chase, and restarts are
+long. Loose hits 98% because the ball spends the setup unowned *and* unchased, so the
+moment it comes back into play there is nobody near it.
+
+**And the churn result stands:** the guard cut flips from 68,701 to 6,396 — **43% below
+baseline.** John's diagnosis was right about the cause of the churn; it is the cure that has
+a side-effect.
+
+**What that suggests:** the guard should exclude only the instructions that would draw a man
+*to the ball itself* — `closing it down`, `chasing at pace`, `intercepting`, `coming for it`
+— and leave the shape-holding ones alone. `the back line`, `finding space` and `holding the
+line` position relative to the ball but do not converge on it, and blocking those is
+probably what emptied the pitch.
+
+**Also unresolved:** with `standing over it` guarded off at 22, `pending the kick` ran
+**zero** frames — he never reached 22, so nothing took over. The two thresholds do not meet.
+
+### Superseded: traced, one gate found
 
 **The trace finally, and it found a real bug that predates the pending work.**
 
