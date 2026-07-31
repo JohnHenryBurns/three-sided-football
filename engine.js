@@ -1495,7 +1495,7 @@ const PORTED = [
       if(pendingRestart.kind!=='corner') return false;
       const m={x:pendingRestart.x, y:pendingRestart.y};
       if(dist(ball,m) > 12) return false;
-      if(dist(p, restartSpot(p)) > 16) return false;   // a swing needs room, not precision
+      if(dist(p, restartSpot(p)) > 22) return false;   // matches `pending the kick`
       return true;
     },
     score:p => pendingRestart ? ripeness(pendingRestart.at !== undefined ? pendingRestart.at : clockSec,
@@ -1537,7 +1537,7 @@ const PORTED = [
       if(pendingRestart.kind && pendingRestart.kind!=='throw') return false;
       const m={x:pendingRestart.x, y:pendingRestart.y};
       if(dist(ball,m) > 12) return false;
-      if(dist(p, restartSpot(p)) > 10) return false;
+      if(dist(p, restartSpot(p)) > 22) return false;   // matches `pending the kick`
       // ── NO SHAPE GATE ON A THROW ──────────────────────────────────────────
       // John: sidesSet should matter for a kick-off, not for throws or corners.
       //
@@ -2552,13 +2552,40 @@ const INSTRUCTIONS = [
       return true;
     } },
 
+  // ── PENDING THE KICK ──────────────────────────────────────────────────────
+  // The taker's own state once he is over the ball, and where the waiting belongs. It outranks
+  // `standing over it` so the overlap resolves cleanly rather than oscillating: a man inside 22
+  // is pending, full stop.
+  { name:'pending the kick', tier:TIER.SCRIPT, base:962,
+    label:p => pendingRestart && pendingRestart.kind==='throw' ? 'pending the throw'
+             : pendingRestart && pendingRestart.kind==='corner' ? 'pending the corner'
+             : 'pending the kick',
+    applies:p => {
+      if(!pendingRestart || pendingRestart.p!==p || p.out || p.sentOff) return false;
+      if(ball.owner) return false;
+      const m={x:pendingRestart.x, y:pendingRestart.y};
+      if(dist(ball,m) > 12) return false;
+      return dist(p, restartSpot(p)) <= 22;
+    },
+    score:p => 962,
+    act:p => {
+      const q=restartSpot(p), d=dist(p,q);
+      if(d > 6) steer(p, q.x, q.y, 1.1); else { p.vx*=0.55; p.vy*=0.55; }
+      const bx=ball.x-p.x, by=ball.y-p.y, bl=Math.hypot(bx,by)||1;
+      p.hx=p.hx*0.8+(bx/bl)*0.2; p.hy=p.hy*0.8+(by/bl)*0.2;
+      return true;
+    } },
   { name:'standing over it', tier:TIER.SCRIPT, base:956,
     applies:p => {
       if(!pendingRestart || pendingRestart.p!==p || p.out || p.sentOff) return false;
       if(ball.owner) return false;
       const m={x:pendingRestart.x, y:pendingRestart.y};
       if(dist(ball,m) > 12) return false;              // the ball is not on the mark yet
-      return dist(p, restartSpot(p)) > 8;              // and he is not yet behind it
+      // He walks until he is there and hands over to `pending the kick`. The two thresholds must
+      // MEET: this stops at 18, that starts at 22, so there is overlap and no gap to fall
+      // through. An earlier version guarded this off at 22 and pending never applied, because he
+      // never got that close.
+      return dist(p, restartSpot(p)) > 18;
     },
     score:p => 956,
     act:p => { const q=restartSpot(p); steer(p, q.x, q.y, 2.6); return true; } },
@@ -3401,9 +3428,32 @@ const INSTRUCTIONS = [
 // cascade won only when nothing applied, exactly as before, and the extra comparison added
 // nothing but churn. Reverted.
 /** Score every instruction that applies, favour the one he is on, run the winner. */
+// ── DURING A RESTART, NOBODY CHASES — BUT EVERYBODY MOVES ───────────────────
+// John's design, refined. The first version blocked all eleven ball-following instructions and
+// emptied the pitch: nobody chased and nobody positioned either, so the ball came back into
+// play with no one near it.
+//
+// The distinction is CONVERGING on the ball versus POSITIONING relative to it.
+//
+//   BLOCKED   closing it down, chasing at pace, intercepting, coming for it, prowling,
+//             sweeping — these all draw a man TO the ball, and the ball is dead.
+//
+//   ALLOWED   the back line, finding space, holding the line, the bus, holding the counter —
+//             these read the ball's position to decide where to STAND. That is exactly what a
+//             side should be doing while a throw is being set up.
+//
+// And John's larger point: the setup time is not dead time. It is when a defence retreats and
+// an attack spreads. A restart that takes three seconds and produces a shape is worth more than
+// one taken instantly into a scrum — the goal count can be recovered later by nerfing the
+// keeper, and the shape cannot be recovered by tuning anything.
+const BALL_CHASING = new Set([
+  'closing it down','chasing at pace','intercepting','coming for it','prowling','sweeping'
+]);
+
 function runInstruction(p){
   let best=null, bestScore=-1e9;
   for(const I of INSTRUCTIONS){
+    if(pendingRestart && BALL_CHASING.has(I.name)) continue;   // the ball is dead
     if(!I.applies(p)) continue;
     // Tier plus the instruction's own score, UNCLAMPED — clamping would make every band a wall,
     // and the bottom two are meant to be crossable.
@@ -3412,7 +3462,7 @@ function runInstruction(p){
     if(sc>bestScore){ bestScore=sc; best=I; }
   }
   if(!best) return false;                        // the cascade won, fairly
-  job(p, best.name, best.tier);
+    job(p, (best.label ? best.label(p) : best.name), best.tier);
   return best.act(p)!==false;
 }
 
