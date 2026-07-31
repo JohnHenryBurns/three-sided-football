@@ -2192,7 +2192,16 @@ const PORTED = [
     // 320 -> 210. At 320 a carrier passed on 10% of frames and a possession lasted about eight
     // frames; at 210 it is 7% and about fourteen. He carries longer, which is what "weight
     // dribbling higher" means when the dribble is the no-op.
-    score:p => 210,
+    // ── 210 -> 74 ─────────────────────────────────────────────────────────
+    // Median possession was FIVE FRAMES. 0.08 seconds. 81% of possessions ended inside half a
+    // second, which is why John never sees a player's name annotation — nobody holds the ball
+    // long enough to be worth naming.
+    //
+    // At 210 against a 2800 no-op a carrier passed on 7% of frames, so a possession lasted
+    // fourteen frames by arithmetic and five in practice once every other release is counted.
+    // At 74 it is 2.6%, and he keeps it for about forty frames — two thirds of a second of
+    // actually having the ball, with room for a touch, a look, and a decision.
+    score:p => 74,
     act:p => {
       const best=bestPass(p);
       if(!best) return false;
@@ -2260,7 +2269,7 @@ const PORTED = [
     },
     // 460 -> 380. Still the most eager thing in the list, because a man pinned on the touchline
     // should be looking to escape — but not so eager that being near a wall means passing.
-    score:p => 380,
+    score:p => 150,   // pinned on a wall is still a reason to move it, but not a reflex
     act:p => {
       let best=null, bs=1e9;
       players.forEach(m=>{
@@ -2356,6 +2365,71 @@ const ACTIONS = [
   //
   // It costs him: shielding is standing still, so it buys safety and gives up ground. That is
   // the trade, and an action without a cost is a reflex.
+  // ── BEATING HIS MAN ───────────────────────────────────────────────────────
+  // John: fakes with sprints past a defender, and the defender gets a `fooled` state that lets
+  // the dribbler break around him.
+  //
+  // A carrier with ONE defender close drops a shoulder and goes. It costs burst — 0.45, the most
+  // expensive thing in the game — and it is not free in outcome either: a good defender is not
+  // fooled, and then the legs are spent for nothing.
+  //
+  // WHETHER IT WORKS IS A CONTEST OF RATINGS, not a dice roll. So a Nasty side's defenders get
+  // beaten less often than their tackling alone would suggest, and a great dribbler is worth
+  // watching.
+  //
+  // He keeps the ball either way — this is a duel, not a release.
+  // ── FOOLED ────────────────────────────────────────────────────────────────
+  // John's other half. A defender who has been beaten does not simply carry on defending — he is
+  // going the wrong way, and for about a second he is out of the play.
+  //
+  // SCRIPT tier, because being beaten is not a decision. He drifts the way he was sent and
+  // cannot chase, tackle or intercept while it lasts — which is what gives the dribbler room to
+  // break, rather than a speed number that would beat everybody equally.
+  { name:'fooled', tier:TIER.SCRIPT, base:900,
+    can:p => !!(p.fooled && clockSec < p.fooled && !p.out && !p.sentOff),
+    score:p => 900,
+    act:p => {
+      // carried the wrong way by his own momentum, slowing
+      p.vx *= 0.94; p.vy *= 0.94;
+      if(RNG_COS() < 0.02) ENGINE_HOOKS.spawnNote(p.x, p.y-24, "wrong way!", "#8fa0ae");
+      return true;
+    } },
+  { name:'beating his man', tier:TIER.PLAYER, base:300,
+    can:p => {
+      if(ball.owner!==p || p.role==='K' || !onPitch(p)) return false;
+      if(p.burst < 0.45) return false;
+      if(p.beatUntil && clockSec < p.beatUntil) return false;
+      let n2=0;
+      players.forEach(o=>{ if(o.team===p.team||!onPitch(o)||allied(p.team,o.team)) return;
+        if(dist(o,p) < 34) n2++; });
+      return n2===1;                                   // one man is a duel; two is a trap
+    },
+    score:p => 300,
+    act:p => {
+      let d=null;
+      players.forEach(o=>{ if(o.team===p.team||!onPitch(o)||allied(p.team,o.team)) return;
+        if(dist(o,p) < 34) d=o; });
+      if(!d){ steer(p, ball.x, ball.y, 2.2); return true; }
+      p.burst -= 0.45;
+      p.beatUntil = clockSec + 2.4;
+      const rk=(p.rating||0.5), dk=(d.rating||0.5);
+      TEL.beats=(TEL.beats||0)+1;
+      if(RNG() < 0.34 + 0.42*(rk-dk)){
+        d.fooled = clockSec + 1.1;                     // he has bought himself a second
+        p.sprint = { why:'beat', blaze:RNG_COS()<0.35 };
+        TEL.beatsWon=(TEL.beatsWon||0)+1;
+        sayLogged(`${p.name} drops a shoulder and goes past ${d.name}!`);
+        ENGINE_HOOKS.spawnNote(p.x, p.y-26, "beats him!", TEAMS[p.team].color);
+      } else {
+        stam(p,-0.04);
+        ENGINE_HOOKS.spawnNote(p.x, p.y-26, "shows him the ball", "#8fa0ae");
+      }
+      // and he carries on, past him if it worked
+      const t9=targets[p.team];
+      const g9=(t9===null||t9===undefined)?{x:CX,y:CY}:goalCenter(t9);
+      steer(p, g9.x, g9.y, 2.7);
+      return true;
+    } },
   { name:'shield it', tier:TIER.PLAYER, base:430,
     can:p => {
       if(ball.owner!==p || !onPitch(p)) return false;
@@ -3295,7 +3369,7 @@ const INSTRUCTIONS = [
   { name:'the back line', tier:TIER.PLAYER, base:380,
     applies:p => p.role==='D' && !p.out && !p.sentOff && targets[p.team]!==null
               && p!==chaser[p.team],
-    score:p => 380,
+    score:p => 150,   // pinned on a wall is still a reason to move it, but not a reflex
     act:p => {
       const own=goalCenter(p.team), TT=T(p.team);
       // onPitch: a sent-off defender still in the array shifted every remaining man's slot,
