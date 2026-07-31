@@ -745,7 +745,42 @@ prerequisite, a rate is a score, and anything that rolls dice in `can()` is char
 actions a match.** John's Mayhem target needs ~40 fouls, which needs ~200 actions. The
 lever is not the foul weights and never was; it is how often any action fires at all.
 
-## The throw-in cannot fire, and I have not fixed it
+## The throw-in fires — the trace found it in one run
+
+**Traced end to end, as I should have three attempts ago:**
+
+```
+f139   pr:-            fetch:y  hold:y      restart staged
+f191   pr:got/placed   fetch:y  hold:y      got it and placed it
+f203   pr:none  throwP:y  owner:y  hold:y   throwPending set — AND HE OWNS THE BALL
+f674   pr:none  throwP:y  owner:y  hold:n   hold expires, still nothing
+f1236  pr:none  throwP:n  owner:n           cleared 1033 frames later
+```
+
+**He owns the ball at f203.** So the "ownership fix" I tried was solving a problem that
+does not exist — which is why it made things worse. `can()` passes fine.
+
+**It is the score.** `restartSince` was read by two `score()` functions and set by nothing,
+so `ripeness((clockSec-clockSec)^2 * rate)` was permanently **zero**. The throw could never
+win a lottery, and he stood over the ball for seventeen seconds until something else
+cleared him.
+
+```
+                held%   freeze   throws
+before           15%     9.8s      0
+after             6%     7.2s      0.5
+```
+
+**The first throw-in ever taken by the action system.** Freeze down 27%.
+
+**Possession dropped from 15% to 6%**, which is inside the 0–49% range every measurement
+has shown this session — so it may be noise, and it may not. It wants more seeds before
+anyone believes either way.
+
+**And on the ball's z:** it is `0.0` at the mark, so the placement is correct. The floating
+is during the *carry*, where `z=6` is deliberate — a carried ball is held, not rolled.
+
+## STILL OWED — the ledger
 
 John, from the browser: *the fetcher keeps "carry it" while wandering, the ball floats at
 the mark, the throw never happens.*
