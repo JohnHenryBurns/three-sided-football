@@ -4703,7 +4703,7 @@ const TEL = {
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, holds:0, holdFrames:0, holdLongest:0, spells:0, spellFrames:0, spellLongest:0, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
@@ -4714,8 +4714,8 @@ function telReset(){
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
     jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
     jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-    actFrames:{}, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, carryTimeout:0, hitWall:0, hitWall:0, throwsTaken:0, throwsTaken:0, ballRecovered:0, oobState:0, oobState:0, ballRecovered:0, intentional:0, incidental:0, incidental:0, foulMissed:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
-  actFrames:{}, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
+    actFrames:{}, holds:0, holdFrames:0, holdLongest:0, spells:0, spellFrames:0, spellLongest:0, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, carryTimeout:0, hitWall:0, hitWall:0, throwsTaken:0, throwsTaken:0, ballRecovered:0, oobState:0, oobState:0, ballRecovered:0, intentional:0, incidental:0, incidental:0, foulMissed:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
+  actFrames:{}, holds:0, holdFrames:0, holdLongest:0, spells:0, spellFrames:0, spellLongest:0, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
   actFrames:{}, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
     unattributed:0, unattMax:0, portFrame:-1,
@@ -4764,7 +4764,54 @@ function telUnattributed(dist2){
   if(dist2>TEL.unattMax) TEL.unattMax=dist2;
 }
 
+// ── POSSESSION, COUNTED HONESTLY ────────────────────────────────────────────
+// Every possession figure quoted this session was an artefact. A pass from A to B reads as
+// three states — A loses, the ball is loose, B gains — so one event counted as two possession
+// boundaries, and "349 possessions a match" was really about thirty passes.
+//
+// It is the same conflation John caught in the loose metric: a ball in flight is not a ball
+// nobody has. Two measures instead, and they answer different questions:
+//
+//   A HOLD is one man with the ball at his feet, gain to release. That is what "he holds it too
+//   briefly" means, and it should ignore what happens next.
+//
+//   A SPELL is a side keeping the ball, and it SURVIVES A COMPLETED PASS. It ends when another
+//   side touches it or the ball goes dead. That is possession as a pundit means it.
+let __holdWho=null, __holdFrames=0, __spellTeam=null, __spellFrames=0;
+function stepPossession(){
+  // SELF-INITIALISING, because TEL is rebuilt in more than one place and a counter that depends
+  // on being registered in the right initialiser is a counter that silently reads zero. Three
+  // registrations were patched and the live object had none of them.
+  if(TEL.holds===undefined){
+    TEL.holds=0; TEL.holdFrames=0; TEL.holdLongest=0;
+    TEL.spells=0; TEL.spellFrames=0; TEL.spellLongest=0;
+  }
+  const o = ball.owner;
+
+  // ── the hold: one man, feet on it ──
+  if(o !== __holdWho){
+    if(__holdWho && __holdFrames > 0){ TEL.holds++; TEL.holdFrames += __holdFrames;
+      if(__holdFrames > TEL.holdLongest) TEL.holdLongest = __holdFrames; }
+    __holdWho = o; __holdFrames = o ? 1 : 0;
+  } else if(o) __holdFrames++;
+
+  // ── the spell: one side, through the air as well as at the feet ──
+  // lastTouch is the side that last played it, so a pass between team-mates does not end it.
+  // A SPELL ENDS WHEN THE BALL GOES DEAD, TOO — not only when another side touches it.
+  // lastTouch alone never resets, so a side that scored and kicked off again read as one
+  // unbroken spell for the whole match: spells counted ZERO because the first one never closed.
+  const dead = !!(pendingRestart || freeKick || throwPending || cornerPending);
+  const t = dead ? null
+          : ((ball.lastTouch===null||ball.lastTouch===undefined) ? null : ball.lastTouch);
+  if(t !== __spellTeam){
+    if(__spellTeam !== null && __spellFrames > 0){ TEL.spells++; TEL.spellFrames += __spellFrames;
+      if(__spellFrames > TEL.spellLongest) TEL.spellLongest = __spellFrames; }
+    __spellTeam = t; __spellFrames = 1;
+  } else if(t !== null) __spellFrames++;
+}
+
 function telFrame(){
+  stepPossession();
   // the push-up flag lives only while a keeper holds; when he lets go, everybody is free to be
   // near their own goal again without the instruction fighting them
   if(!(ball.owner && ball.owner.role==='K')) players.forEach(q=>{ q.__pushed=false; });
@@ -4879,6 +4926,18 @@ function buildMatchReport(){
   md+=`| **scrambles** (re-claim <0.45s, same spot) | ${TEL.rapid} | ${p90(TEL.rapid)} | rare |\n`;
   md+=`| of those, a keeper juggling | ${TEL.gkRapid} | ${p90(TEL.gkRapid)} | ~0 |\n`;
   md+=`| ball loose | ${Math.round(100*TEL.loose/f)}% | | ~35% |\n`;
+  // ── HOLDS AND SPELLS ────────────────────────────────────────────────────
+  // A HOLD is one man with it at his feet, gain to release. A SPELL is a side keeping it and it
+  // SURVIVES A COMPLETED PASS — the difference between "he never holds the ball" and "they never
+  // keep it". Counting a pass as two possession boundaries is what made every earlier figure
+  // meaningless.
+  const _h = TEL.holds||1, _s = TEL.spells||1;
+  md+=`| **holds** (a man, feet on it) | ${TEL.holds} | ${p90(TEL.holds)} | |\n`;
+  md+=`| \u2014 mean hold | ${(TEL.holdFrames/_h/60).toFixed(2)}s | | |\n`;
+  md+=`| \u2014 longest hold | ${(TEL.holdLongest/60).toFixed(1)}s | | |\n`;
+  md+=`| **spells** (a side, through the air) | ${TEL.spells} | ${p90(TEL.spells)} | |\n`;
+  md+=`| \u2014 mean spell | ${(TEL.spellFrames/_s/60).toFixed(2)}s | | |\n`;
+  md+=`| \u2014 longest spell | ${(TEL.spellLongest/60).toFixed(1)}s | | |\n`;
   md+=`| ball airborne | ${Math.round(100*TEL.aerial/f)}% | | ~20% |\n`;
   md+=`| \u2014 ankle to knee (4-20) | ${Math.round(100*TEL.zLow/f)}% | | most of it |\n`;
   md+=`| \u2014 head height (20-50) | ${Math.round(100*TEL.zMid/f)}% | | |\n`;
