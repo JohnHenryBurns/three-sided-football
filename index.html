@@ -462,7 +462,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=159"></script>
+<script src="engine.js?v=160"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2851,7 +2851,7 @@ function startMatch(){
   hideCard(); celeUntil = 0;
   applyTeamSelection();
   resetMatch();
-  kickoff(0);
+  kickoff(0, true);
   renderScore();
   buildBodies();          // the kits change with the teams, so the bodies are rebuilt
   running = true;
@@ -3347,7 +3347,7 @@ function boot(){
   buildFireLight();
   applyTeamSelection();
   resetMatch();
-  kickoff(0);
+  kickoff(0, true);
   renderScore();
   buildBodies();
   renderTeamSlots();
