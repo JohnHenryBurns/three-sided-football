@@ -2473,7 +2473,14 @@ const ACTIONS = [
     act:p => {
       // carried the wrong way by his own momentum, slowing
       p.vx *= 0.94; p.vy *= 0.94;
-      if(RNG_COS() < 0.02) ENGINE_HOOKS.spawnNote(p.x, p.y-24, "wrong way!", "#8fa0ae");
+      // ── NO NOTE HERE ──────────────────────────────────────────────────────
+      // This spawned one at 2% a frame, and `fooled` is an ACTION whose act() runs on every frame
+      // the state lasts. Result: 786 "wrong way!" notes in a single match — 54% OF EVERY POP-UP
+      // IN THE GAME, and the rapid-fire succession John saw.
+      //
+      // A NOTE MARKS AN EVENT, NOT A STATE. The event is the moment he is beaten, which the
+      // tackle and the beat already know about and already annotate. A running state does not
+      // need to keep announcing itself.
       return true;
     } },
   { name:'beating his man', tier:TIER.PLAYER, base:300,
@@ -4339,7 +4346,17 @@ function physics(dt){
       // A restart is not a contest. Nobody tackles a man carrying the ball to a throw-in.
       if(ball.fetch && ball.fetch.by && ball.fetch.by!==best) return;
       ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
-      if(ball.flameShot&&best.role==="K") ENGINE_HOOKS.spawnNote(best.x,best.y-24,"🔥 extinguished!","#ffd166");
+      // ── AND THE FLAME GOES OUT WHEN HE CATCHES IT ─────────────────────────
+      // `flameShot` was never cleared on the claim, so the keeper "extinguished" the same shot
+      // frame after frame: 1,128 attempts in one match, 282 of them getting past a 25% gate. It
+      // was the single loudest note in the game after the fooled state.
+      //
+      // Same fault as `isShot` staying true on a ball that had stopped being a shot. A flag that
+      // describes an event has to be cleared by the event that ends it.
+      if(ball.flameShot && best.role==="K"){
+        ENGINE_HOOKS.spawnNote(best.x, best.y-24, "\ud83d\udd25 extinguished!", "#ffd166");
+        ball.flameShot = false;
+      }
       ball.flameShot=false;
       // EVERY claim by ANYBODY, which is what this has always counted. I put it in the report
       // labelled "keeper claims" and it read as 199 keeper touches in 170 seconds — a number that
