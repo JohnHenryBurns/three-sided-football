@@ -959,6 +959,29 @@ function kick(tx,ty,power,isShot){
 /** Where a taker stands relative to the mark. A thrower is BEHIND the line and the ball is on
  *  it — they are on opposite sides of the chalk, which is what a throw-in is. A corner taker
  *  stands at the flag. Everyone else stands where the ball is. */
+/** Are both other sides back in their own third? A restart should not be taken into a pitch
+ *  where nobody has reset — John's rule, and it is what makes the pause mean something: the
+ *  extra seconds buy a shape, rather than fifteen men standing where the whistle found them.
+ *
+ *  Measured as: of the players who are not the taker, how many are nearer their own goal than
+ *  the halfway point of their own third. Two thirds of them is enough — waiting for all of them
+ *  would hang on one man walking back from a corner. */
+function sidesSet(taker){
+  let want=0, there=0;
+  players.forEach(p=>{
+    if(p===taker || p.out || p.sentOff || p.role==='K') return;
+    want++;
+    const own=goalCenter(p.team);
+    if(dist(p,own) < dist(own,{x:CX,y:CY})*0.92) there++;
+  });
+  // 0.66 blocked almost every restart — throws fell from 34 a match to 2 — because waiting for
+  // two thirds of thirteen men to be back means waiting for the slowest of them, every time.
+  //
+  // 0.40 is "most of the pitch has reset", which is what the eye reads as a set piece. It also
+  // fails open: with nobody left to position, want===0 and the taker is not held hostage.
+  return want===0 || there/want >= 0.40;
+}
+
 function restartSpot(p){
   const R=pendingRestart;
   if(!R) return {x:p.x, y:p.y};
@@ -1302,6 +1325,14 @@ const SETUP_WEIGHT = 900;
 /** How ripe a mandated action is. Grows from nothing to well past SETUP_WEIGHT, so it is
  *  unlikely at first, likely soon, and effectively certain in the end — without a deadline
  *  anywhere. `rate` is where a side's urgency enters. */
+// RATES QUARTERED, WHICH DOUBLES THE TIME. ripeness is (elapsed^2)*rate, so the moment a given
+// weight is reached moves as 1/sqrt(rate) — a quarter of the rate is twice the wait. John asked
+// for double the average ripening time on transitions and this is the arithmetic of it, not a
+// guess at new numbers.
+//
+//   throw   240+300*direct  ->  60+75*direct    even odds at ~2.8s, was 1.4
+//   corner  180+260*direct  ->  45+65*direct
+//   penalty 130             ->  33              the pause IS the drama
 function ripeness(since, rate){
   const t = Math.max(0, clockSec - since);
   return t*t*rate;            // quadratic: hesitant, then decisive, which is how people are
@@ -1428,10 +1459,11 @@ const PORTED = [
       if(pendingRestart.kind!=='corner') return false;
       const m={x:pendingRestart.x, y:pendingRestart.y};
       if(dist(ball,m) > 12) return false;
-      return dist(p, restartSpot(p)) <= 16;   // a swing needs room, not precision
+      if(dist(p, restartSpot(p)) > 16) return false;   // a swing needs room, not precision
+      return true;
     },
     score:p => pendingRestart ? ripeness(pendingRestart.at !== undefined ? pendingRestart.at : clockSec,
-                        180 + 260*T(p.team).direct) : 0,   // a corner ripens slower than a throw
+                        45 + 65*T(p.team).direct) : 0,   // a corner ripens slower than a throw
     act:p => {
       const e=EDGES[GOAL_EDGE[cornerGoal]], g=goalCenter(cornerGoal);
       const cx2=g.x+e.nx*46, cy2=g.y+e.ny*46;
@@ -1469,7 +1501,8 @@ const PORTED = [
       if(pendingRestart.kind && pendingRestart.kind!=='throw') return false;
       const m={x:pendingRestart.x, y:pendingRestart.y};
       if(dist(ball,m) > 12) return false;
-      return dist(p, restartSpot(p)) <= 10;
+      if(dist(p, restartSpot(p)) > 10) return false;
+      return sidesSet(p);           // nobody throws into an unset pitch
     },
     // THE CLOCK IS THE STAGING TIME, ALWAYS SET. `since` was only assigned in the carry stage —
     // and when the ball is staged already on the mark, which is most restarts, that stage never
@@ -1478,7 +1511,7 @@ const PORTED = [
     // showed it as `since:n` for nineteen consecutive frames.
     score:p => pendingRestart ? ripeness(pendingRestart.since !== undefined ? pendingRestart.since
                         : (pendingRestart.at !== undefined ? pendingRestart.at : clockSec),
-                        240 + 300*T(p.team).direct) : 0,
+                        60 + 75*T(p.team).direct) : 0,
     act:p => {
       const best=bestPass(p);
       const tgt = best || players.find(m=>m.team===p.team && m!==p && onPitch(m) && m.role!=='K');
@@ -1498,7 +1531,7 @@ const PORTED = [
   { name:'penalty', tier:TIER.SCRIPT, ported:true,
     coach:T => 0,
     can:p => !!(penaltyShooter===p && ball.owner===p),
-    score:p => ripeness(p.restartSince||clockSec, 130),
+    score:p => ripeness(p.restartSince||clockSec, 33),
     act:p => {
       const gt=penaltyGoalTeam;
       const e=EDGES[GOAL_EDGE[gt]], g=goalCenter(gt);
@@ -1517,7 +1550,7 @@ const PORTED = [
   { name:'free-kick', tier:TIER.SCRIPT, ported:true,
     coach:T => 0,
     can:p => !!(freeKick && freeKick.taker===p && ball.owner===p),
-    score:p => ripeness(freeKick ? freeKick.at : clockSec, 200 + 300*T(p.team).direct),
+    score:p => ripeness(freeKick ? freeKick.at : clockSec, 50 + 75*T(p.team).direct),
     act:p => {
       const aim = (freeKick && freeKick.aim!==undefined) ? freeKick.aim : targets[p.team];
       const tgt = goalCenter(aim);
