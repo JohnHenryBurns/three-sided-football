@@ -2770,9 +2770,24 @@ const INSTRUCTIONS = [
   // NOT explicit — he is offering, not obeying. Target: the throw mark itself, from beyond 110,
   // which is "come and be available at throwing distance".
   { name:'showing for a throw', tier:TIER.PLAYER, base:760,
-    applies:p => !!(pendingRestart && cornerTaker!==pendingRestart.p && p!==pendingRestart.p
-                    && p.team===pendingRestart.team
-                    && dist(p,{x:pendingRestart.x,y:pendingRestart.y})>110),
+    // ── HYSTERESIS ON THE SHOWING DISTANCE ────────────────────────────────
+    // `dist > 110` with nothing else: a team-mate hovering near 110 from the mark toggled in and
+    // out EVERY FRAME — 8,561 job changes a match in each direction, the largest flicker in the
+    // game and the one John saw.
+    //
+    // Third instance today of an unhysteresised threshold: carry-to-mark at 9, the standing spot
+    // at 8, and this. steer() decelerates as it closes, so a man sits ON the boundary rather than
+    // crossing it, and every predicate written as a bare distance test oscillates.
+    //
+    // He stops showing at 110 and does not start again until 90.
+    applies:p => {
+      if(!pendingRestart || cornerTaker===pendingRestart.p || p===pendingRestart.p) return false;
+      if(p.team!==pendingRestart.team) return false;
+      const d=dist(p,{x:pendingRestart.x,y:pendingRestart.y});
+      const on = p.__showing ? d>90 : d>110;
+      p.__showing = on;
+      return on;
+    },
     score:p => 760,
     act:p => { steer(p, pendingRestart.x, pendingRestart.y, 2.0); return true; } },
 
