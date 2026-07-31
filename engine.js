@@ -3601,6 +3601,37 @@ function physics(dt){
   for(let k=0;k<6;k++){
     const e=EDGES[k];
     const d=(ball.x-e.p1.x)*e.nx+(ball.y-e.p1.y)*e.ny;
+
+    // ── THE CROSSING IS TESTED OUTSIDE THE PROXIMITY GUARD ────────────────────
+    // The woodwork test lived INSIDE `if(d<7)`, which is the very band a fast ball skips. So the
+    // crossing test I wrote this morning to cure tunnelling was itself sitting behind the
+    // tunnelling — it was evaluated 15 times in a whole match, once per goal, always at the frame
+    // the goal was awarded and never at the frame the ball actually crossed.
+    //
+    // A crossing does not care how near the ball is NOW. It cares whether the sign changed.
+    {
+      const dP = (ball.px!==undefined) ? (ball.px-e.p1.x)*e.nx + (ball.py-e.p1.y)*e.ny : d;
+      if(e.goal && dP>0 && d<=0 && !out[GOAL_EDGE.indexOf(k)] && !ball.woodT
+         && (ball.isShot||Math.hypot(ball.vx,ball.vy)>4)){
+        const tC = dP/Math.max(0.0001, dP-d);
+        const aX = (ball.px!==undefined) ? ball.px+(ball.x-ball.px)*tC : ball.x;
+        const aY = (ball.py!==undefined) ? ball.py+(ball.y-ball.py)*tC : ball.y;
+        const aZ = (ball.pz!==undefined) ? ball.pz+(ball.z-ball.pz)*tC : ball.z;
+        const aL = (aX-e.mx)*e.ux + (aY-e.my)*e.uy;
+        const half=e.len*GOAL_HALF, R=4.2;
+        const hitPost = Math.abs(Math.abs(aL)-half)<R && aZ<GOAL_H;
+        const hitBar  = Math.abs(aZ-GOAL_H)<R && Math.abs(aL)<half+R;
+        if(hitPost||hitBar){
+          ball.woodT=clockSec;
+          TEL.woodwork++; if(hitBar) TEL.bars++; else TEL.posts++;
+          if(hitBar){ ball.zv=-Math.abs(ball.zv)*0.55; }
+          else { ball.vx=-ball.vx*0.55; ball.vy=-ball.vy*0.55; }
+          ball.isShot=false;
+          ENGINE_HOOKS.spawnNote(ball.x,ball.y-24,hitBar?"\u{1F94A} CROSSBAR!":"\u{1F94A} POST!","#ffd166");
+        }
+      }
+    }
+
     if(d<7){
       const along=(ball.x-e.mx)*e.ux+(ball.y-e.my)*e.uy;
       const gTeam=e.goal?GOAL_EDGE.indexOf(k):-1;
