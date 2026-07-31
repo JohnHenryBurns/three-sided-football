@@ -403,6 +403,45 @@ with a mechanism attached.
 
 **Next:** why the ball goes out so often. Not the chase, not the actions, not the hold.
 
+## Why the harness drifts — traced
+
+**First, a correction: my "3x too high" was my own arithmetic.** I compared 75–96 throw-ins
+in a five-minute harness match against 27 in a 2.9-minute browser one, without
+normalising. Per 90 it is 1080–1224 against 834 — **a factor of 1.3, not 3.**
+
+Then, ruling causes out:
+
+**Not frame rate.** Browser 10,493 frames over 175s of play; harness 18,000 over 300s.
+**Both exactly 60.0 frames per match second.** The clocks agree.
+
+**Not match length.** 3, 5 and 8-minute harness matches give 1080, 1224 and 1110 per 90 —
+flat. Nothing accumulates.
+
+**Partly the neutral switch, which I added an hour ago.**
+
+```
+harness, neutral      1410 throws/90   loose 72%
+harness, identities   1238 throws/90   loose 74%
+browser               834              loose 64%
+```
+
+**The identities account for about 12% of the throw gap and none of the loose gap.** Worth
+knowing, because it means the harness's default is measuring a harder game than the one
+being played — deliberately, but it should be stated whenever a harness figure is quoted.
+
+**~1.5x remains unexplained**, and it is the same gap on `closing it down`: 1% harness,
+7% browser.
+
+### What is left to check
+
+The two loops are not identical and never were. **The celebration hold is 3.5s in the
+harness and 2.6s plus a 1.6s ball return in the browser** — different lengths of dead time
+per goal, and with 18–27 goals a match that is minutes of difference in what counts as
+"play".
+
+That is the next thing to measure, and it is measurable: count held frames in each and
+compare.
+
 ## To investigate
 
 **The corner trio is duplicated.** The three waves are in the list *and* still in the
