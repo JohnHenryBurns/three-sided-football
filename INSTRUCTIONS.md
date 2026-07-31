@@ -374,6 +374,35 @@ a COACH weight on the existing *denying a throw*.
 four instructions and tuning them against an unseeded sim would produce weights that
 mean nothing.
 
+## The loose-ball chain, traced
+
+Each step ruled out the next-most-obvious cause:
+
+```
+loose 79%
+  -> is the ball unclaimable because it is high?     no: 94% of loose time it is low
+  -> is nobody within claim reach?                   yes: 2% of loose frames
+  -> is the nearest man far?                         45 units, flat across every percentile
+  -> is the chase not firing?                        yes: `closing it down` runs 1% of frames
+  -> why?                                            it needs !holdingPlay()
+  -> and holdingPlay() is true                       86% OF THE MATCH
+```
+
+**The game is permanently mid-restart.** Fifteen players hold their shape around a ball
+nobody may go for, because the chase is forbidden during a hold and the hold almost never
+ends.
+
+**Tightening `holdingPlay()` did not fix it.** A hold now requires something actually
+pending — `pendingRestart`, a free kick, a fetch — and the figure did not move. So a
+restart genuinely *is* pending 86% of the time.
+
+**Which points at the throw-in rate: 75–96 a match.** The ball goes out, a restart stages,
+the chase is suspended, the ball goes out again. That is the loop, and it is the same
+throw-in figure that has been the standing complaint since the first browser log — now
+with a mechanism attached.
+
+**Next:** why the ball goes out so often. Not the chase, not the actions, not the hold.
+
 ## To investigate
 
 **The corner trio is duplicated.** The three waves are in the list *and* still in the

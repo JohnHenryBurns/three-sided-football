@@ -741,7 +741,21 @@ function kick(tx,ty,power,isShot){
 // `holdActive` is a local inside think(), so an instruction cannot see it — and an instruction
 // that cannot see the world it is deciding about is not much of an instruction. The same question,
 // asked where anything can ask it.
-function holdingPlay(){ return nowMs() < restartHold; }
+// ── A HOLD IS ONLY A HOLD IF SOMETHING IS BEING STAGED ──────────────────────
+// restartHold was true for 86% of a neutral match, which meant `closing it down` — the chase,
+// which requires !holdingPlay() — fired on 1% of frames. Fifteen players held their shape around
+// a ball nobody went for, and the loose figure sat at 79%.
+//
+// The cause is that restarts now RIPEN. The hold used to be a fixed 1-3 seconds and is now
+// extended repeatedly while an action waits to become ripe — so `restartHold` in the future no
+// longer means "a restart is being staged", it means "one was staged at some point recently".
+//
+// A hold requires a THING BEING HELD FOR. If nothing is pending, play is live whatever the clock
+// says — and the chase is allowed again.
+function holdingPlay(){
+  if(nowMs() >= restartHold) return false;
+  return !!(pendingRestart || freeKick || cornerPending || throwPending || goalRestart || ball.fetch);
+}
 
 // ── A SEEDED RANDOM, SO A MATCH CAN BE RUN TWICE ────────────────────────────
 // RNG() is unseeded, so no run is reproducible: the same configuration gave 23 goals and
