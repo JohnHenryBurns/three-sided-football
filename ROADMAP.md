@@ -188,6 +188,109 @@ the assignment happens after both. Candidates are the page's own opening sequenc
 `kickoff()` call whose staging runs before `resetMatch()` clears it. **Print `ball.owner`
 either side of the first `think()` and it will name itself.**
 
+## EDIT MODE — the plan
+
+**The idea:** pause the match, reach in, and move things. Drag a player anywhere on the turf
+or off it, drag him to the bench where he locks, drag him back off again, move the ball.
+Eventually: change positions, give a man a place to run to, a full coach overlay.
+
+**Why it fits.** Three-sided football is Jorn's joke about tampering with the rules, so a
+mode where you reach in and move people is native rather than bolted on. And it turns the
+instruction system into something you can *interrogate*: put three defenders on one man,
+unpause, watch what they decide.
+
+**The sleeper benefit is that it is a debugging instrument.** Most of today was *"why is
+that man doing that"* answered by writing a counter and running six seeds. Placing a
+situation by hand and watching it resolve at 0.25x would have found the flicker, the
+goal-kick hang and the defenders-running-away in minutes rather than hours.
+
+### What already exists
+
+```
+picking a thing      three.js raycast, the scene is already there
+dragging on turf     raycast to the y=0 plane
+setting position     p.x, p.y — the engine has no opinion about who wrote them
+the bench            p.out and benchAt[t] exist and already work
+pausing              `running` and `held` already gate the step
+```
+
+### THE ONE DESIGN QUESTION, and it decides the feature
+
+**What does a drop MEAN?**
+
+**A snapshot** — you place them, unpause, the instructions reclaim them immediately. A man
+dropped in the corner walks back to his line within two seconds. Honest, trivial, probably
+unsatisfying.
+
+**A held override** — he stays where you put him until the ball or an opponent comes near.
+Needs a new instruction, `where he was told`, at COACH tier with a decay. More work, and it
+is the version that feels like coaching.
+
+**Not decided. Start with the ball, where the question does not arise.**
+
+### Phase 1 — the ball only
+
+The whole of picking and dragging, proved on a single object, with none of the state
+questions. **A tenth of the work, and it says immediately whether picking feels good on a
+phone.**
+
+```
+edit mode toggle      only available while paused
+raycast pick          generous hit radius; the ball is small on a phone
+drag to y=0 plane     ball.x, ball.y follow the finger
+on drop               ball.vx = ball.vy = 0, owner cleared, noClaim for ~20 frames
+                      so nobody teleports onto it the instant play resumes
+```
+
+**Deliberately not in phase 1:** players, the bench, undo, anything that persists.
+
+### Phase 2 — players on the turf
+
+```
+pick a player         a "grabbed" highlight, because fifteen men at that camera angle
+                      and pinch-zoom already bound means people WILL grab the wrong man
+drag anywhere         including off the pitch
+on drop               position set; decide the snapshot-vs-override question HERE
+```
+
+**Flagged now so it is not a surprise:** `onPitch(p)` gates most instructions, so a man
+dragged into the stands has almost nothing that applies and will stand inert rather than
+doing something funny. **Decide whether that is the joke or a bug before building it.**
+
+### Phase 3 — the bench
+
+```
+drag to the bench     p.out = true, seated, locked
+drag off the bench    p.out = false, placed where dropped
+```
+
+The bench already draws and already seats sent-off men, so this is mostly hit-testing the
+dugout rather than new state.
+
+### Phase 4 — instructions, and the coach overlay
+
+```
+give a man a target   he runs there next, once, then rejoins the instruction list
+change a position     K / D / M / F, which the formation and several predicates already read
+the full overlay      per-side tactics without the menu, drawn on the pitch
+```
+
+**This is where the held-override question has to be answered properly**, because "run
+here" is an override with a lifetime by definition.
+
+### Rules to hold to
+
+**Edit mode is only reachable while paused.** No dragging a man mid-stride.
+
+**Nothing in edit mode may touch `RNG()`.** It is a cosmetic and authoring surface; if
+placing a player shifts the seeded match, every A/B comparison in the harness becomes
+meaningless. `RNG_COS()` exists for exactly this.
+
+**Every drop must leave the engine in a state it could have reached itself.** A ball with an
+owner and a velocity pointing nowhere, a player inside another player, a keeper outside his
+own area holding the ball — the engine has rules for all of these and they must not be
+skipped just because a finger did it.
+
 ## New priorities — from watching matches
 
 **1. Instruction state flickers during transitions — MEASURED, NOT FIXED.**
