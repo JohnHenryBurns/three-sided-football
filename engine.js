@@ -466,7 +466,15 @@ function incidentalFoul(p, victim, clumsiness){
   const agg = AGG_PRESETS[teamAGG[p.team]].f;
   // fatigue makes a man clumsy, which is where late-match cards come from
   const tired = 1 + (1-p.stamina)*0.8;
-  if(RNG() > clumsiness*agg*tired*0.05) return false;
+  // ── THE MAYHEM DIAL ───────────────────────────────────────────────────────
+  // 0.05 gave two incidental fouls a match at Filthy — about 14% of a tackle. John's target is
+  // three Filthy sides under a Mayhem referee OFTEN FINISHING WITH ONLY THE GOALKEEPERS, which
+  // is twelve reds; at a 21% foul-to-red rate that needs roughly fifty-six fouls.
+  //
+  // 0.18. At Filthy that is half of all tackles and a third of headers becoming fouls, which is
+  // absurd — and absurd is the setting. At Clean it is 10%, which is a clumsy challenge now and
+  // then, and that is the setting too.
+  if(RNG() > clumsiness*agg*tired*0.18) return false;
   TEL.incidental++;
   const R=REF();
   if(RNG() > R.sees){ TEL.foulMissed++; return true; }   // it happened; nobody called it
@@ -1658,7 +1666,10 @@ const PORTED = [
         if(dist(q,tgt) < dist(o,tgt)) cover++; });
       return cover <= 1;
     },
-    score:p => 26 * (AGG_PRESETS[teamAGG[p.team]].f),   // Clean 14, Firm 26, Nasty 47, Filthy 73
+    // 26 -> 85. Clean 47, Firm 85, Nasty 153, Filthy 238 — which at PLAY_ON 2800 is 1.6% to
+    // 7.8% of the frames a professional foul is even available, and it is only available when an
+    // opponent is breaking away with nobody covering. A Filthy side takes almost every one.
+    score:p => 85 * (AGG_PRESETS[teamAGG[p.team]].f),
     act:p => {
       const victim=ball.owner;
       if(!victim) return false;
