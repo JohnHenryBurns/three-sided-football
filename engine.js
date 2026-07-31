@@ -5174,7 +5174,12 @@ function keeperLine(k){
 }
 
 function colorCommentary(){
-  try{ ambientChatter(); }catch(e5){}
+  // ── AND THE CATCH REPORTS ─────────────────────────────────────────────────
+  // It was `catch(e5){}` — an empty catch that hid a function throwing on every single frame
+  // for as long as the 3D page has been the game. A swallowed error is a feature that does not
+  // exist and nobody knows it.
+  try{ ambientChatter(); }
+  catch(e5){ TEL.chatterErr=(TEL.chatterErr||0)+1; if(TEL.chatterErr===1) console.warn('ambientChatter:', e5.message); }
   // style & matchup color (~every 45s)
   if(clockSec-lastStyleAt>45&&RNG()<0.4){
     const ls=styleLines();
@@ -5273,8 +5278,24 @@ const usingHollerbox = () => voiceEngineName==='hollerbox' && !!holler;
 // Three more that never touched the DOM and had been left behind by a classifier that judged
 // them by the company they kept rather than by what they do.
 function ambientChatter(){
-  if(!matchLive||!voiceOn||!speechOK) return;
-  if(queuedUtter>0||(!usingHollerbox()&&speechSynthesis.speaking)) return;
+  // ── THE GATES REFERRED TO A PAGE THAT NO LONGER EXISTS ────────────────────
+  // Three of these globals live only in flat.html: `matchLive`, `queuedUtter`, `usingHollerbox`.
+  // On the 3D page the first reference throws — and the call site is
+  //
+  //     try{ ambientChatter(); }catch(e5){}
+  //
+  // an empty catch, which swallowed it every frame. That is why fixing `speak` last commit
+  // changed nothing: the function never got as far as speaking.
+  //
+  // A silent catch around a call that has never once succeeded is indistinguishable from a
+  // feature nobody wrote. This is the fifth dead thing found today and the second hidden by a
+  // try/catch.
+  //
+  // What the gates actually MEAN, expressed in what the engine owns:
+  //   the match is running          phase==='play'
+  //   the announcer is not busy     ENGINE_HOOKS tells us, or we simply pace ourselves
+  if(phase!=='play') return;
+  if(typeof voiceOn!=='undefined' && !voiceOn) return;
   const rt=nowMs()/1000;
   if(rt-lastChatterAt<6) return;   // REAL seconds: slow-speed viewing gets a full broadcast
   const cand=[];
