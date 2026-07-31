@@ -5226,54 +5226,17 @@ function colorCommentary(){
 // ---------- Narrator (Web Speech API — built into the phone, works offline) ----------
 let voiceOn=true, narrator=null, queuedUtter=0, welcomed=false;
 
-const HOLLERBOX_SRC = 'https://johnhenryburns.github.io/hollerbox/engine/';
-let voiceEngineName = 'browser';      // 'browser' | 'hollerbox'
-let holler = null;                    // the loaded engine, or null until it is
-
-/** Load Hollerbox and start its audio. Called at match start, NOT at the first goal: an
- *  AudioWorklet is interpreted before it is compiled and is about twice as slow as real time
- *  cold, so the first word out of it drops samples — which sounds exactly like a click. Three
- *  hundred milliseconds of silence at kick-off buys a clean first shout. */
-
-/** Say something, and call back when it is finished. The same shape as an utterance's onend, so
- *  the queue does not need to know which engine it is talking to. */
-function hollerSay(text, isGoalCall, onEnd, original){
-  if(holler) holler.stretch = original || text;
-  if(!holler){ onEnd&&onEnd(); return; }
-  const { S, P } = holler;
-  try{
-    if(holler.wake) holler.wake();
-    const v = { ...holler.voice };
-    // A GOAL CALL HOLDS THE VOWEL, and this is the whole reason to be here. The text handed in
-    // has already had "GOOOOAAALLL" flattened to "goal", because every engine reads the stretched
-    // spelling as something else — the phone says "gull" and this one says "goo-oh-l". But the
-    // stretch was never in the letters; it is in the DELIVERY, and a physical tract can hold a
-    // vowel for as long as there is air. `drawl` is that, and how far it goes is read back off
-    // the original spelling: more o's, longer shout.
-    if(isGoalCall){
-      v.per = (v.per||0.05)*1.35;
-      v.acc = Math.min(14,(v.acc||7)+3);
-      const os = (String(holler.stretch||'').match(/[OA]/gi)||[]).length;
-      v.drawl = Math.max(v.drawl||0, Math.min(1, 0.45 + 0.06*Math.max(0, os-2)));
-    }
-    const { ph, stress } = S.chainFor(text);
-    if(!ph.length){ onEnd&&onEnd(); return; }
-    const n = S.tractFor(holler.node, v, holler.n);
-    holler.node.port.postMessage({ type:'voice', v });
-    const seq = S.planSpeech(ph, v, { n, stress });
-    holler.done = onEnd || null;
-    holler.node.port.postMessage({ type:'goal', seq });
-    // a floor under the callback, so a lost message cannot wedge the queue for the whole match
-    const mine = holler.done;
-    setTimeout(()=>{ if(holler && holler.done===mine && mine){ holler.done=null; mine(); } },
-               (seq.end+1.2)*1000);
-  }catch(e){ onEnd&&onEnd(); }
-}
-
-function hollerStop(){
-  if(holler){ try{ holler.node.port.postMessage({type:'stopSeq'}); }catch(e){} holler.done=null; }
-}
-const usingHollerbox = () => voiceEngineName==='hollerbox' && !!holler;
+// ── HOLLERBOX IS GONE FROM THIS GAME ────────────────────────────────────────
+// Forty-eight lines that loaded a speech synthesiser from another project and spoke through it
+// instead of the browser. index.html says so at the top of its own voice section — "no hollerbox
+// here, that was pulled out of this page deliberately" — and the engine kept carrying the
+// loader, the voice plan, the stop, and a `usingHollerbox()` that could only ever return false.
+//
+// It had one live consequence: ambientChatter guarded on usingHollerbox(), which does not exist
+// on the 3D page, so the guard threw and the filler commentary never spoke. A dependency that
+// nothing uses is not free — it is a trap with a delay on it.
+//
+// flat.html keeps its own copy and is welcome to it.
 
 // Three more that never touched the DOM and had been left behind by a classifier that judged
 // them by the company they kept rather than by what they do.
