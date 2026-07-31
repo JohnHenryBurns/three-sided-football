@@ -677,6 +677,42 @@ low-cost action that retains possession — a touch, a turn, a step — so that 
 a positive choice rather than the absence of one? `shield it` is nearly that, but its
 `can()` requires pressure within 26.
 
+## The throw-in freeze — half found
+
+**The gap was real and is now filled.** `fetching the ball` walks a man to a loose ball and
+sets `got` — **and then stops applying. Nothing else did.** He stood holding the ball until
+the 20-second cap voided the restart.
+
+**`carrying it to the mark` is the missing half:** the ball rides with him, goes down on the
+mark, and `throwPending` is set so the throw becomes available. Without it the fetch had a
+beginning and no end.
+
+**But the freeze survives, and now it is a constant:**
+
+```
+seed   longest freeze
+9001   10.7s
+9003   10.7s
+9005   10.7s
+9002   13.6s
+9004   19.1s
+```
+
+**Three seeds freeze for exactly 10.7 seconds.** That is a fixed timeout, not a player
+failing to arrive — and it rules out everything about walking distance, clamping, or who
+was chosen.
+
+**Ruled out:** the thrower is the closest man to the mark; he *is* exempt from
+`clampInside`; `fetching the ball` and the exemption name the same player; and there are
+only **2** throw-in stagings in a match, so it is not a re-staging loop.
+
+**Not yet found:** what holds play for 10.7s. `restartHold` is extended by 2400ms at
+staging and nothing found so far extends it further.
+
+**Next, and it should be a trace rather than a theory:** log `restartHold`, `pendingRestart`,
+`ball.fetch` and `throwPending` every frame through one 10.7s freeze. Four values, 642
+frames. That shows what is holding it rather than what might be.
+
 ## STILL OWED — the ledger
 
 **Nothing here is done. It is written down so it cannot quietly stop being owed.**
