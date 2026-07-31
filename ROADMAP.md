@@ -149,6 +149,36 @@ a second while a restart is being set up. A man who is walking somewhere should 
 walking there; flicker means two instructions are trading a player frame by frame, and it
 reads as indecision.
 
+### `pending the kick` — the design is right, the wiring is not
+
+**John's design, and it is the correct shape:** once the taker reaches his spot, hand him to
+a new instruction — `pending the throw`, `pending the corner`, `pending the kick` — which
+holds him there. **The ripening belongs in that state**, and the label makes the pause
+legible on screen.
+
+**Built, and it does what it should to the churn:**
+
+```
+predicate flips   11,183 -> 2,299 a match   (79% down)
+`standing over it` leaves the leaderboard entirely
+```
+
+**And the game breaks: goals 6.5 → 1.7, loose 99%.** Restarts stop completing.
+
+**Ruled out:** the radius mismatch. `pending the kick` holds him at up to 22 and the throw
+action demanded 10, so a man pending at 18 could never throw — aligning both to 22 changed
+nothing, so that was real and not the cause.
+
+**What is left to check:** whether `pending the kick` at SCRIPT 4950 outranks the restart
+actions' own tier, or whether holding him with a light steer is enough to keep `dist(ball,
+mark) <= 12` true. Loose at 99% means the ball sits on the mark all match — **it is placed
+and never struck.**
+
+**Three attempts on this instruction, each leaving the game worse than it found it.** The
+design is not the problem; the handoff is losing something. Next time: trace one restart
+from staging to strike, printing which instruction and which action fire each frame, before
+changing a number.
+
 ### Unreachable targets and oscillating predicates — the full audit
 
 **John's distinction, and it is the one that matters:** a threshold that **completes**
