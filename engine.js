@@ -427,7 +427,24 @@ const AGG_D={Clean:"Soft challenges, spotless disciplinary record.",
 let teamATK=["Balanced","Balanced","Balanced"], teamDEF=["Balanced","Balanced","Balanced"],
     teamAGG=["Firm","Firm","Firm"];
 let tac=[null,null,null], menuTeam=null, coalAlly=[false,false,false];
+// ── NEUTRAL COACHING, FOR TUNING ────────────────────────────────────────────
+// Three sides with three tactical identities means every measurement mixes the behaviour being
+// tuned with the tactics shaping it. Spain's TikiTaka and a Route One side are not the same
+// experiment, and averaging them tells you about neither.
+//
+// With this on, every side plays Balanced/Balanced/Firm and no identity nudge applies — so a
+// change to a weight is visible as a change to the weight rather than as a change to how three
+// different teams respond to it.
+//
+// OFF BY DEFAULT. This is a laboratory setting, not a game setting: the identities are most of
+// what makes the sides feel different, and they go back on once the baseline is right.
+let NEUTRAL_COACHING = false;
+
 function applyPresets(t){
+  if(NEUTRAL_COACHING){
+    tac[t]={...ATK_PRESETS.Balanced, ...DEF_PRESETS.Balanced};
+    return;
+  }
   tac[t]={...ATK_PRESETS[teamATK[t]],...DEF_PRESETS[teamDEF[t]]};
   const L=TEAMS[t];
   if(L&&L.nudge&&teamATK[t]===L.id.atk&&teamDEF[t]===L.id.def) Object.assign(tac[t],L.nudge);
