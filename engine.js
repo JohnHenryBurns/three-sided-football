@@ -1549,6 +1549,21 @@ function shotLaneClear(p, tgt){
   return clear;
 }
 
+/** May this man gather the ball with his hands? A keeper may, inside his area, and nobody else
+ *  ever may. The rule the laws actually state.
+ *
+ *  JOHN'S POINT, AND IT IS RIGHT: this belongs as a testable predicate rather than a guard
+ *  buried in the claim loop. The claim is not an action — the ball is gathered in physics, not
+ *  chosen in `runAction` — so it cannot be a `can()`. But it can have ONE HOME that both the
+ *  claim and `secure it` consult, which is the same thing for every purpose except the name.
+ *
+ *  Before this existed the drop rule ran without it: a keeper outside his area claimed the ball,
+ *  was told to drop it, and claimed it again 236 times a match. */
+function mayGather(p){
+  if(p.role!=='K') return false;
+  return dist(p, goalCenter(p.team)) <= 112;
+}
+
 function gkOutlets(gk){
   let near=null,nd=1e9, far=null,fd=-1,fs=-1e9, anyNear=null,anyD=1e9;
   const og=goalCenter(gk.team);
@@ -1972,7 +1987,11 @@ const PORTED = [
   // mustKick rule and it belongs in can() rather than as a check inside the hold.
   { name:'secure it', tier:TIER.SCRIPT, ported:true,
     coach:T => 0,
-    can:p => !!(p.role==='K' && ball.owner===p && gkHolder!==p && !p.mustKick && onPitch(p)),
+    // and `secure it` asks the same question. It fires after the ball is already his — this is
+    // the HOLD rather than the gather — but a keeper who has drifted out while holding should
+    // not be able to re-secure, and asking here means the rule is stated where a reader looks.
+    can:p => !!(p.role==='K' && ball.owner===p && gkHolder!==p && !p.mustKick
+                && onPitch(p) && mayGather(p)),
     score:p => 900,                    // he has caught it; there is nothing to decide
     act:p => {
       gkHolder=p; gkHoldUntil=clockSec+1.6; GKSTAT.holds=(GKSTAT.holds||0)+1;
@@ -4134,10 +4153,10 @@ function physics(dt){
     //
     // A rule that undoes an action every frame is not a rule, it is an argument. He simply
     // cannot gather it out here, which is the actual law and needs no correction afterwards.
-    if(p.role==="K"){
-      const og9=goalCenter(p.team);
-      if(dist(p,og9) > 112) return;
-    }
+    if(p.role==="K" && !mayGather(p)) return;   // he cannot gather it out here
+
+
+
 
     // ── A BALL ON A RESTART MARK IS NOT CLAIMABLE ─────────────────────────
     // It is placed and waiting for its taker. Without this the nearest man picks it up — which
