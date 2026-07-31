@@ -1,3 +1,145 @@
+# Actions and instructions — status
+
+**Measured through `lab.js`, six seeds, 3-minute matches, identities on.**
+
+```
+instructions   45
+actions        23
+goals          4.3 / match
+loose          87%
+crowd          1.89
+engine         287 KB
+```
+
+## Where this stands
+
+**The cascade is gone.** 495 lines, then 240, then 68 more. No `steer()` exists outside
+the lists and `jobFallback` fires zero times a match.
+
+**Every restart is on the state machine** — throw, corner, goal kick, free kick, penalty.
+Fetch → carry → stand → take, driven by where the ball is rather than by flags. **One
+teleport remains and it is the kick-off**, which is a reset rather than a jump.
+
+**Penalties exist again.** Nothing had awarded one since the cascade went; the trigger was
+missing and the action would have crashed if it had fired. The keeper now guesses left,
+right or middle, and separately high or low, before the ball is struck.
+
+**The coach multiplies rather than adds**, which took the identity spread from 1.2:1 to
+1.74:1 on passing.
+
+## THE OPEN QUESTION, and it blocks the rock-paper-scissors work
+
+```
+passes per match, ten seeds
+
+TikiTaka   92.7 ± 70.0
+RouteOne   65.5 ± 59.8
+
+separation 0.42 SD — inside the noise
+```
+
+**A three-minute match varies by ±75% seed to seed.** Every identity comparison made this
+session was reading noise, including one I reported as an inversion that was nothing.
+
+**Nothing about coaching can be calibrated until this is resolved.** Two options, and it is
+a judgement about feel rather than arithmetic:
+
+- **ten-minute matches for calibration** — cuts the relative spread by roughly √3, slow but
+  honest, and the only way to see a real matchup matrix
+- **sharper dials** — `/25` instead of `/45` spans 3:1 and is visible in three minutes, at
+  the risk of caricature
+
+## Next session, in order
+
+**1. Resolve the noise floor.** Nothing else in this list is measurable first.
+
+**2. Then the RPS triangle**, built in the channel that works — positioning, not weights:
+
+```
+GEGENPRESS  beats  TIKI-TAKA     bodies near the carrier kill short passing
+TIKI-TAKA   beats  BUNKER        patient circulation finds a low block's gap
+ROUTE ONE   beats  GEGENPRESS    a high line leaves grass behind it
+```
+
+**The triangle is currently commentary only.** `styleLines()` asserts these counters from
+"the lab's matchup matrix", which no longer exists. **Measure the matrix and regenerate the
+commentary from it** — if patience does not eat the press, the line comes out.
+
+**3. Smaller things:** `stepStats()` for ~25 loose counters; the Mayhem ceiling (a called
+foul stops play, so a strict referee suppresses the count he punishes — *fouls per minute
+of open play* is the honest measure); `PEN_R` at 132 gives 1.7 penalties a match against a
+target under 1.
+
+## Method notes — these cost the most to learn
+
+**A trace beats an inference.** Four inferences on the corner moved nothing; one trace
+found two bugs in a single run. The same held for the goal line, the woodwork, the restart
+stall and the carry threshold.
+
+**A measurement showing no change means nothing until the change is confirmed on disk.**
+Five string-anchored edits failed silently this session. **Edit by line number.**
+
+**Ad-hoc measurement loops lie.** They skip the celebration hold that `lab.js` and both
+browsers honour, and they play a different match. Measure through `lab.js` only.
+
+**Cosmetic randomness must not share the simulation's stream.** `RNG_COS()` exists because
+adding a commentary line was changing match outcomes, and the resulting numbers looked
+plausible.
+
+**One seed is an anecdote.** Six consistent observations from one seed are one observation.
+
+**A screenshot beat six sweeps.** The surviving cascade, the hovering ball, the phantom
+save and the goal-kick teleport were all found from a picture or a sentence, not from the
+harness.
+
+---
+
+## New priorities — from watching matches
+
+**1. Instruction state flickers during transitions — MEASURED, NOT FIXED.**
+
+```
+job changes in one match: 18,853 — 105 a second
+
+4452  holding the line -> showing for a throw
+4452  showing for a throw -> holding the line
+3750  closing it down -> standing over it
+3750  standing over it -> closing it down
+```
+
+**Perfectly symmetric pairs.** Two instructions trading a player every frame, 8,904 frames
+of a 10,800-frame match on the top pair alone. That is the flicker, and it reads as
+indecision because it is.
+
+**Two attempts, neither worked:**
+
+- proportional commitment `sc*1.09+40` — **worse, 140/s.** `sc` includes the tier constant,
+  so ×1.09 on a SCRIPT instruction added 360 and reshuffled which script won. **A bonus
+  must apply to the decision, not to the tier.**
+- flat 150 — **identical to the multiply, also 140/s**, which means the commitment bonus is
+  not the mechanism at all.
+
+**The lead worth following:** `job()` is called more than once per frame by design — there
+is a comment saying so. If the flicker is instructions *within* a frame rather than across
+frames, the counter is measuring something real but not what it appears to, **and the fix
+is elsewhere entirely.** Confirm what a single frame actually does before changing anything
+else. Some players change job several times
+a second while a restart is being set up. A man who is walking somewhere should keep
+walking there; flicker means two instructions are trading a player frame by frame, and it
+reads as indecision.
+
+**2. Too many throw-ins, and the cause is passing.** A pass that goes out is a pass that
+should not have been played. `bestPass` scores on ground gained, lane, and crowding — **it
+does not ask whether the ball will still be on the pitch when it arrives.** Adding a
+boundary term should cut throws at the source rather than by slowing restarts.
+
+**3. Reduce clustering — more 1v1 and 2v1.** The interesting football is a man with the
+ball and one or two opponents, not fifteen in a scrum. `crowd` sits at 1.89 and wants to
+come down; the levers are the spread in `finding space`, the separation radius, and how
+many men `closing it down` sends to the same ball.
+
+---
+
 # Roadmap — the 3D pitch
 
 Outstanding ideas, ranked, with what's known and what isn't. `three.html` is the
