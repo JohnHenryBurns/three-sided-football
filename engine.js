@@ -5095,6 +5095,37 @@ function styleLines(){
   for(const a of alive) for(const b of alive){ if(a===b) continue;
     if(A[a]==="Probe"&&D[b]==="Gegenpress")
       L.push(`The form guide says patience eats the press. ${tm(a)} know the numbers against ${tm(b)}.`);
+    // ── THE REST OF THE MATCHUP TABLE ─────────────────────────────────────
+    // Six pairings of a possible twenty were covered and Trap had none at all, so most matches
+    // produced no style commentary — the announcer had opinions about a fifth of the football
+    // being played in front of him.
+    //
+    // These are the readings a pundit would actually offer, and every one names both sides so it
+    // is a claim about a MATCHUP rather than a compliment.
+    if(A[a]==="TikiTaka"&&D[b]==="Trap")
+      L.push(`${tm(b)} are inviting ${tm(a)} in — the trap only springs if you take the bait.`);
+    if(A[a]==="RouteOne"&&D[b]==="Trap")
+      L.push(`You cannot trap a ball that flies over you. ${tm(a)} are ignoring ${tm(b)} entirely.`);
+    if(A[a]==="RouteOne"&&D[b]==="ParkTheBus")
+      L.push(`Long balls into a packed box — ${tm(a)} are feeding ${tm(b)} exactly what they want.`);
+    if(A[a]==="Probe"&&D[b]==="ParkTheBus")
+      L.push(`Patience against a low block. ${tm(a)} will be here all night, and they know it.`);
+    if(A[a]==="Probe"&&D[b]==="Trap")
+      L.push(`A thinking match — ${tm(a)} probing, ${tm(b)} waiting to pounce on the loose one.`);
+    if(A[a]==="Swashbuckle"&&D[b]==="Gegenpress")
+      L.push(`Chaos meets chaos. ${tm(a)} and ${tm(b)} have both decided defending is optional.`);
+    if(A[a]==="Swashbuckle"&&D[b]==="Trap")
+      L.push(`${tm(b)} are betting ${tm(a)} give it away eventually. On this evidence, fair bet.`);
+    if(A[a]==="Balanced"&&D[b]==="Gegenpress")
+      L.push(`${tm(a)} keep it sensible while ${tm(b)} hunt. Something has to give.`);
+    if(A[a]==="TikiTaka"&&D[b]==="ParkTheBus")
+      L.push(`Death by a thousand touches against eleven behind the ball. Somebody blinks first.`);
+    if(G[a]==="Filthy"&&G[b]==="Clean")
+      L.push(`${tm(a)} are kicking lumps out of ${tm(b)}, who are being far too polite about it.`);
+    if(G[a]==="Filthy"&&G[b]==="Filthy")
+      L.push(`${tm(a)} and ${tm(b)} have agreed the referee is a suggestion.`);
+    if(D[a]==="ParkTheBus"&&D[b]==="ParkTheBus")
+      L.push(`Two buses parked. Somebody fetch a book.`);
     if(A[a]==="RouteOne"&&D[b]==="Gegenpress")
       L.push(`Over the top is the antidote to a press — ${tm(a)} keep launching it past ${tm(b)}.`);
     if(A[a]==="TikiTaka"&&D[b]==="ParkTheBus")
