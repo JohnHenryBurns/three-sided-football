@@ -1329,6 +1329,31 @@ const PORTED = [
       return false;    // he now HAS the ball; his frame continues so he can carry it
     } },
 
+  // ── STAYING UP ────────────────────────────────────────────────────────────
+  // STEP 1 OF THE KEEPER EXPERIMENT. A keeper declining to dive is not nothing — it is a named
+  // goalkeeping decision with a payoff: stay on your feet, stay reactive, make him commit first.
+  // It is why keepers are coached to do it.
+  //
+  // The generic PLAY_ON_WEIGHT cannot express that. It carries no coach weight, appears in no
+  // report, and cannot be told apart from a frame where nothing was available at all.
+  //
+  // MECHANICALLY THIS CHANGES ALMOST NOTHING. He already declines most frames; the weight is set
+  // so the dive/hold split stays where it was. The point is to make the decision VISIBLE before
+  // anything is built on top of it — if he never holds, the dive weight is wrong and that is a
+  // one-line fix rather than a new mechanic.
+  { name:'staying up', tier:TIER.PLAYER, ported:true,
+    coach:T => (1-T.press)*40,          // a patient side keeps its keeper on his feet
+    can:p => {
+      if(p.role!=='K' || !onPitch(p) || ball.owner) return false;
+      if(p.diveUntil && clockSec < p.diveUntil) return false;
+      const og=goalCenter(p.team);
+      if(dist(ball,og) > 260) return false;
+      return !!ball.isShot;             // the same situation the dive reads, for now
+    },
+    score:p => 2400,                    // holds the existing split: he dives ~12% of the time
+    act:p => { TEL.keeperHeld++; return false; }   // he stays where he is, and stays free
+  },
+
   { name:'dive', tier:TIER.PLAYER, ported:true,
     coach:T => 0,
     can:p => {
@@ -3948,7 +3973,7 @@ const TEL = {
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
@@ -3959,20 +3984,20 @@ function telReset(){
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
     jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
     jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-    actFrames:{}, headers:0, shields:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
-  actFrames:{}, headers:0, shields:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
+    actFrames:{}, headers:0, shields:0, keeperHeld:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
     unattributed:0, unattMax:0, portFrame:-1,
   unattributed:0, unattMax:0, portFrame:-1, deflected:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, woodwork:0, bars:0, posts:0, port:{},
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
@@ -4067,6 +4092,7 @@ function buildMatchReport(){
   md+=`| free kicks | ${TEL.freeKicks} | ${p90(TEL.freeKicks)} | ~22 |\n`;
   md+=`| back-passes (keeper must kick) | ${TEL.backPass} | ${p90(TEL.backPass)} | |\n`;
   md+=`| **headers** | ${TEL.headers} | ${p90(TEL.headers)} | ~40 |\n`;
+  md+=`| keeper stayed up | ${TEL.keeperHeld} | | vs dives |\n`;
   md+=`| shielding (frames) | ${TEL.shields} | | |\n`;
   md+=`| **restarts voided by the watchdog** | ${TEL.restartVoid} | | should be 0 |\n`;
 
