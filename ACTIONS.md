@@ -1,3 +1,39 @@
+# ⚠ THE CASCADE IS NOT GONE
+
+**PR #192 said "THE CASCADE IS GONE". It was wrong.**
+
+Sixty-eight lines survive in the **per-player loop** — the fetch and the carry-to-mark —
+after the 495-line owner block was cut. They run **before** the instruction list, so they
+win.
+
+**Found from a colour.** `fetching the ball` is SCRIPT tier and should draw red. John's
+screenshot showed it **green**, which is PLAYER, which is what `job()` defaults an absent
+tier to. That block calls `job()` with no tier.
+
+**And the extracted instructions do not work.** Disabling the block:
+
+```
+                        held%   freeze    throws
+cascade block live        6%     7.6s      1.0
+cascade block disabled    1%   128.5s      0.0
+```
+
+**178-second freezes — the whole match.** `fetching the ball` and `carrying it to the mark`
+have never functioned; the cascade has been doing their job.
+
+**Consequences for anything read below or in INSTRUCTIONS.md:**
+
+- every restart measurement this session described the **cascade**, not the actions
+- three fixes to the restart path were made to code that was not running
+- the block **stays** until the instructions work — a broken restart is worse than a
+  duplicated one
+
+**The next piece of work, and the order matters:** make the two instructions work *with the
+block disabled*, proven on the same six seeds, **before** cutting it. I cut first and
+assumed, which is what produced all of the above.
+
+---
+
 # Action instructions — design
 
 **Not built.** This is the analysis John asked for after the position extraction landed.
