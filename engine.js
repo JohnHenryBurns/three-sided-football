@@ -1896,6 +1896,7 @@ const INSTRUCTIONS = [
     act:p => {
       if(dist(p,ball)>13){ steer(p, ball.x, ball.y, 2.6); return true; }
       pendingRestart.got=true;
+      ball.owner=p;                          // he has picked it up, and now he carries it
       ENGINE_HOOKS.spawnNote(ball.x, ball.y-22, "\u{1F450} fetched", TEAMS[p.team].color);
       return true;
     } },
@@ -2578,11 +2579,20 @@ const INSTRUCTIONS = [
   // when he arrives. THE MARK IS THE ONE THING HE MUST GET RIGHT: put it down anywhere else and
   // the throw is taken from the wrong place, which is the other half of what John saw.
   { name:'carrying it to the mark', tier:TIER.SCRIPT, base:955,
-    applies:p => !!(pendingRestart && pendingRestart.p===p && pendingRestart.fetch
-                    && pendingRestart.got && !pendingRestart.placed),
+    // IT DEPENDS ON THE BALL, NOT ON pendingRestart SURVIVING. John watched a fetcher arrive,
+    // leave the ball floating and wander off with a GREEN label — green is PLAYER tier, so he was
+    // running `carrying it`, the dribble. The script had stopped applying.
+    //
+    // It stopped because `pendingRestart` was cleared underneath him — by the watchdog, or by a
+    // restart being re-staged. He kept the ball, lost the instruction, fell through to the
+    // dribble, and the ball's z stayed at the carry height because nothing reset it.
+    //
+    // A man carrying a ball to a mark is doing that until the ball is down. The condition is
+    // `ball.fetch`, which he owns, not a restart record he does not.
+    applies:p => !!(ball.fetch && ball.fetch.by===p && ball.owner===p && onPitch(p)),
     score:p => 955,
     act:p => {
-      const mx=pendingRestart.x, my=pendingRestart.y;
+      const mx=ball.fetch.sx, my=ball.fetch.sy;
       if(dist(p,{x:mx,y:my})>10){
         steer(p, mx, my, 2.5);
         ball.x=p.x; ball.y=p.y; ball.z=6; ball.vx=0; ball.vy=0; ball.zv=0;   // it rides with him
@@ -2590,7 +2600,8 @@ const INSTRUCTIONS = [
       }
       // ON THE MARK. Ball down, and the throw becomes available.
       ball.x=mx; ball.y=my; ball.z=0; ball.vx=0; ball.vy=0; ball.zv=0;
-      pendingRestart.placed=true;
+      ball.owner=null;                      // it is DOWN. He is not holding it any more.
+      if(pendingRestart) pendingRestart.placed=true;
       ball.fetch=null;
       throwPending=p;
       // THE CLOCK THE RIPENING READS, and the whole bug. `restartSince` was read by two score()
