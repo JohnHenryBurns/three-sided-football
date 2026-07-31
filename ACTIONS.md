@@ -1,168 +1,98 @@
 # Actions and instructions — status
 
-**Measured through `lab.js` on six seeds, 3-minute matches, identities on.**
+**Measured through `lab.js`, six seeds, 3-minute matches, identities on.**
 
 ```
-instructions   42
-actions        19
-goals          9.7 / match
-corners        2.7
-throw-ins      34.5
-loose          85%      target ~35
-usable         0 / 6
+instructions   45
+actions        23
+goals          4.3 / match
+loose          87%
+crowd          1.89
+engine         287 KB
 ```
 
-## What is done
+## Where this stands
 
-**The cascade is gone.** 240 lines deleted plus the 495-line owner block. No `steer()`
-exists outside `INSTRUCTIONS`, `ACTIONS` and `PORTED`, and `jobFallback` fires **zero**
-times a match — the list has an answer for every player on every frame.
+**The cascade is gone.** 495 lines, then 240, then 68 more. No `steer()` exists outside
+the lists and `jobFallback` fires zero times a match.
 
-**Restarts work.** Throws and corners run the four-stage machine: fetch → carry → stand →
-take. The stalls are gone; the mark is reachable at 14 rather than an unreachable 9.
+**Every restart is on the state machine** — throw, corner, goal kick, free kick, penalty.
+Fetch → carry → stand → take, driven by where the ball is rather than by flags. **One
+teleport remains and it is the kick-off**, which is a reset rather than a jump.
 
-**Goals are goals.** The out-of-play state check no longer swallows a ball in the net.
+**Penalties exist again.** Nothing had awarded one since the cascade went; the trigger was
+missing and the action would have crashed if it had fired. The keeper now guesses left,
+right or middle, and separately high or low, before the ball is struck.
 
-**The tier colours are honest.** An untiered `job()` draws grey, which is how the last two
-surviving cascade blocks were found — both from screenshots.
+**The coach multiplies rather than adds**, which took the identity spread from 1.2:1 to
+1.74:1 on passing.
 
-## THE ONE NUMBER THAT MATTERS
-
-```
-loose 85%, target ~35, and 0/6 usable
-```
-
-**The ball is on the floor for six-sevenths of a match.** Every other figure is downstream
-of it. Nothing else in this document is worth doing before this.
-
-**What is known about it:** it is not the restarts, which now complete in about a second.
-It is not the carrier, who dribbles correctly when he has it. **It is that a loose ball is
-rarely picked up** — and the last measurement of that showed the nearest man to a loose
-ball sitting at a flat 45 units, which is a formation distance, not a chase.
-
-**The candidate:** `closing it down` and `intercepting` are PLAYER-tier instructions
-competing against `finding space` and `the back line`, which are also PLAYER tier. A side
-holding its shape outscores a side going for the ball. That is a weight question and the
-first honest one available, now that nothing is hiding behind a cascade.
-
-## Next: less passing, better passing
-
-**John, watching:** *too much passing, and too much bad passing into contested territory.
-Players bunch up and kick into a scrum. I want more space and smarter play.*
-
-**Three incremental adjustments — not a redesign.**
-
-### 1. Dribbling weighted up
-
-`carrying it` is a positional instruction and the no-op is what lets it run. So the lever
-is the **pass weights**, not the dribble: `pass` at 320 and `pass-safe` at 460 against
-`PLAY_ON_WEIGHT` 2800 means a carrier passes on ~10% and ~14% of frames respectively. **A
-possession lasts about eight frames before he lets go.**
-
-Lower them and he carries longer. That is the whole of "weight dribbling higher".
-
-### 2. A pass must not go into a scrum
-
-`bestPass` scores on ground gained toward the target goal, minus 500 for a blocked lane.
-**It does not ask how crowded the receiver is.** A man forty yards forward with three
-opponents around him scores well on gain and gets the ball.
-
-Add a crowding term: count opponents within ~45 of the candidate and penalise. **A pass to
-a covered man should lose to a pass to a free one, even if the free one is square.**
-
-### 3. `pass backwards` — a new action
-
-`can()` fires when **the way forward is crowded**: opponents in the forward arc, no
-open lane ahead. `act()` finds the best mate BEHIND the ball and plays it there.
-
-This is the option the engine has never had. A carrier under pressure today can shoot,
-hoof, shield, or pass forward into trouble — **there is no way to keep the ball by going
-backwards**, which is the first thing a real side does when the front is blocked.
-
-**Expected:** fewer passes, longer possessions, and the ones that happen going to men who
-can receive them. **Measured on:** `contested` (the 56% figure), possession length, and
-goals — which should not fall.
-
-## The keeper's phantom save — diagnosed, not fixed
-
-**John:** *"the goalie grabs a ball he was nowhere near. He'll be on the right side of the
-goal, there's a shot wide of the left that wasn't going in anyway, and suddenly the keeper
-is holding the ball."*
-
-**It is not a save. It is the goal kick.**
-
-```js
-stageGoalKick:  ball.owner = gk;  ball.x = gk.x;  ball.y = gk.y;
-```
-
-A shot wide crosses the goal line, a goal kick is awarded, and **the ball appears in his
-gloves wherever he happens to be standing.** It reads as a save that never happened, and it
-is **the last teleport in the game** — throws and corners were put on the state machine,
-goal kicks never were.
-
-**The fix is obvious and did not work.** Placing the ball on the six-yard line and letting
-him walk to it gave:
+## THE OPEN QUESTION, and it blocks the rock-paper-scissors work
 
 ```
-              goals   loose
-before          2.7     60%
-placed          1.2     24%
+passes per match, ten seeds
+
+TikiTaka   92.7 ± 70.0
+RouteOne   65.5 ± 59.8
+
+separation 0.42 SD — inside the noise
 ```
 
-**Loose at 3–8% on four seeds means the ball is owned almost always** — the keeper reaches
-it, picks it up, and the carry/place cycle loops. Same class of fault the throw had before
-its trace, and it wants the same treatment: **trace one goal kick stage by stage** rather
-than reason about it.
+**A three-minute match varies by ±75% seed to seed.** Every identity comparison made this
+session was reading noise, including one I reported as an inversion that was nothing.
 
-**Reverted.** The teleport stays until the replacement works, because a phantom save is
-better than a keeper holding the ball for the whole match.
+**Nothing about coaching can be calibrated until this is resolved.** Two options, and it is
+a judgement about feel rather than arithmetic:
 
-## Calibrating the coach — the baseline finding
+- **ten-minute matches for calibration** — cuts the relative spread by roughly √3, slow but
+  honest, and the only way to see a real matchup matrix
+- **sharper dials** — `/25` instead of `/45` spans 3:1 and is visible in three minutes, at
+  the risk of caricature
 
-**Before tuning anything: the coach terms are too small to matter.**
+## Next session, in order
 
-```
-pass:  base 210,  coach (1-T.direct)*50
+**1. Resolve the noise floor.** Nothing else in this list is measurable first.
 
-TikiTaka  direct 0.15   210 + 42 = 252    8.3% of frames
-RouteOne  direct 0.95   210 +  3 = 213    7.1% of frames
-```
-
-**A 300% difference in identity produces a 1.2-point difference in behaviour.** Every coach
-term is an additive constant of ±20 to ±90 against action scores of 210–460, competing
-against `PLAY_ON_WEIGHT` 2800. They are swamped.
-
-**Measured, four matches per identity, all three sides the same:**
+**2. Then the RPS triangle**, built in the channel that works — positioning, not weights:
 
 ```
-TikiTaka    goals 3.3   passes 47   shots 2   back  7
-RouteOne    goals 5.5   passes 62   shots 1   back 15
-Balanced    goals 2.0   passes 30   shots 0   back  8
+GEGENPRESS  beats  TIKI-TAKA     bodies near the carrier kill short passing
+TIKI-TAKA   beats  BUNKER        patient circulation finds a low block's gap
+ROUTE ONE   beats  GEGENPRESS    a high line leaves grass behind it
 ```
 
-Route One passes *more* than TikiTaka and recycles twice as often — **the opposite of both
-identities.** With the terms this small, that is seed noise wearing an identity's name.
+**The triangle is currently commentary only.** `styleLines()` asserts these counters from
+"the lab's matchup matrix", which no longer exists. **Measure the matrix and regenerate the
+commentary from it** — if patience does not eat the press, the line comes out.
 
-### The two channels, and only one is broken
+**3. Smaller things:** `stepStats()` for ~25 loose counters; the Mayhem ceiling (a called
+foul stops play, so a strict referee suppresses the count he punishes — *fouls per minute
+of open play* is the honest measure); `PEN_R` at 132 gives 1.7 penalties a match against a
+target under 1.
 
-```
-instructions   coach moves the TARGET   act() reads T()      WORKS
-actions        coach moves the WEIGHT   coach: T => const    SWAMPED
-```
+## Method notes — these cost the most to learn
 
-Three instructions read coaching directly in `act()` — `the back line` (39% of frames),
-`finding space` (27%), `closing it down` (6%) — and those genuinely shift where men stand.
-**Positioning is coached. Choice is not.**
+**A trace beats an inference.** Four inferences on the corner moved nothing; one trace
+found two bugs in a single run. The same held for the goal line, the woodwork, the restart
+stall and the carry threshold.
 
-### What calibration needs first
+**A measurement showing no change means nothing until the change is confirmed on disk.**
+Five string-anchored edits failed silently this session. **Edit by line number.**
 
-**Multiplicative, not additive.** `score * (0.4 + 1.2*T.direct)` spans 3:1 and survives the
-no-op; `score + 50` does not. The intentional foul already proved this — an explicit
-300:1 table was the only thing that made Clean and Filthy distinguishable.
+**Ad-hoc measurement loops lie.** They skip the celebration hold that `lab.js` and both
+browsers honour, and they play a different match. Measure through `lab.js` only.
 
-**And an objective.** "Good football" cannot be optimised, but *distinguishability* can:
-run each identity against itself and require the pass/shot/punt mix to differ by more than
-the seed spread. That is measurable, and it is the honest first target.
+**Cosmetic randomness must not share the simulation's stream.** `RNG_COS()` exists because
+adding a commentary line was changing match outcomes, and the resulting numbers looked
+plausible.
+
+**One seed is an anecdote.** Six consistent observations from one seed are one observation.
+
+**A screenshot beat six sweeps.** The surviving cascade, the hovering ball, the phantom
+save and the goal-kick teleport were all found from a picture or a sentence, not from the
+harness.
+
+---
 
 ## Step 1 done: the coach multiplies. And the noise floor is the real obstacle.
 
