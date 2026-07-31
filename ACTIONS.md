@@ -223,6 +223,289 @@ The seeded harness. **Six identical matches before and after**, and a discard co
 must not climb. That check did not exist this morning and it is the whole reason a
 transplant is now a reasonable thing to attempt rather than a reckless one.
 
+## Step two: written, not wired
+
+**All thirteen exist on the `transplant` branch. None of them fires.**
+
+`ACTIONS_LIVE` is `false`, `runAction` skips the ported set, and the cascade does every
+kick exactly as it did this morning. Proven rather than asserted:
+
+```
+six seeds against baseline.json, switch off
+6/6 IDENTICAL — goals, throw-ins and loose% to two decimals
+```
+
+**This is the split the surgery rule allows.** The transplant must be atomic, because the
+*mixture* is what crashes — some kicks releasing the ball through `runAction` while
+others release it inline. But **writing the organ is not fitting it.** With the switch
+off there is no mixture: the cascade owns every release, as before.
+
+### What each one carries
+
+```
+SCRIPT   corner-swing  throw-in  penalty  free-kick
+PLAYER   gk-roll  gk-punt  gk-clear  gk-hopeful
+         pass  pass-safe  pass-alt  shot  shot-power
+```
+
+Every one has `can`, `score`, `tier` and **`coach(T)`** — John's correction, that the
+bench weights *every* action rather than owning a tier. `gk-clear` is PLAYER now: a
+bunkering side weights it +110 and a passing side does not, and neither is being ordered.
+
+**The `score()` floors are the interesting part.** `pass-safe` at 90 and `gk-hopeful` at
+100 are deliberately below everything else — they are what happens when nothing better
+applies, which is how the cascade's `else` branches translate into a scored list. An
+`else` is just the lowest score.
+
+**The `act()` bodies are stubs returning false.** Filling them is the flip: move each
+cascade site's body into its action, delete the site, set `ACTIONS_LIVE = true`. One
+commit, six seeds, and it either holds or reverts whole.
+
+## The ripening no-op
+
+**John's idea, and it removes every hardcoded restart delay in the engine.**
+
+A mandated action does not fire the instant it is legal. **It ripens** — its weight grows
+each frame against a fixed no-op at SCRIPT tier, so the chance of it happening rises from
+nearly nothing to a certainty, and *which frame it lands on is sampled rather than set*.
+
+```
+0.5s   weight   100   p=0.10
+1.0s   weight   400   p=0.31
+1.5s   weight   900   p=0.50
+2.0s   weight  1600   p=0.64
+3.0s   weight  3600   p=0.80
+```
+
+Quadratic: **hesitant, then decisive**, which is how people are.
+
+**This is the variable pause, and "sometimes they can move quick" falls out of it** rather
+than being a special case. A quick throw is not a different rule — it is the tail of the
+same distribution.
+
+**And the growth rate is where tactics reach it:**
+
+```
+direct 0.2   rate 328   even odds at 1.7s
+direct 0.5   rate 430   1.4s
+direct 0.8   rate 532   1.3s
+```
+
+Same action, different urgency, no second code path. A penalty ripens at 130 with no
+coach term at all — **the pause is the drama there, and nothing about a side's tempo
+should hurry it.**
+
+**What it replaces:** `readyAt: nowMs()+1100`, `cap: nowMs()+2000`, `restartHold +2400`,
+and the 900ms kick-off pause. Four constants, each of which made every instance of its
+restart identical.
+
+## The deletion, scoped properly
+
+**The flip fails on a guard, and the reason is structural.** `gkDiveCheck(targets[owner.team])`
+sits at line 2891 — **outside the per-player loop**, in a block that captured `owner` at
+the top of the frame. An action releasing the ball leaves that stale, and no guard inside
+the loop can reach code that runs after it.
+
+So step 2 is load-bearing, not tidiness. But measuring it changed the estimate:
+
+```
+the owner-decision block   495 lines, 12 kick sites
+```
+
+**And it is not only kicks.** Interleaved with them:
+
+```
+gkHolder / gkHoldUntil     the keeper's hold state
+stats.tackles / o.tackles  tackling — not an action at all
+owner.noChase, the hop     the thrower's follow-through
+ball.puntBy                possession tracking the ally rules read
+```
+
+**None of those was ported, because the port was looking for `kick()`.** They are
+bookkeeping that happens to live beside kicks.
+
+### What the deletion actually is
+
+Not a deletion. **A separation**: pull the bookkeeping out of the block, leave it running,
+and remove only the decision-and-kick pairs the actions now own. The block shrinks rather
+than vanishes.
+
+**Three things must survive it:**
+
+1. `gkHolder` — the keeper's hold is read by four instructions
+2. tackling — an entire mechanic with no action equivalent
+3. `ball.puntBy` and the ally-pass flags — the three-sided rules depend on them
+
+**And `gkDiveCheck` needs an owner that is still valid**, which means either passing the
+team explicitly or moving the call into the shot actions where the shooter is known.
+
+### Estimate
+
+Larger than a flip and smaller than a rewrite. **The organ is ready and the cavity needs
+preparing** — and knowing that precisely is worth more than another attempt at the boolean.
+
+## Fourteen, and the two inversions
+
+**`dive` and `tackle` were both written from the wrong player's frame**, and that is what
+made the flip crash rather than anything about kicks.
+
+```
+gkDiveCheck(defT)    called by the SHOOTER, reaching across to move a keeper
+the tackle           a rate inside a forEach over opponents, run from the CARRIER's frame
+```
+
+Both reach through a variable that means something at the top of the frame and something
+else by the time it is read. **Guarding that is impossible from inside the loop; removing
+the reach makes it a non-question.**
+
+As actions they belong to the player who acts:
+
+```
+dive     his prerequisite is "a shot is coming at my goal"
+tackle   his prerequisite is "somebody near me has the ball"
+```
+
+**And both return `false`.** A dive is not a touch and a tackle *gains* the ball rather
+than releasing it — so the frame continues and the positional instruction still runs. That
+distinction is what the runner was built for and these are the first two to use it.
+
+**Rates preserved:** the tackle's `0.010*(0.6+0.8*press)*aggression` with its fresh-tackler
+and gassed-carrier terms becomes a score of ~47, which is 1.5% of the frames a tackler is
+in range. Every factor survives as a term.
+
+## The flip, attempt two: the crash is fixed, the behaviour is not
+
+**It runs.** No crash, six matches to completion. That is real progress — the crash took
+three attempts and is now gone at the root rather than guarded.
+
+**What fixed it, in order of how much it mattered:**
+
+1. **`dive` became a keeper action.** The shooter no longer reaches across to move a
+   goalkeeper.
+2. **`tackle` became a tackler's action.** The carrier no longer rolls dice for his own
+   tacklers.
+3. **The owner block requires a *current* owner** — `if(owner && ball.owner===owner)`.
+   `owner` is captured before the player loop; an action may have taken the ball since,
+   and a block that reasons about a man in possession is wrong when he no longer has it.
+
+That third line is the crash in one condition. **Not a guard on twelve call sites: a
+statement that a block about the ball's owner requires the ball's owner.**
+
+### And then it stalls
+
+```
+0/6 usable   loose 84-88% on every seed   "nobody chasing"
+```
+
+The ball sits. **The ported actions do not reproduce what the cascade was doing** — most
+likely their `can()` prerequisites are stricter than the branches they replaced, so
+restarts never complete and nobody takes possession.
+
+**That is a behaviour gap, not a structural one**, and it is the right kind of problem to
+be left with: fifteen named actions whose conditions can be checked one at a time against
+a seed, rather than a crash whose cause is somewhere in 495 lines.
+
+**Next:** instrument which actions fire during a flipped match and which never do. The
+ones that never fire are the ones whose `can()` is wrong.
+
+## The instrumentation, and what it says
+
+One flipped match, 300 seconds, 15 players — so roughly **270,000 player-frames**:
+
+```
+fired   corner-swing 2   gk-punt 1   gk-clear 1   secure it 2
+        tackle 1   pass 3   shield it 1
+NEVER   throw-in  penalty  free-kick  gk-roll  dive
+        gk-hopeful  pass-safe  shot  shot-power  head it
+
+play on: 142
+```
+
+**153 total action opportunities in a whole match.** That is the finding, and it is not
+about any individual `can()`.
+
+`runAction` is reached by every player every frame, and for almost all of them nothing
+applies — correctly, since they do not have the ball. **But the ball's owner should have
+several actions available on nearly every frame he holds it**, and 153 says he almost
+never does.
+
+**So the fault is upstream of the conditions.** Either `runAction` is not being reached
+for the owner, or the owner exists for far fewer frames than expected. The 84% loose
+figure points at the second: **if nobody holds the ball, no ball-owning action can fire,
+and every one of the ten looks broken when only one thing is.**
+
+**That reframes the next step.** Not "check ten `can()` conditions" but "find out why
+possession barely exists in a flipped match" — one question instead of ten, and the
+answer probably restores most of the ten at once.
+
+**Prime suspect:** the claim path. `if(owner && ball.owner===owner)` guards a block with
+no `else`, so nothing there handles a loose ball — but if claiming happens somewhere that
+depends on that block having run, guarding it would starve possession exactly this way.
+
+## The stall is one constant
+
+```
+dormant   1298 owner-frames, 13 possessions won   ~100 frames each
+flipped    153 owner-frames, 12 possessions won   ~13 frames each
+```
+
+**Possession is won equally often and lost eight times faster.** A carrier releases the
+ball within a fifth of a second instead of carrying it.
+
+**`PLAY_ON_WEIGHT = 2800` predicts exactly that.** Actions scoring 300–460 against it fire
+on 10–14% of frames, so a hold lasts 7–10 frames. The measurement matches the arithmetic,
+which means nothing is broken — the dial is simply wrong.
+
+```
+2800    a 360 action fires 11.4% of frames   hold ~9 frames
+30000   fires 1.2%                           hold ~84 frames
+```
+
+**The cascade holds ~100 frames, so the figure the game already had is around 30,000.** I
+chose 2800 by eye when the only actions were a header and a shield, and never revisited it
+when eleven more arrived.
+
+**None of the ten "broken" `can()` conditions is broken.** They never fired because nobody
+holds the ball long enough for a second action to be considered — the first one available
+takes it and ends the possession.
+
+## THE FLIP IS DONE
+
+```
+5/6 usable   —   baseline was 4/6
+```
+
+Fifteen actions live, the cascade's tackle deleted, its three `gkDiveCheck` calls gone,
+and `ACTIONS_LIVE` true.
+
+**What it took, and none of it was the twelve kick sites:**
+
+```
+dive -> a keeper action      the shooter stopped reaching across to move a keeper
+tackle -> a tackler's        the carrier stopped rolling dice for his own tacklers
+if(owner && ball.owner===owner)   a block about the owner requires the owner
+PLAY_ON_WEIGHT 2800 -> 60000      the dial that made ten actions look broken
+```
+
+**The last one is the lesson.** At 2800 a carrier released the ball within nine frames, so
+no second action was ever considered and ten `can()` conditions looked wrong. **One
+constant, ten symptoms** — and I only found it by measuring possession directly rather than
+inspecting the conditions.
+
+### Where it stands
+
+```
+loose 70-76%   baseline 65%     still looser than the cascade
+throws 75-96   baseline 38-58   and more of them
+goals 18-29    baseline 8-27    in range
+```
+
+**Usability is better than baseline and the texture is not.** The ball spends more time
+loose, which is the thing to tune next — and it is now tunable, because every release is a
+named action with a weight rather than a rate buried in a branch.
+
+That was the point of the whole exercise.
+
 ## Order
 
 1. find the common shape, or establish that there isn't one

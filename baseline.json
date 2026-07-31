@@ -1,0 +1,56 @@
+[
+ {
+  "seed": 2000,
+  "ok": true,
+  "goals": 27,
+  "throws": 55,
+  "loose": 62.17,
+  "aerial": 31.88,
+  "crowd": 2.169
+ },
+ {
+  "seed": 2001,
+  "ok": true,
+  "goals": 23,
+  "throws": 58,
+  "loose": 63.22,
+  "aerial": 33.33,
+  "crowd": 2.073
+ },
+ {
+  "seed": 2002,
+  "ok": true,
+  "goals": 18,
+  "throws": 58,
+  "loose": 63.5,
+  "aerial": 27.73,
+  "crowd": 2.026
+ },
+ {
+  "seed": 2003,
+  "ok": false,
+  "goals": 8,
+  "throws": 38,
+  "loose": 82.92,
+  "aerial": 19.28,
+  "crowd": 1.05
+ },
+ {
+  "seed": 2004,
+  "ok": true,
+  "goals": 26,
+  "throws": 45,
+  "loose": 62.82,
+  "aerial": 34.05,
+  "crowd": 2.24
+ },
+ {
+  "seed": 2005,
+  "ok": false,
+  "goals": 8,
+  "throws": 39,
+  "loose": 37.8,
+  "aerial": 20.89,
+  "crowd": 2.69
+ }
+]
