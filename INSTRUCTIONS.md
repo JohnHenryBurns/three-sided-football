@@ -497,11 +497,34 @@ cascade. The list wins (1300+120 beats a cascade branch that never gets scored) 
 copies are unreachable — but two copies of a decision is how they drift, and I broke
 the file twice trying to delete them. Delete carefully, with the brace depth checked.
 
-**Gloves at 55%**, up from 44% then 38% across three logs while I was changing keeper
+**GLOVES: SOLVED, and I had not noticed.** Eight seeds give 16, 19, 22, 23, 24, 25, 26,
+30% — median 24 against a target of ~30. **We are now under it.** The back-pass rule and
+the action port between them fixed a number that had climbed 38 -> 44 -> 55 across three
+logs and had an open investigation attached to it.
+
+Worth noting how it was found: not by working on it, but by re-checking the open list
+with proper sampling. **Two of the four open items were already dead.**
+
+**Superseded: gloves at 55%**, up from 44% then 38% across three logs while I was changing keeper
 behaviour. Three moves in one direction is not noise. Suspects: the clearance path, the
 area clamp, the crowded-keeper rule.
 
-**Woodwork: tunnelling found and fixed, and it was not enough.** The test asked whether
+**WOODWORK: still zero across eight seeds, so this one is real.** Instrumented:
+
+```
+one match, 15 goals scored
+  frames where the ball crossed a goal plane by this test's reckoning:  1
+```
+
+**The test's notion of "crossed" does not match the one the goal uses.** A goal is awarded
+at `d < -6`; the crossing test wants `dPrev > 0 && d <= 0`, which happens an earlier frame
+— and evidently almost never registers.
+
+**Next:** find where `ball.px` is written relative to where the boundary test reads it. If
+the test runs before `physics()` updates the previous position, `dPrev` equals `d` and
+nothing can ever cross.
+
+**Previously: tunnelling found and fixed, and it was not enough.** The test asked whether
 the ball was INSIDE an 8-unit band across the goal plane, and a shot travels 8.5 units a
 frame — so it was never once measured inside. Textbook tunnelling. Now it tests the
 CROSSING: where the ball was against where it is, with the height and lateral position
