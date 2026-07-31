@@ -2897,6 +2897,43 @@ const INSTRUCTIONS = [
       return true;
     } },
 
+  // ── CHASING AT PACE ───────────────────────────────────────────────────────
+  // The sprint. It went with the cascade and nothing replaced it, so since that cut NOBODY IN
+  // THE GAME HAS RUN — burst is spent by the dive, the sweep and the power shot, and by nothing
+  // that moves a man.
+  //
+  // An instruction rather than an action, by our own boundary rule: this is a decision about
+  // WHERE HE GOES AND HOW FAST, not about what he does with the ball. It is `closing it down`
+  // with the handbrake off.
+  //
+  // WHEN IT IS WORTH IT is the whole instruction. A loose ball he can reach before anybody else,
+  // or one he is losing a race for by a little. Not a ball already lost, and not one he will
+  // reach walking — a sprint is a bet, and burst is what he pays.
+  { name:'chasing at pace', tier:TIER.PLAYER, base:398,
+    applies:p => {
+      if(!onPitch(p) || p.role==='K' || ball.owner || holdingPlay()) return false;
+      if(p.burst <= 0.35) return false;                  // no legs
+      if(p !== chaser[p.team]) return false;             // one man per side
+      const d=dist(p,ball);
+      if(d < 30 || d > 190) return false;                // not a walk, not a hopeless case
+      // is it a race? somebody else within a stride of my distance
+      let rival=1e9;
+      players.forEach(q=>{ if(q.team!==p.team && onPitch(q)) rival=Math.min(rival, dist(q,ball)); });
+      return rival < d + 40;                             // close enough to be worth the legs
+    },
+    score:p => 398 + (1-Math.min(1,dist(p,ball)/190))*40,   // keener the closer he is
+    act:p => {
+      if(!p.sprint && p.burst>0.35){
+        p.sprint={why:'chase', blaze:RNG()<0.10};
+        p.burst -= 0.35;
+        GKSTAT.b_chase=(GKSTAT.b_chase||0)+1;
+        if(p.sprint.blaze) blazeCall(p);
+      }
+      const lead=6;
+      steer(p, ball.x+ball.vx*lead, ball.y+ball.vy*lead, 2.6);
+      return true;
+    } },
+
   // ── OFFERING AFTER A RESTART ──────────────────────────────────────────────
   // NOT explicit: he has taken it and is choosing to make himself available rather than chase.
   // Released by POSSESSION — the moment anybody else has the ball he is a player again — with
