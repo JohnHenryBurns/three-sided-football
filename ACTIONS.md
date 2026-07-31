@@ -608,6 +608,38 @@ straight out of the geometry, no tuned probability required.
 recorded here before the next step begins. Any step that does not move its own measure
 gets reverted rather than kept "because it is more correct".
 
+## The sweep has no answer — something is missing, not mistuned
+
+**John is right on both counts:** a completed pass is not a turnover, and the weights were
+derived against a cascade that ran every frame so they were always going to be too eager.
+
+**But sweeping does not find a value, because the variance dwarfs the effect:**
+
+```
+weight    frames the ball is held, four seeds
+  2800    1, 50, 12, 3 %
+ 12000    11, 30, 14, 0 %
+ 30000    0, 2, 57, 15 %
+```
+
+**A dial produces a trend. There is no trend.** Some matches hold the ball half the time
+and some effectively never, at every weight tried.
+
+**That says something is absent rather than badly weighted.** The candidate: with the
+cascade gone, nothing keeps a possession alive between actions. A man owns the ball, an
+action fires and releases it, it flies, and whether anybody recovers it is chance. The
+cascade's every-frame evaluation was doing continuous work — carrying, shielding,
+re-choosing — that a 3%-per-frame action list does not replicate.
+
+**What is likely missing:** the ball-carrier has no *default*. Every other player has one —
+`finding space`, `the back line`. The carrier's only positional instruction is `carrying
+it`, and his action list is entirely ways to GIVE THE BALL AWAY. There is no "keep it".
+
+**Next, and it is a design question rather than a tuning one:** should a carrier have a
+low-cost action that retains possession — a touch, a turn, a step — so that not-passing is
+a positive choice rather than the absence of one? `shield it` is nearly that, but its
+`can()` requires pressure within 26.
+
 ## STILL OWED — the ledger
 
 **Nothing here is done. It is written down so it cannot quietly stop being owed.**
