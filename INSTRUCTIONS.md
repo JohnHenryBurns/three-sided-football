@@ -509,7 +509,41 @@ with proper sampling. **Two of the four open items were already dead.**
 behaviour. Three moves in one direction is not noise. Suspects: the clearance path, the
 area clamp, the crowded-keeper rule.
 
-**WOODWORK: the fix was behind the bug it fixed, and there is a second cause.**
+**WOODWORK: the ball DOES cross the plane. John was right and my measurement was wrong.**
+
+Traced frame by frame into a goal, on the conceding edge:
+
+```
+frame -4    d = +5.1
+frame -3    d = +1.4
+frame -2    d = -2.3    crosses here, cleanly
+frame -1    d = -6.0    goal awarded
+```
+
+**3.7 units a frame, no tunnelling, an unmistakable sign change.** `dPrev>0 && d<=0` is
+true on frame −2, so the crossing test *should* fire.
+
+**So "the ball never crosses the plane" was false**, and it was the conclusion of two
+sessions. It came from counting crossings with instrumentation whose anchor did not match
+the source — a `for(let k=0;k<6;k++){` with different indentation than I searched for,
+which silently counted nothing and reported zero.
+
+**That is the third measurement today that produced a confident number from an anchor that
+never matched.** The others were caught because the number looked odd; this one looked
+plausible, which is worse.
+
+**What is actually established:**
+
+- the ball crosses cleanly, at ~4 units a frame
+- at the crossing the ball was at z=41, under a 54 crossbar — a legitimate goal, not
+  woodwork, so *this particular* goal correctly produced none
+- the crossing test is now outside the `d<7` guard, which was a real fault and is fixed
+
+**What is not established:** whether the test fires on that frame. Every attempt to count
+it has used broken instrumentation. **The next step is to log from inside the test itself
+rather than from a patched copy** — put a counter in the engine, run, read it, remove it.
+
+**Superseded: the ball essentially never passes through a goal plane**
 
 **First fault, now corrected.** The crossing test lived *inside* `if(d<7)` — the very
 proximity band a fast ball skips. So the test written this morning to cure tunnelling was
