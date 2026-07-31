@@ -2509,6 +2509,54 @@ const INSTRUCTIONS = [
       steer(p, g.x+e.nx*12, g.y+e.ny*12, 2.4);
       return true;
     } },
+  // ── THE PENALTY BOX EMPTIES ───────────────────────────────────────────────
+  // A penalty is the one set piece with no wall — the laws put EVERYBODY outside the area and
+  // behind the ball, and the three-sided version makes that more interesting rather than less,
+  // because there are two sides who are not taking it and they want different things.
+  //
+  //   THE ATTACKING SIDE   on the arc, goal-side of the ball, ready for the rebound. They are
+  //                        the only ones who benefit from it dropping short.
+  //
+  //   THE CONCEDING SIDE   the same arc, because a rebound they reach first ends the danger.
+  //                        Slightly deeper — they are protecting, not hunting.
+  //
+  //   THE THIRD SIDE       John's question, and the good one. They care about neither the kick
+  //                        nor the rebound. They drop toward their OWN goal and spread — because
+  //                        whatever happens next, somebody attacks somebody, and the side that
+  //                        did not concede the penalty is the side best placed to counter it.
+  //
+  // All of them stay out of the box. The keeper is exempt via `on his line`, and the shooter via
+  // being the taker.
+  { name:'clearing the penalty area', tier:TIER.SCRIPT, base:942,
+    applies:p => !!(pendingRestart && pendingRestart.kind==='penalty'
+                    && pendingRestart.p!==p && !p.out && !p.sentOff
+                    && !(p.role==='K' && p.team===penaltyGoalTeam)),
+    score:p => 942,
+    act:p => {
+      const spot={x:pendingRestart.x, y:pendingRestart.y};
+      const g=goalCenter(penaltyGoalTeam);
+      // the axis from goal out through the spot: everyone stands beyond the ball on it
+      const ax=spot.x-g.x, ay=spot.y-g.y, al=Math.hypot(ax,ay)||1;
+      const ux=ax/al, uy=ay/al, px=-uy, py=ux;
+      const lat=((p.k1*733)%1-0.5);
+
+      if(p.team===pendingRestart.team){
+        // ATTACKING: on the arc, tight, hungry for the rebound
+        const dep=PEN_R+26+((p.k2*397)%1)*30;
+        steer(p, g.x+ux*dep+px*lat*190, g.y+uy*dep+py*lat*190, 2.2);
+      } else if(p.team===penaltyGoalTeam){
+        // CONCEDING: the same arc, a little deeper. Protecting, not hunting.
+        const dep=PEN_R+40+((p.k2*571)%1)*26;
+        steer(p, g.x+ux*dep+px*lat*210, g.y+uy*dep+py*lat*210, 2.2);
+      } else {
+        // THE THIRD SIDE: neither kick nor rebound is theirs. Home, and spread for the counter.
+        const own=goalCenter(p.team);
+        const cx2=own.x+(CX-own.x)*0.42, cy2=own.y+(CY-own.y)*0.42;
+        const ox=-(own.y-CY), oy=(own.x-CX), ol=Math.hypot(ox,oy)||1;
+        steer(p, cx2+(ox/ol)*lat*230, cy2+(oy/ol)*lat*230, 2.1);
+      }
+      return true;
+    } },
   { name:'positioning for a restart', tier:TIER.SCRIPT, base:940,
     applies:p => !!(pendingRestart && !restartFree(p) && !p.out && !p.sentOff
                     && p.role!=='K'),
