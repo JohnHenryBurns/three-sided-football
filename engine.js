@@ -884,6 +884,17 @@ function kick(tx,ty,power,isShot){
 //
 // A hold requires a THING BEING HELD FOR. If nothing is pending, play is live whatever the clock
 // says — and the chase is allowed again.
+/** Where a taker stands relative to the mark. A thrower is BEHIND the line and the ball is on
+ *  it — they are on opposite sides of the chalk, which is what a throw-in is. A corner taker
+ *  stands at the flag. Everyone else stands where the ball is. */
+function restartSpot(p){
+  const R=pendingRestart;
+  if(!R) return {x:p.x, y:p.y};
+  if(R.kind==='corner' || cornerTaker===p) return {x:R.x, y:R.y};
+  const odx=R.x-CX, ody=R.y-CY, ol=Math.hypot(odx,ody)||1;
+  return { x:R.x + odx/ol*22, y:R.y + ody/ol*22 };
+}
+
 function holdingPlay(){
   if(nowMs() >= restartHold) return false;
   return !!(pendingRestart || freeKick || cornerPending || throwPending || goalRestart || ball.fetch);
@@ -1041,7 +1052,14 @@ function job(p, what, tier){
   // and `||` treats 0 as absent, so the cascade was being promoted to PLAYER and drawn green.
   // A cascade branch is not a player decision; it is a decision nobody has named yet, and the
   // whole point of the grey is to show how much of that is left.
-  p.jobTier = (tier === undefined || tier === null) ? TIER.PLAYER : tier;
+  // AN UNTIERED CALL MEANS NOBODY ASSIGNED THIS. It used to default to PLAYER, so a cascade
+  // branch calling job(p,'fetching the ball') drew GREEN — indistinguishable from a player
+  // decision, which is exactly what the colouring exists to distinguish.
+  //
+  // John spotted a surviving cascade block from that colour after I had declared the cascade
+  // gone and spent hours measuring it. The default hid it. Now an absent tier is 0, which the
+  // renderer draws GREY, and grey means "nobody named this".
+  p.jobTier = (tier === undefined || tier === null) ? 0 : tier;
 }
 
 /** Called once per player per frame, after think() has settled on something. */
@@ -1272,24 +1290,46 @@ const PORTED = [
   //
   // That replaces `readyAt: nowMs()+1100` — a constant that made every throw identical and could
   // not be quick even when quick was right.
+  // ── TAKING IT ─────────────────────────────────────────────────────────────
+  // The last stage. He is behind the ball, the ball is on the mark, and the action ripens from
+  // the moment he got there — so the pause varies and a quick one is the tail of the same
+  // distribution rather than a special case.
+  //
+  // He picks it up for the instant of the throw because kick() reads ball.owner to know who
+  // struck it, and lets go immediately after. And THE RESTART ENDS HERE, which is the thing the
+  // old version never did: pendingRestart is cleared by the ball being struck, by nothing else.
   { name:'throw-in', tier:TIER.SCRIPT, ported:true,
     coach:T => 0,
-    can:p => !!(throwPending===p && ball.owner===p),
-    score:p => ripeness(p.restartSince||clockSec, 260 + 340*T(p.team).direct),
+    can:p => {
+      if(!pendingRestart || pendingRestart.p!==p || ball.owner || !onPitch(p)) return false;
+      const m={x:pendingRestart.x, y:pendingRestart.y};
+      if(dist(ball,m) > 12) return false;              // not on the mark
+      return dist(p, restartSpot(p)) <= 10;            // and he is in position
+    },
+    // THE CLOCK IS THE STAGING TIME, ALWAYS SET. `since` was only assigned in the carry stage —
+    // and when the ball is staged already on the mark, which is most restarts, that stage never
+    // runs. So `since` stayed undefined, ripeness got clockSec, elapsed was zero, and the throw
+    // could never ripen. The same fault as `restartSince`, one layer further down, and the trace
+    // showed it as `since:n` for nineteen consecutive frames.
+    score:p => ripeness(pendingRestart.since !== undefined ? pendingRestart.since
+                        : (pendingRestart.at !== undefined ? pendingRestart.at : clockSec),
+                        240 + 300*T(p.team).direct),
     act:p => {
       const best=bestPass(p);
       const tgt = best || players.find(m=>m.team===p.team && m!==p && onPitch(m) && m.role!=='K');
-      if(!tgt){ kick(CX,CY,6); return true; }
-      kick(tgt.x+tgt.vx*6, tgt.y+tgt.vy*6, Math.min(6.4, Math.max(2.8, dist(tgt,p)/66*1.15)), false);
-      const throwD=dist(tgt,p);
-      ball.zv = 2.6 + Math.min(1.6, throwD/260*1.6);
-      throwPending=null;
+      ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p;
+      if(tgt){
+        const d9=dist(tgt,p);
+        kick(tgt.x+tgt.vx*6, tgt.y+tgt.vy*6, Math.min(6.4, Math.max(2.8, d9/66*1.15)), false);
+        ball.zv = 2.6 + Math.min(1.6, d9/260*1.6);
+      } else kick(CX, CY, 5.5, false);
+      ball.owner=null;
+      pendingRestart=null; throwPending=null; ball.fetch=null;   // struck: the restart is over
+      p.noChase=clockSec+1.0;
+      TEL.throwsTaken++;
       return true;
-    } },      // the cascade's target logic moves here on the flip
+    } },
 
-  // ── THE PENALTY ───────────────────────────────────────────────────────────
-  // Ripens slowest of the three. A penalty is the one restart where the pause IS the drama, and
-  // nothing about a side's tempo should hurry it — no coach weight, no direct term.
   { name:'penalty', tier:TIER.SCRIPT, ported:true,
     coach:T => 0,
     can:p => !!(penaltyShooter===p && ball.owner===p),
@@ -1885,723 +1925,63 @@ function runAction(p){
 }
 
 const INSTRUCTIONS = [
-  // ── FETCH THE BALL ────────────────────────────────────────────────────────
-  // EXPLICIT. He has been given a restart and the ball is lying somewhere. Nothing outranks it,
-  // and the base score is the position it held in the cascade so the refactor does not quietly
-  // reshuffle the AI.
-  { name:'fetching the ball', tier:TIER.SCRIPT, base:900,
-    applies:p => !!(pendingRestart && pendingRestart.p===p && pendingRestart.fetch
-                    && ball.fetch && !pendingRestart.got),
-    score:p => 900,
+  // ── THE RESTART, AS A STATE MACHINE ───────────────────────────────────────
+  //
+  // Built from what should happen rather than from what the cascade did, because the cascade did
+  // not work either: hovering balls, wandering takers, eleven-second freezes.
+  //
+  // FOUR STAGES, and each one asks WHERE THE BALL IS rather than reading a flag. Flags get
+  // cleared underneath a player — that is what stranded the last version mid-carry. The ball's
+  // position cannot be cleared.
+  //
+  //   1  he does not have it and it is not on the mark   -> go and get it
+  //   2  he has it                                       -> carry it to the mark, put it down
+  //   3  it is on the mark and he is not behind it       -> take up position
+  //   4  he is behind it                                 -> the action fires when ripe
+  //
+  // A restart ends when the ball is struck. Nothing else ends it, and no timeout is needed
+  // because every stage moves toward the next one.
+
+  { name:'fetching the ball', tier:TIER.SCRIPT, base:960,
+    applies:p => !!(pendingRestart && pendingRestart.p===p && !p.out && !p.sentOff
+                    && ball.owner!==p
+                    && dist(ball, {x:pendingRestart.x, y:pendingRestart.y}) > 12),
+    score:p => 960,
     act:p => {
-      if(dist(p,ball)>13){ steer(p, ball.x, ball.y, 2.6); return true; }
-      pendingRestart.got=true;
+      if(dist(p,ball) > 12){ steer(p, ball.x, ball.y, 2.6); return true; }
+      ball.owner=p; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
       ENGINE_HOOKS.spawnNote(ball.x, ball.y-22, "\u{1F450} fetched", TEAMS[p.team].color);
       return true;
     } },
 
-  // ── RETREAT FROM A FREE KICK ──────────────────────────────────────────────
-  // EXPLICIT, and the only rule in football that exists purely to make a restart possible.
-  // ── THE FREE KICK, ARCHITECTED ────────────────────────────────────────────
-  //
-  // FOOTBALL ALLOWS MOTION HERE. Only the ball must be stationary; the offending side must
-  // retreat 9.15m and everybody may move throughout — runs are made, walls shuffle, and a kick
-  // may be taken quickly while all of it is still happening. Nobody is frozen, and building it
-  // as a freeze would have been wrong.
-  //
-  // EVERY OPPONENT RETREATS, not just the offender. I had this wrong: in football all opponents
-  // must be 9.15m away, and only the side taking it may be close. On a hex that means BOTH other
-  // teams back off — the third side included.
-  //
-  // ALLIANCES ARE INFORMAL AND CONFER NOTHING HERE. An ally is not entitled to stand over
-  // somebody else's free kick, and letting them sit in the passing lanes turned a restart into a
-  // scrum around the kicker. A free kick is the one moment a side is guaranteed space, and that
-  // guarantee is the whole point of the rule.
-
-  // ── THE TAKER ─────────────────────────────────────────────────────────────
-  // SCRIPT. He walks to it, stands over it, and gives the play A MOMENT TO FORM — but not
-  // forever. He goes when the wall is clear, or after 2.5 seconds regardless, which is what a
-  // quick free kick is.
-  { name:'standing over a free kick', tier:TIER.SCRIPT, base:960,
-    applies:p => !!(freeKick && !freeKick.done && freeKick.taker===p && !p.out && !p.sentOff),
-    score:p => 960,
-    act:p => {
-      const fd=dist(p,{x:freeKick.x,y:freeKick.y});
-      if(fd>12){ steer(p, freeKick.x, freeKick.y, 2.4); return true; }
-      p.vx=0; p.vy=0;
-      ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.touchT=0.4;
-      if(clockSec-freeKick.at>2.5 || wallClear(freeKick)){
-        freeKick.done=true;
-        p.noChase=clockSec+1.0;
-      }
-      return true;
-    } },
-
-  // ── THE RETREAT ───────────────────────────────────────────────────────────
-  // REQUIREMENT, and the only rule in football that exists purely to make a restart possible.
-  // The offending side and nobody else.
-  { name:'retreating from a free kick', tier:TIER.REQUIREMENT, base:880,
-    applies:p => !!(freeKick && !freeKick.done && p.team!==freeKick.team && !p.out && !p.sentOff
-                    && Math.hypot(p.x-freeKick.x, p.y-freeKick.y)<64),
-    score:p => 880,
-    act:p => {
-      const dx=p.x-freeKick.x, dy=p.y-freeKick.y, dl=Math.hypot(dx,dy)||1;
-      steer(p, freeKick.x+dx/dl*70, freeKick.y+dy/dl*70, 2.4);
-      return true;
-    } },
-
-  // ── THE WALL ──────────────────────────────────────────────────────────────
-  // COACH. Once he is legal, he stands ON THE LINE between the ball and his own goal, at the
-  // required distance — which is what a wall is: bodies in the way of the direct route. Spread
-  // laterally by the usual stable hash so three men make a wall rather than a queue.
-  // Only the OFFENDING side builds a wall. The third team has retreated like everyone else, but
-  // it is not their goal being shot at and they have no reason to stand in front of it.
-  // EITHER DEFENDING SIDE MAY NEED A WALL, not just the offender — the kick may be aimed at the
-  // third team's goal, and on a hex nobody is told which. A side guards its own goal when it is
-  // the one being aimed at, which is the only thing worth guarding.
-  { name:'in the wall', tier:TIER.COACH, base:130,
-    applies:p => !!(freeKick && !freeKick.done && p.team===freeKick.aim && !p.out && !p.sentOff
-                    && p.role!=='K'
-                    && Math.hypot(p.x-freeKick.x, p.y-freeKick.y)>=64),
-    score:p => 130,
-    act:p => {
-      const og=goalCenter(p.team);
-      const dx=og.x-freeKick.x, dy=og.y-freeKick.y, dl=Math.hypot(dx,dy)||1;
-      const px=-dy/dl, py=dx/dl;
-      const lat=((p.k1*829)%1-0.5)*46;
-      steer(p, freeKick.x+dx/dl*72+px*lat, freeKick.y+dy/dl*72+py*lat, 2.2);
-      return true;
-    } },
-
-  // ── MAKING A RUN ──────────────────────────────────────────────────────────
-  // COACH. The taker's side finds an OPEN LANE: each man picks an angle from the ball by stable
-  // hash and runs to it, at a distance that keeps him a real option rather than on top of the
-  // kick. A weight, not a must — if the ball comes loose he plays football instead.
-  { name:'making a run', tier:TIER.COACH, base:128,
-    applies:p => !!(freeKick && !freeKick.done && p.team===freeKick.team && freeKick.taker!==p
-                    && !p.out && !p.sentOff && p.role!=='K'),
-    score:p => 128,
-    act:p => {
-      // toward the goal the KICK is aimed at, which is not always the side's standing target
-      const tgt=goalCenter(freeKick.aim!==undefined?freeKick.aim:targets[p.team]);
-      const base=Math.atan2(tgt.y-freeKick.y, tgt.x-freeKick.x);
-      const ang=base + ((p.k1*887)%1-0.5)*1.7;      // fan across the attacking side
-      const rad=95 + ((p.k2*673)%1)*85;
-      steer(p, freeKick.x+Math.cos(ang)*rad, freeKick.y+Math.sin(ang)*rad, 2.1);
-      return true;
-    } },
-
-  // ── THE THIRD SIDE KEEPS ITS DISTANCE ─────────────────────────────────────
-  // They have retreated with everybody else — the REQUIREMENT above applies to them too. Beyond
-  // that they simply hold a sensible station and wait for the ball to be live, which is what a
-  // team with no stake in a restart actually does.
-  //
-  // They do NOT sit in the passing lanes. An informal alliance confers no right to crowd
-  // somebody else's free kick, and letting them do it turned a restart into a scrum.
-  { name:'covering its own goal', tier:TIER.PLAYER, base:405,
-    applies:p => !!(freeKick && !freeKick.done && p.team!==freeKick.team && p.team!==freeKick.aim
-                    && !p.out && !p.sentOff && p.role!=='K'
-                    && Math.hypot(p.x-freeKick.x, p.y-freeKick.y)>=64),
-    score:p => 405,
-    act:p => {
-      const own=goalCenter(p.team);
-      const ax=CX-own.x, ay=CY-own.y, al=Math.hypot(ax,ay)||1;
-      const px=-ay/al, py=ax/al;
-      const lat=((p.k1*911)%1-0.5)*150;
-      steer(p, own.x+ax*0.6+px*lat, own.y+ay*0.6+py*lat, 1.5);
-      return true;
-    } },
-
-
-  // ── INTO THE BOX FOR A CORNER ─────────────────────────────────────────────
-  // EXPLICIT. Named from its steer target: g9 plus 46 along the goal's inward normal, with a
-  // per-player lateral offset — that is "get in the box and spread across its width".
-  { name:'into the box', tier:TIER.COACH, base:860,
-    applies:p => !!(pendingRestart && cornerTaker===pendingRestart.p && cornerGoal!==null
-                    && p!==pendingRestart.p && p.team===pendingRestart.team),
-    score:p => 860,
-    act:p => {
-      const g9=goalCenter(cornerGoal), e9=EDGES[GOAL_EDGE[cornerGoal]];
-      const lat=((p.k1*997)%1-0.5)*90;
-      steer(p, g9.x+e9.nx*46+e9.ux*lat, g9.y+e9.ny*46+e9.uy*lat, 2.2);
-      return true;
-    } },
-
-  // ── MARKING AT A CORNER ───────────────────────────────────────────────────
-  // EXPLICIT. Target: fifteen units from his man, on the line between that man and the goal —
-  // which is goal-side marking, and is the whole of defending a corner.
-  { name:'marking at a corner', tier:TIER.COACH, base:850,
-    applies:p => !!(pendingRestart && cornerTaker===pendingRestart.p && cornerGoal!==null
-                    && p.team===cornerGoal),
-    score:p => 850,
-    act:p => {
-      const g9=goalCenter(cornerGoal);
-      let mk=null,mkd=1e9;
-      players.forEach(q=>{ if(q.team!==pendingRestart.team||q.out||q.sentOff)return;
-        const d9=dist(q,g9); if(d9<mkd){mkd=d9;mk=q;} });
-      if(!mk) return false;
-      const gx=g9.x-mk.x, gy=g9.y-mk.y, gl=Math.hypot(gx,gy)||1;
-      steer(p, mk.x+gx/gl*15, mk.y+gy/gl*15, 2.2);
-      return true;
-    } },
-
-  // ── SHOWING FOR A THROW ───────────────────────────────────────────────────
-  // NOT explicit — he is offering, not obeying. Target: the throw mark itself, from beyond 110,
-  // which is "come and be available at throwing distance".
-  { name:'showing for a throw', tier:TIER.PLAYER, base:760,
-    applies:p => !!(pendingRestart && cornerTaker!==pendingRestart.p && p!==pendingRestart.p
-                    && p.team===pendingRestart.team
-                    && dist(p,{x:pendingRestart.x,y:pendingRestart.y})>110),
-    score:p => 760,
-    act:p => { steer(p, pendingRestart.x, pendingRestart.y, 2.0); return true; } },
-
-  // ── DENYING A THROW ───────────────────────────────────────────────────────
-  // Target: the midpoint between the thrower and the man he most wants, which is a body in the
-  // passing lane rather than a man marking a man.
-  { name:'denying a throw', tier:TIER.PLAYER, base:750,
-    applies:p => !!(pendingRestart && cornerTaker!==pendingRestart.p
-                    && p.team!==pendingRestart.team
-                    && dist(p,{x:pendingRestart.x,y:pendingRestart.y})<150),
-    score:p => 750,
-    act:p => {
-      const R=pendingRestart;
-      let mk=null,mkd=1e9;
-      players.forEach(q=>{ if(q.team!==R.team||q===R.p||q.out||q.sentOff)return;
-        const dd=dist(q,{x:R.x,y:R.y}); if(dd<mkd){mkd=dd;mk=q;} });
-      if(!mk) return false;
-      steer(p, (mk.x+R.x)/2, (mk.y+R.y)/2, 2.0);
-      return true;
-    } },
-
-  // ── THE BUS: A MIDFIELDER DROPS IN ────────────────────────────────────────
-  // Named from its condition, not its target: TT.bunker>0.5 && role M. A coach setting that
-  // changes WHICH INSTRUCTION APPLIES rather than tweaking a number — which is what a tactic is,
-  // and it was already true before this list existed. The list just makes it legible.
-  { name:'the bus \u2014 dropping in', tier:TIER.COACH, base:520,
-    // WIDENED to match what the cascade actually did: bunker alone, not bunker-plus-an-opposing-
-    // owner. I had added a condition the original never had, so whenever the ball was loose or
-    // his own side's the cascade kept him — which is most of the 6% that was left.
-    applies:p => p.role==='M' && !p.out && !p.sentOff && targets[p.team]!==null
-              && p!==chaser[p.team] && TACTICS(p.team).bunker>0.5,
-    score:p => 520,
-    act:p => {
-      const own=goalCenter(p.team);
-      steer(p, own.x+(ball.x-own.x)*0.62, own.y+(ball.y-own.y)*0.62, 2.0);
-      return true;
-    } },
-
-  // ── THE LONE OUTLET ───────────────────────────────────────────────────────
-  // The other half of the bus: while everyone else drops, one forward holds a position between
-  // his own goal and the ball, so there is somebody to counter through.
-  { name:'holding the counter', tier:TIER.COACH, base:510,
-    applies:p => p.role==='F' && !p.out && !p.sentOff && targets[p.team]!==null
-              && p!==chaser[p.team] && TACTICS(p.team).bunker>0.5,
-    score:p => 510,
-    act:p => {
-      // the midpoint between his own goal and the one he attacks — a counter station, not a
-      // point relative to the ball. The instruction had this as (own+ball)/2, which is a
-      // different place entirely and drifts with play instead of holding a post.
-      const own=goalCenter(p.team), tgt=goalCenter(targets[p.team]);
-      steer(p, (own.x+tgt.x)/2, (own.y+tgt.y)/2, 2.0);
-      return true;
-    } },
-
-  // ── INTERCEPTING ──────────────────────────────────────────────────────────
-  // Target: ball.x + ball.vx*6 — six frames AHEAD of the ball rather than at it. Leading a pass
-  // is a different instruction from chasing one, and the target is the only thing that says so.
-  { name:'intercepting', tier:TIER.PLAYER, base:480,
-    applies:p => !p.out && !p.sentOff && p.role!=='K' && !ball.owner
-              && Math.hypot(ball.vx,ball.vy)>2.5 && dist(p,ball)<120,
-    score:p => 480 - dist(p,ball)*0.4,           // the nearest man wants it most
-    act:p => { steer(p, ball.x+ball.vx*6, ball.y+ball.vy*6, 2.3); return true; } },
-
-  // ── NO PRESSING A FRIEND'S KEEPER ─────────────────────────────────────────
-  // Three-sided-specific and it has no analogue in football: an ally's keeper is holding, so you
-  // drop into your own shape rather than harassing him. The comment above it already said this;
-  // the name just makes it visible.
-  { name:"an ally's keeper has it", tier:TIER.PLAYER, base:600,
-    applies:p => !!(gkHolding() && ball.owner && p.team!==ball.owner.team && p.role!=='K'
-                    && allied(p.team, ball.owner.team)),
-    score:p => 600,
-    act:p => {
-      const og5=goalCenter(p.team), ax5=CX-og5.x, ay5=CY-og5.y;
-      steer(p, og5.x+ax5*0.55, og5.y+ay5*0.55, 0.9);
-      return true;
-    } },
-
-  // ── RETREAT FOR THE LONG BALL ─────────────────────────────────────────────
-  // A defender against an opposing keeper who has it: get depth, because what is coming is a
-  // punt. The lateral spread is per-player and stable so a back line does not stack.
-  { name:'getting depth', tier:TIER.COACH, base:590,
-    applies:p => !!(gkHolding() && ball.owner && p.team!==ball.owner.team && p.role==='D'
-                    && !allied(p.team, ball.owner.team)),
-    score:p => 590,
-    act:p => {
-      const og5=goalCenter(p.team), ax5=CX-og5.x, ay5=CY-og5.y;
-      const pl5=Math.hypot(ax5,ay5)||1, px5=-ay5/pl5, py5=ax5/pl5;
-      const lat6=((p.k1*997)%1-0.5)*240;
-      steer(p, og5.x+ax5*0.34+px5*lat6, og5.y+ay5*0.34+py5*lat6, 1.15);
-      return true;
-    } },
-
-  // ── COVERING A ROLL LANE ──────────────────────────────────────────────────
-  // A midfielder or forward against a keeper who is holding: stand 62% of the way along the line
-  // from him to one of his outlets, so the short distribution has a body in it. Each player picks
-  // a DIFFERENT outlet from a stable per-player hash, which is why a whole side does not converge
-  // on the same lane.
-  //
-  // The 85 floor keeps him out of the keeper's area — the same distance the area rule uses, and
-  // it was already here before I gave keepers that clamp.
-  { name:'covering a roll lane', tier:TIER.COACH, base:580,
-    applies:p => !!(gkHolding() && ball.owner && p.team!==ball.owner.team && p.role!=='K'
-                    && !allied(p.team, ball.owner.team) && p.role!=='D'
-                    && players.some(m=>m.team===ball.owner.team && m.role!=='K' && !m.out && !m.sentOff)),
-    score:p => 580,
-    act:p => {
-      const gk2=ball.owner;
-      const outs=players.filter(m=>m.team===gk2.team&&m.role!=='K'&&!m.out&&!m.sentOff);
-      const o5=outs[Math.floor(((p.k1*769)%1)*outs.length)%outs.length];
-      let lx=gk2.x+(o5.x-gk2.x)*0.62, ly=gk2.y+(o5.y-gk2.y)*0.62;
-      const dgk=Math.hypot(lx-gk2.x,ly-gk2.y);
-      if(dgk<85){ lx=gk2.x+(lx-gk2.x)/(dgk||1)*85; ly=gk2.y+(ly-gk2.y)/(dgk||1)*85; }
-      GKSTAT.laneCover=(GKSTAT.laneCover||0)+1;
-      steer(p,lx,ly,1.2);
-      return true;
-    } },
-
-  // ── NOBODY TO COVER ───────────────────────────────────────────────────────
-  // The same situation with no outlets left to stand in front of — a side down to its keeper.
-  // He holds the middle, which is the only useful thing left to do.
-  { name:'holding the middle', tier:TIER.PLAYER, base:570,
-    applies:p => !!(gkHolding() && ball.owner && p.team!==ball.owner.team && p.role!=='K'
-                    && !allied(p.team, ball.owner.team) && p.role!=='D'
-                    && !players.some(m=>m.team===ball.owner.team && m.role!=='K' && !m.out && !m.sentOff)),
-    score:p => 570,
-    act:p => { steer(p,CX,CY,0.9); return true; } },
-
-  // ── RECEIVING LANES AT A THROW ────────────────────────────────────────────
-  // The taker's own side while play is held. Staggered infield: a per-player lateral spread of
-  // 260 and a depth between 70 and 165, both from stable hashes — so five men offer five
-  // DIFFERENT options rather than shuffling along the line together.
-  //
-  // This is the same trick as lane-covering. Two hashes, no communication, and a shape.
-  // NOT explicit. Offering yourself is a CHOICE — the same call I made for "showing for a throw"
-  // and then contradicted here. Marked explicit these outranked the gkHolding family by a
-  // thousand points during any hold, and the measurements said so immediately: loose 50-61% ->
-  // 61-68%, crowding 2.0-2.2 -> 1.5-1.9. Players were abandoning useful positions to go and
-  // offer for a throw that had not happened yet.
-  { name:'offering a lane', tier:TIER.PLAYER, base:840,
-    applies:p => !!(holdingPlay() && pendingRestart && pendingRestart.p
-                    && pendingRestart.p!==cornerTaker && pendingRestart.p.role!=='K'
-                    && p.team===pendingRestart.team && p!==pendingRestart.p && p.role!=='K'),
-    score:p => 840,
-    act:p => {
-      const rx=pendingRestart.x, ry=pendingRestart.y;
-      const inx=CX-rx, iny=CY-ry, il=Math.hypot(inx,iny)||1;
-      const nix=inx/il, niy=iny/il, pux=-niy, puy=nix;
-      GKSTAT.laneSteer=(GKSTAT.laneSteer||0)+1;
-      const lat2=((p.k1*997)%1-0.5)*260;
-      const dep2=70+((p.k2*613)%1)*95;
-      steer(p, rx+nix*dep2+pux*lat2, ry+niy*dep2+puy*lat2, 1.35);
-      return true;
-    } },
-
-  // ── AN ALLY OFFERS FROM DEEPER ────────────────────────────────────────────
-  // Three-sided again, and a nice piece of design: an allied side offers too, but from 140-230
-  // rather than 70-165 and spread wider. They are supplementary outlets ACROSS a battle line —
-  // available without crowding the ally whose throw it is.
-  { name:'an ally offers deep', tier:TIER.PLAYER, base:830,
-    applies:p => !!(holdingPlay() && pendingRestart && pendingRestart.p
-                    && pendingRestart.p!==cornerTaker && pendingRestart.p.role!=='K'
-                    && p.team!==pendingRestart.team && p.role!=='K'
-                    && allied(p.team, pendingRestart.team)),
-    score:p => 830,
-    act:p => {
-      const rx=pendingRestart.x, ry=pendingRestart.y;
-      const inx=CX-rx, iny=CY-ry, il=Math.hypot(inx,iny)||1;
-      const nix=inx/il, niy=iny/il, pux=-niy, puy=nix;
-      const lat5=((p.k1*733)%1-0.5)*330;
-      const dep5=140+((p.k2*541)%1)*90;
-      steer(p, rx+nix*dep5+pux*lat5, ry+niy*dep5+puy*lat5, 1.15);
-      return true;
-    } },
-
-  // ── THE CORNER, ALL THREE WAVES ───────────────────────────────────────────
-  // The same geometry three times with different depths, which is what a corner looks like from
-  // above: attackers flood 30-72 out, defenders pack 16-34 goal-side of them, and an ALLIED third
-  // side arrives as a second wave at 62-102, wider than either.
-  //
-  // COACH tier, all three — a routine. And now that a play is a weight rather than a wall, a man
-  // in the box who sees the ball break loose can leave his slot and go for it.
-  { name:'flooding the mouth', tier:TIER.COACH, base:120,
-    applies:p => !!(holdingPlay() && cornerTaker && pendingRestart
-                    && pendingRestart.p===cornerTaker && cornerGoal!==null
-                    && p!==cornerTaker && p.role!=='K' && p.team===pendingRestart.team),
-    score:p => 120,
-    act:p => {
-      const g4=goalCenter(cornerGoal), e4=EDGES[GOAL_EDGE[cornerGoal]];
-      const u4x=-e4.ny, u4y=e4.nx;
-      const lat4=((p.k1*883)%1-0.5)*e4.len*GOAL_HALF*1.5;
-      const dep4=30+((p.k2*577)%1)*42;
-      steer(p, g4.x+e4.nx*dep4+u4x*lat4, g4.y+e4.ny*dep4+u4y*lat4, 1.75);
-      return true;
-    } },
-
-  { name:'packing the near zone', tier:TIER.COACH, base:118,
-    applies:p => !!(holdingPlay() && cornerTaker && pendingRestart
-                    && pendingRestart.p===cornerTaker && cornerGoal!==null
-                    && p!==cornerTaker && p.role!=='K' && p.team===cornerGoal),
-    score:p => 118,
-    act:p => {
-      const g4=goalCenter(cornerGoal), e4=EDGES[GOAL_EDGE[cornerGoal]];
-      const u4x=-e4.ny, u4y=e4.nx;
-      const lat4=((p.k1*883)%1-0.5)*e4.len*GOAL_HALF*1.2;
-      const dep4=16+((p.k2*577)%1)*18;
-      steer(p, g4.x+e4.nx*dep4+u4x*lat4, g4.y+e4.ny*dep4+u4y*lat4, 1.45);
-      return true;
-    } },
-
-  // An ally turns up to somebody else's corner: wider and deeper than either side contesting it,
-  // there to profit from the mess rather than to make it.
-  { name:'the second wave', tier:TIER.COACH, base:116,
-    applies:p => !!(holdingPlay() && cornerTaker && pendingRestart
-                    && pendingRestart.p===cornerTaker && cornerGoal!==null
-                    && p!==cornerTaker && p.role!=='K' && p.team!==pendingRestart.team
-                    && p.team!==cornerGoal && allied(p.team, pendingRestart.team)),
-    score:p => 116,
-    act:p => {
-      const g4=goalCenter(cornerGoal), e4=EDGES[GOAL_EDGE[cornerGoal]];
-      const u4x=-e4.ny, u4y=e4.nx;
-      const lat4=((p.k1*733)%1-0.5)*e4.len*GOAL_HALF*1.9;
-      const dep4=62+((p.k2*541)%1)*40;
-      GKSTAT.allySiege=(GKSTAT.allySiege||0)+1;
-      steer(p, g4.x+e4.nx*dep4+u4x*lat4, g4.y+e4.ny*dep4+u4y*lat4, 1.2);
-      return true;
-    } },
-
-  // ── THE KEEPER HOLDS HIS LINE ─────────────────────────────────────────────
-  // Open-field, and the one every match spends most of its time in. He tracks the ball ALONG his
-  // own goal line — clamped to 90% of the mouth so he never wanders past a post — and stands 20
-  // in front of it. Then, if the ball comes within 55 and is not his side's, he goes for it.
-  //
-  // Two behaviours in one branch, and the second is the interesting one: a keeper who leaves his
-  // line is making a decision, not holding a position.
-  { name:'holding the line', tier:TIER.PLAYER, base:400,
-    applies:p => p.role==='K' && !p.out && !p.sentOff
-              && !(dist(p,ball)<55 && (!ball.owner || ball.owner.team!==p.team)),
-    score:p => 400,
-    act:p => {
-      const e=EDGES[GOAL_EDGE[p.team]];
-      let along=(ball.x-e.mx)*e.ux+(ball.y-e.my)*e.uy;
-      const lim=e.len*GOAL_HALF*0.9; along=Math.max(-lim,Math.min(lim,along));
-      steer(p, e.mx+e.ux*along+e.nx*20, e.my+e.uy*along+e.ny*20, 1.9);
-      return true;
-    } },
-
-  { name:'coming for it', tier:TIER.PLAYER, base:410,
-    applies:p => p.role==='K' && !p.out && !p.sentOff
-              && dist(p,ball)<55 && (!ball.owner || ball.owner.team!==p.team),
-    score:p => 410,
-    act:p => {
-      const e=EDGES[GOAL_EDGE[p.team]];
-      let along=(ball.x-e.mx)*e.ux+(ball.y-e.my)*e.uy;
-      const lim=e.len*GOAL_HALF*0.9; along=Math.max(-lim,Math.min(lim,along));
-      steer(p, e.mx+e.ux*along+e.nx*20, e.my+e.uy*along+e.ny*20, 1.9);
-      steer(p, ball.x, ball.y, 2.3);
-      return true;
-    } },
-
-  // ── PROWLING ──────────────────────────────────────────────────────────────
-  // The chaser, while play is held: he orbits at 52 rather than standing over the ball. Ten
-  // yards, which is the distance a referee gives you — the engine already knew that, and the
-  // comment on the branch said "prowl the ten yards".
-  //
-  // This needed `chaser[]` hoisted out of think() to be extractable at all, which is the
-  // structural change this commit is really about.
-  { name:'prowling', tier:TIER.PLAYER, base:390,
-    applies:p => !!(holdingPlay() && ball.owner && p===chaser[p.team]
-                    && ball.owner.team!==p.team && !p.out && !p.sentOff),
-    score:p => 390,
-    act:p => {
-      const dx3=p.x-ball.x, dy3=p.y-ball.y, d3=Math.hypot(dx3,dy3)||1;
-      steer(p, ball.x+dx3/d3*52, ball.y+dy3/d3*52, 1.9);
-      return true;
-    } },
-
-  // ── CLOSING THE BALL DOWN ─────────────────────────────────────────────────
-  // The same man when play is NOT held: he leads the ball by six frames rather than chasing
-  // where it is, and how hard he presses comes from his side's tactics. Extractable for the same
-  // reason — the chaser is now a fact anything can read.
-  { name:'closing it down', tier:TIER.PLAYER, base:395,
-    applies:p => !!(!holdingPlay() && p===chaser[p.team] && !p.out && !p.sentOff
-                    && (!ball.owner || ball.owner.team!==p.team)),
-    score:p => 395,
-    act:p => {
-      steer(p, ball.x+ball.vx*6, ball.y+ball.vy*6, 2.15+0.4*T(p.team).press);
-      return true;
-    } },
-
-  // ── THE BACK LINE ─────────────────────────────────────────────────────────
-  // Where a defender stands when he is not chasing: on the line from his own goal to the ball,
-  // at a fraction set by his side's LINE tactic — and the two centre-backs sit 34 either side of
-  // that point so they hold a width rather than stacking.
-  //
-  // The bunker variant is folded in rather than being its own instruction: it is the same act at
-  // a different depth, which is what a tactic should do to a position.
-  { name:'the back line', tier:TIER.PLAYER, base:380,
-    applies:p => p.role==='D' && !p.out && !p.sentOff && targets[p.team]!==null
-              && p!==chaser[p.team],
-    score:p => 380,
-    act:p => {
-      const own=goalCenter(p.team), TT=T(p.team);
-      // onPitch: a sent-off defender still in the array shifted every remaining man's slot,
-      // so a back four became a back three standing in the wrong three places.
-      const ds=players.filter(q=>q.team===p.team&&q.role==='D'&&onPitch(q));
-      const idx=ds.indexOf(p), lineShift=(TT.line-0.5)*0.22;
-      let f=(idx===0?0.38:0.62)+lineShift;
-      if(TT.bunker>0.5) f=(idx===0?0.28:0.48)+lineShift*0.5;
-      const bx=own.x+(ball.x-own.x)*f, by=own.y+(ball.y-own.y)*f;
-      const e=EDGES[GOAL_EDGE[p.team]];
-      steer(p, bx+e.ux*(idx===0?34:-34), by+e.uy*(idx===0?34:-34), 2.0);
-      return true;
-    } },
-
-  // ── FINDING SPACE ─────────────────────────────────────────────────────────
-  // Everybody else: a point between the ball and the goal they are attacking, at a fraction set
-  // by role and by the DIRECT tactic — and then fanned sideways, midfielders one way and forwards
-  // the other.
-  //
-  // THE SPREAD IS THE GOOD PART. It grows as the ball nears the target goal: 55 normally, up to
-  // 158 when play compresses into the last 230. Width instead of pile-in, and it is the reason a
-  // crowded box does not become a scrum of everybody.
-  { name:'finding space', tier:TIER.PLAYER, base:370,
-    applies:p => (p.role==='M'||p.role==='F') && !p.out && !p.sentOff
-              && targets[p.team]!==null && p!==chaser[p.team]
-              && !(T(p.team).bunker>0.5),
-    score:p => 370,
-    act:p => {
-      const tgt=goalCenter(targets[p.team]), TT=T(p.team);
-      const f=p.role==='M'?0.45:(0.72+(TT.direct-0.5)*0.26);
-      let sx=ball.x+(tgt.x-ball.x)*f, sy=ball.y+(tgt.y-ball.y)*f;
-      const side=(p.role==='M'?1:-1);
-      const dBallGoal=dist(ball,tgt);
-      const spread=55+Math.max(0,(230-dBallGoal))*0.45;
-      const ang=Math.atan2(tgt.y-ball.y,tgt.x-ball.x)+Math.PI/2;
-      sx+=Math.cos(ang)*spread*side; sy+=Math.sin(ang)*spread*side;
-      steer(p,sx,sy,2.0);
-      return true;
-    } },
-
-  // ── CARRYING IT ───────────────────────────────────────────────────────────
-  // The man on the ball, and the last big thing in the cascade. Three forces added together
-  // rather than three branches choosing between them, which is why it never looked like a
-  // decision:
-  //
-  //   toward the goal he is attacking      the direction he wants to go
-  //   away from his nearest opponent       only inside 60, weighted 0.9 — a shoulder-drop
-  //   away from the nearest wall           inside 95, weighted 1.6, UNLESS that wall is the
-  //                                        mouth he is shooting at
-  //
-  // THE MOUTH EXCEPTION IS THE GOOD PART. Every other boundary pushes him infield; the one he
-  // is attacking does not, or he would swerve away from goal at the moment of shooting. That is
-  // one condition doing the work of an entire "should I shoot" branch.
-  { name:'carrying it', tier:TIER.PLAYER, base:420,
-    applies:p => ball.owner===p && !p.out && !p.sentOff && targets[p.team]!==null,
-    score:p => 420,
-    act:p => {
-      const tgt=goalCenter(targets[p.team]);
-      let near=null,nd=1e9;
-      players.forEach(o=>{ if(o.team!==p.team&&!o.out&&!o.sentOff){ const d=dist(o,p); if(d<nd){nd=d;near=o;} } });
-      let dx=tgt.x-p.x, dy=tgt.y-p.y; const dl=Math.hypot(dx,dy)||1; dx/=dl; dy/=dl;
-      if(near&&nd<60){ dx+=(p.x-near.x)/nd*0.9; dy+=(p.y-near.y)/nd*0.9; }
-      let wd=1e9,we=null;
-      for(const e2 of EDGES){ const d2=(p.x-e2.p1.x)*e2.nx+(p.y-e2.p1.y)*e2.ny; if(d2<wd){wd=d2;we=e2;} }
-      const inMouth=we&&we.goal&&we===EDGES[GOAL_EDGE[targets[p.team]]]&&
-        Math.abs((p.x-we.mx)*we.ux+(p.y-we.my)*we.uy)<we.len*GOAL_HALF*1.3;
-      const wallR=oobRule?95:70, wallW=oobRule?1.6:1.1;
-      if(wd<wallR&&!inMouth){ const w=(wallR-wd)/wallR*wallW; dx+=we.nx*w; dy+=we.ny*w; }
-      steer(p,p.x+dx*80,p.y+dy*80,2.05);
-      return true;
-    } },
-
-  // ── VULTURES WITH PATIENCE ────────────────────────────────────────────────
-  // The third side at somebody else's restart, when it is not their business at all. They hold a
-  // counter station 85% of the way from their own goal to the centre — near midfield, out of the
-  // mess, and perfectly placed for whatever comes loose.
-  //
-  // The comment in the cascade called them "vultures with patience" and I have kept the name,
-  // because it describes the tactic better than anything I would have written.
-  { name:'vultures with patience', tier:TIER.COACH, base:110,
-    applies:p => !!(holdingPlay() && pendingRestart && p.role!=='K' && !p.out && !p.sentOff
-                    && p.team!==pendingRestart.team
-                    && !allied(p.team, pendingRestart.team)
-                    && !(cornerGoal!==null && p.team===cornerGoal)),
-    score:p => 110,
-    act:p => {
-      const og4=goalCenter(p.team);
-      steer(p, og4.x+(CX-og4.x)*0.85, og4.y+(CY-og4.y)*0.85, 1.0);
-      return true;
-    } },
-
-  // ── SWEEPING ──────────────────────────────────────────────────────────────
-  // A keeper leaving his line for a loose ball — but only when he can genuinely get there first:
-  // 18 clear of the nearest opponent, or nobody within 120. That margin is the whole instruction,
-  // and it is why this does not read as a keeper wandering.
-  //
-  // He spends burst on it, which makes it a commitment rather than a drift.
-  { name:'sweeping', tier:TIER.PLAYER, base:415,
-    applies:p => {
-      if(p.role!=='K'||p.out||p.sentOff||ball.owner||holdingPlay()) return false;
-      const og2=goalCenter(p.team);
-      if(dist(ball,og2)>=190) return false;
-      let oppNear=1e9;
-      players.forEach(q=>{ if(q.team!==p.team&&!q.out&&!q.sentOff) oppNear=Math.min(oppNear,dist(q,ball)); });
-      return dist(p,ball)<oppNear-18 || oppNear>120;
-    },
-    score:p => 415,
-    act:p => {
-      if(!p.sprint&&p.burst>0.25){
-        p.sprint={why:'sweep',blaze:RNG()<0.12};
-        GKSTAT.b_sweep=(GKSTAT.b_sweep||0)+1;
-        if(p.sprint.blaze) blazeCall(p);
-      }
-      steer(p,ball.x,ball.y,1.5);
-      return true;
-    } },
-
-  // ── PUSHING UP FOR THE KEEPER ─────────────────────────────────────────────
-  // His own keeper has the ball and is about to send it somewhere. They push away from their own
-  // goal — on a hex that is the only direction that means anything — so there is an outlet to
-  // aim at. Added inline this morning when I made keepers clear their lines; it belongs here.
-  { name:'pushing up', tier:TIER.PLAYER, base:360,
-    applies:p => !!(ball.owner && ball.owner.role==='K' && ball.owner.team===p.team
-                    && p!==ball.owner && !p.out && !p.sentOff
-                    && Math.hypot(p.x-goalCenter(p.team).x, p.y-goalCenter(p.team).y)<210),
-    score:p => 360,
-    act:p => {
-      const og9=goalCenter(p.team);
-      const ax=p.x-og9.x, ay=p.y-og9.y, al9=Math.hypot(ax,ay)||1;
-      steer(p, og9.x+ax/al9*250, og9.y+ay/al9*250, 1.9);
-      return true;
-    } },
-
-  // ── AFTER A GOAL: FETCH IT ────────────────────────────────────────────────
-  // SCRIPT. Whoever was nearest goes and gets the ball, whatever shirt he is wearing — which is
-  // what actually happens, and it is often not the side taking the kick-off.
-  { name:'retrieving after a goal', tier:TIER.SCRIPT, base:950,
-    applies:p => !!(goalRestart && goalRestart.fetcher===p && !p.out && !p.sentOff),
-    score:p => 950,
-    act:p => { steer(p, ball.x, ball.y, 2.4); return true; } },
-
-  // ── AFTER A GOAL: TAKE THE KICK-OFF ───────────────────────────────────────
-  // SCRIPT. The man who will restart it walks to the spot and waits, which is why the ball
-  // arriving at the centre should meet somebody rather than a bare patch of grass.
-  { name:'walking to the spot', tier:TIER.SCRIPT, base:945,
-    applies:p => !!(goalRestart && goalRestart.taker===p && !p.out && !p.sentOff),
-    score:p => 945,
-    act:p => { steer(p, CX-8, CY, 2.2); return true; } },
-
-  // ── AFTER A GOAL: EVERYBODY ELSE ──────────────────────────────────────────
-  // SCRIPT, and the reason the whole thing is one: fifteen players walking into a formation is
-  // choreography, not fifteen decisions that happen to agree.
-  //
-  // Each side gathers in ITS OWN THIRD of the hex — the third containing its own goal — spread
-  // laterally by the same stable hash the corner waves use, so a formation forms without anybody
-  // being told a slot.
-  { name:'taking up position', tier:TIER.SCRIPT, base:940,
-    applies:p => !!(goalRestart && goalRestart.fetcher!==p && goalRestart.taker!==p
-                    && !p.out && !p.sentOff && p.role!=='K'),
-    score:p => 940,
-    act:p => {
-      const own=goalCenter(p.team);
-      const ax=CX-own.x, ay=CY-own.y, al=Math.hypot(ax,ay)||1;
-      const px=-ay/al, py=ax/al;
-      const lat=((p.k1*911)%1-0.5)*180;
-      const dep=0.45+((p.k2*631)%1)*0.25;          // 45-70% of the way to the middle
-      steer(p, own.x+ax*dep+px*lat, own.y+ay*dep+py*lat, 2.0);
-      return true;
-    } },
-
-  // ── WAITING OUT A SENDING-OFF ─────────────────────────────────────────────
-  // A man is walking to the bench and the other fourteen stood exactly where the foul left them.
-  // A sending-off is thirty seconds of dead time and it looked like a freeze-frame with one man
-  // moving through it.
-  //
-  // They take up their kick-off shape while he goes — the same positions as after a goal, which
-  // is right, because the same thing happens next. SCRIPT: nobody is deciding this.
-  { name:'waiting out a sending-off', tier:TIER.SCRIPT, base:930,
-    applies:p => !!(walking && walking!==p && !p.out && !p.sentOff && p.role!=='K'),
-    score:p => 930,
-    act:p => {
-      const own=goalCenter(p.team);
-      const ax=CX-own.x, ay=CY-own.y, al=Math.hypot(ax,ay)||1;
-      const px=-ay/al, py=ax/al;
-      const lat=((p.k1*911)%1-0.5)*180;
-      const dep=0.45+((p.k2*631)%1)*0.25;
-      steer(p, own.x+ax*dep+px*lat, own.y+ay*dep+py*lat, 1.6);   // no hurry; he has a walk to finish
-      return true;
-    } },
-
-  // ── HE HAS JUST SWUNG IT IN ───────────────────────────────────────────────
-  // What a corner taker does after delivering, which is not "not chase". He drops to the edge of
-  // the box — wide of the mess, square to it, and behind the flight — which is where the second
-  // ball goes and where he can actually do something about it.
-  //
-  // This replaces a `noChase` flag. A flag that says what a player is NOT doing is not an
-  // instruction, it is a hole where one should be: it also stopped working the moment anybody
-  // claimed the ball, which for a corner is about a second.
-  //
-  // Four seconds, then he is an ordinary footballer again.
-  { name:'dropping to the edge', tier:TIER.COACH, base:126,
-    applies:p => !!(justDelivered && justDelivered.p===p && clockSec-justDelivered.at<4
-                    && cornerGoal!==null && onPitch(p)),
-    score:p => 126,
-    act:p => {
-      const g=goalCenter(cornerGoal), e=EDGES[GOAL_EDGE[cornerGoal]];
-      const ux=-e.ny, uy=e.nx;
-      // the side he swung it from, so he covers his own flank rather than crossing the box
-      const side=((p.x-g.x)*ux+(p.y-g.y)*uy)>=0?1:-1;
-      steer(p, g.x+e.nx*128+ux*side*66, g.y+e.ny*128+uy*side*66, 2.0);
-      return true;
-    } },
-
-  // ── CARRYING IT TO THE MARK ───────────────────────────────────────────────
-  // THE MISSING HALF OF THE FETCH. `fetching the ball` walks him to a loose ball and sets
-  // `got` — and then stops applying. Nothing else did. He stood holding it until the 20-second
-  // cap voided the restart, and play was frozen for the whole time.
-  //
-  // That is John's throw-in freeze: 11.4 seconds measured on one seed, and he watched it happen
-  // in the browser and described it as stalling at the sideline. It was not stalling at the line;
-  // it was standing wherever the ball happened to be, with no next instruction.
-  //
-  // The ball rides with him — a fetched ball is carried, not dribbled — and goes down on the mark
-  // when he arrives. THE MARK IS THE ONE THING HE MUST GET RIGHT: put it down anywhere else and
-  // the throw is taken from the wrong place, which is the other half of what John saw.
-  { name:'carrying it to the mark', tier:TIER.SCRIPT, base:955,
-    applies:p => !!(pendingRestart && pendingRestart.p===p && pendingRestart.fetch
-                    && pendingRestart.got && !pendingRestart.placed),
-    score:p => 955,
+  { name:'carrying it to the mark', tier:TIER.SCRIPT, base:958,
+    applies:p => !!(pendingRestart && pendingRestart.p===p && ball.owner===p
+                    && !p.out && !p.sentOff),
+    score:p => 958,
     act:p => {
       const mx=pendingRestart.x, my=pendingRestart.y;
-      if(dist(p,{x:mx,y:my})>10){
-        steer(p, mx, my, 2.5);
-        ball.x=p.x; ball.y=p.y; ball.z=6; ball.vx=0; ball.vy=0; ball.zv=0;   // it rides with him
-        return true;
-      }
-      // ON THE MARK. Ball down, and the throw becomes available.
+      ball.x=p.x; ball.y=p.y; ball.z=5; ball.vx=0; ball.vy=0; ball.zv=0;   // it rides with him
+      if(dist(p,{x:mx,y:my}) > 9){ steer(p, mx, my, 2.6); return true; }
+      // DOWN ON THE MARK, and he lets go. Putting it down is the point.
       ball.x=mx; ball.y=my; ball.z=0; ball.vx=0; ball.vy=0; ball.zv=0;
-      pendingRestart.placed=true;
-      ball.fetch=null;
-      throwPending=p;
-      // THE CLOCK THE RIPENING READS, and the whole bug. `restartSince` was read by two score()
-      // functions and set by nothing, so ripeness((clockSec - clockSec)^2 * rate) was always
-      // ZERO. The throw-in's can() passes — the trace shows him owning the ball at the mark —
-      // but its score never rose above nothing, so it never won a lottery and he stood there
-      // for seventeen seconds until something else cleared him.
-      p.restartSince = clockSec;
+      ball.owner=null;
+      // THE RIPENING CLOCK STARTS WHEN THE BALL IS DOWN, not when the restart was awarded. A
+      // taker who had to walk forty yards has not been dawdling.
+      if(pendingRestart.since===undefined) pendingRestart.since=clockSec;
       ENGINE_HOOKS.spawnNote(mx, my-22, "on the mark", TEAMS[p.team].color);
       return true;
     } },
+
+  { name:'standing over it', tier:TIER.SCRIPT, base:956,
+    applies:p => {
+      if(!pendingRestart || pendingRestart.p!==p || p.out || p.sentOff) return false;
+      if(ball.owner) return false;
+      const m={x:pendingRestart.x, y:pendingRestart.y};
+      if(dist(ball,m) > 12) return false;              // the ball is not on the mark yet
+      return dist(p, restartSpot(p)) > 8;              // and he is not yet behind it
+    },
+    score:p => 956,
+    act:p => { const q=restartSpot(p); steer(p, q.x, q.y, 2.6); return true; } },
 
   // ── OFFERING AFTER A RESTART ──────────────────────────────────────────────
   // NOT explicit: he has taken it and is choosing to make himself available rather than chase.
@@ -2701,74 +2081,12 @@ function think(dt){
       // They run above via runInstruction(), which is reached before this whole pendingRestart
       // section, so the taker's own branch below is all that is left here.
 
-      if(p===R.p){
-        // ── FETCH FIRST, THEN TAKE IT ─────────────────────────────────────
-        // A fetching restart has the ball lying where it went out rather than sitting on the
-        // spot. He goes and GETS it, carries it to the mark, and only then takes the throw. Play
-        // is not held for any of this — everyone else is still playing.
-        if(R.fetch && ball.fetch && !R.got){ job(p,'fetching the ball');
-          const bd9=dist(p,ball);
-          if(bd9>13){
-            steer(p, ball.x, ball.y, 2.6);         // jog out to it
-            return;
-          }
-          R.got=true;                              // picked up
-          ENGINE_HOOKS.spawnNote(ball.x, ball.y-22, "\u{1F450} fetched", TEAMS[p.team].color);
-        }
-        if(R.fetch && R.got){
-          const md=Math.hypot(R.x-p.x, R.y-p.y);
-          if(R.ground){
-            // A CORNER IS DRIBBLED. He never picks it up, so the ball travels at his feet rather
-            // than in his hands — just ahead of him, which is what a dribble is.
-            const hl9=Math.hypot(p.hx,p.hy)||1;
-            if(md>10){ ball.x=p.x+(p.hx/hl9)*9; ball.y=p.y+(p.hy/hl9)*9; ball.z=0; ball.vx=0; ball.vy=0; }
-            else { ball.x=R.x; ball.y=R.y; ball.z=0; ball.vx=0; ball.vy=0; R.placed=true; }
-          } else {
-            // CARRYING IT BACK, and putting it DOWN once the mark is within reach. The ball must
-            // end up on the mark and the thrower behind it — if it stays in his hands he walks it
-            // outside the line and it goes out again, which is the loop.
-            if(md>16){ ball.x=p.x; ball.y=p.y; ball.z=0; ball.vx=0; ball.vy=0; }
-            else { ball.x=R.x; ball.y=R.y; ball.z=0; ball.vx=0; ball.vy=0; R.placed=true; }
-          }
-        }
-        // throwers take their mark BEHIND the chalk; corner and goal-kick takers stand on their spot
-        let sx8=R.x, sy8=R.y;
-        // A CORNER TAKER STAYS ON THE SPOT — reverted, and the reason is the throw-in loop again.
-        // A corner taker does NOT get throwPending, so the ball follows its owner. Move him
-        // outside the line and the ball goes with him, and a ball outside the line is out of
-        // play: corners collapsed from 10-19 a match to 1-2 and throw-ins tripled.
-        //
-        // Standing him beside the ball needs the ball pinned to the arc the way a throw-in pins
-        // it to the mark. That is the fix, and it is a change to the corner's own handling rather
-        // than to where he stands.
-        if(cornerTaker!==p&&p.role!=="K"){
-          // FULLY BEHIND THE CHALK, MEASURED FROM HIS BODY. 20 put his CENTRE 14 outside, and a
-          // body of radius 11 spans from 3 outside to 25 — three units of daylight, which is a
-          // man brushing the line rather than standing behind it.
-          //
-          // 30 gives him 13 clear, which is a body-width. A centre is not a position; the thing
-          // that has to be outside the line is the PLAYER, and he is 22 across.
-          //
-          // He steps back over once the ball leaves him, because this only applies while
-          // pendingRestart names him.
-          // 24, not 30 and not 20. At 20 his body cleared the chalk by 3, which is a man
-          // brushing the line. At 30 the walk out was long enough that restarts started
-          // overlapping. 24 gives him 7 units of daylight and did not move the counts.
-          const odx=R.x-CX, ody=R.y-CY, ol=Math.hypot(odx,ody)||1;
-          sx8=R.x+odx/ol*24; sy8=R.y+ody/ol*24;
-        }
-        steer(p,sx8,sy8,2.6);
-        if((dist(p,{x:sx8,y:sy8})<10&&nowMs()>(R.readyAt||0))||nowMs()>R.cap){
-          p.x=sx8; p.y=sy8; p.vx=0; p.vy=0;
-          ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.touchT=0.4;
-          ball.fetch=null; cornerPending=null; cornerSpot=null;
-          restartHold=nowMs()+(cornerTaker===p?500:260);
-          if(cornerTaker!==p){ throwPending=p; GKSTAT.lastThrower=p; }   // a throw must find a teammate
-          else { cornerPending=p; cornerSpot={x:R.x,y:R.y}; }            // and a corner waits on the flag
-          pendingRestart=null;
-        }
-        return;
-      }
+      // ── THE CASCADE'S RESTART IS GONE ─────────────────────────────────────
+    // Sixty-eight lines that survived the main cut and quietly did all the restart work while
+    // three extracted instructions sat unused. It did not work either — hovering balls,
+    // wandering takers, eleven-second freezes — so this is not a port of it. The instruction
+    // list now has a four-stage state machine built from what SHOULD happen.
+
     }
     if(gkHolding()&&p.team===ball.owner.team&&p!==ball.owner&&p.role!=="K"){ job(p,'showing for the keeper');
       // spread into outlet positions: the roll should never have to go backwards
@@ -3748,7 +3066,7 @@ const TEL = {
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
@@ -3759,20 +3077,20 @@ function telReset(){
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
     jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
     jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-    actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, oobState:0, oobState:0, ballRecovered:0, intentional:0, incidental:0, incidental:0, foulMissed:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
+    actFrames:{}, headers:0, shields:0, keeperHeld:0, throwsTaken:0, throwsTaken:0, ballRecovered:0, oobState:0, oobState:0, ballRecovered:0, intentional:0, incidental:0, incidental:0, foulMissed:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
     unattributed:0, unattMax:0, portFrame:-1,
   unattributed:0, unattMax:0, portFrame:-1, deflected:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, woodwork:0, bars:0, posts:0, port:{},
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
@@ -4541,7 +3859,7 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
   ball.owner=null;
   ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
   ball.fetch={ by:thr, sx, sy, team:thr.team, at:clockSec };
-  pendingRestart={p:thr, x:sx, y:sy, team:thr.team, fetch:true,
+  pendingRestart={ at:clockSec,p:thr, x:sx, y:sy, team:thr.team, fetch:true,
                   cap:nowMs()+20000, readyAt:nowMs()};
   suppress={team:toucher,until:clockSec+0.8};
   ENGINE_HOOKS.spawnNote(sx,sy-24,"throw-in!",TEAMS[thr.team].color,TEAMS[thr.team].accent);
@@ -4591,7 +3909,7 @@ function stageCorner(ownerT,e,ex,ey){
   ball.owner=null;
   ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
   ball.fetch={ by:taker, sx:cx2, sy:cy2, team:att, at:clockSec, ground:true };
-  pendingRestart={p:taker, x:cx2, y:cy2, team:att, fetch:true, ground:true,
+  pendingRestart={ at:clockSec,p:taker, x:cx2, y:cy2, team:att, fetch:true, ground:true,
                   cap:nowMs()+20000, readyAt:nowMs()};
   cornerTaker=taker; cornerGoal=ownerT;
   // The ceremony starts when the ball reaches the flag, not when the corner is awarded — he
