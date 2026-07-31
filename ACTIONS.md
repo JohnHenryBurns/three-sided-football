@@ -32,6 +32,28 @@ have never functioned; the cascade has been doing their job.
 block disabled*, proven on the same six seeds, **before** cutting it. I cut first and
 assumed, which is what produced all of the above.
 
+### The stadium wall
+
+John: *"it should have been stopped by the stadium wall and picked up by a fetcher."*
+
+The ball was reaching **281 units** past the touchline — the car park. Every downstream
+rule then had to cope with a ball nobody could reach, and each has failed at it in turn:
+the staging, the fetch, the recovery.
+
+**A hard bound at 34 units out.** It stops dead and drops. Everything after it can now
+assume the ball is somewhere a man could walk to.
+
+```
+furthest the ball got out    before 281    after 36
+```
+
+**Same lesson as out-of-play being a state:** make the bad situation impossible rather than
+handling it everywhere it turns up.
+
+**And it exposed a stall it had been masking.** Seed 9004 went from a 38s freeze to 175s —
+the runaway ball was ending passages that now continue into whatever is wrong. That is a
+trace for next time, and it is the last known stall.
+
 ### Which restarts are on the state machine
 
 ```
