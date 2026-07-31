@@ -3696,7 +3696,7 @@ const TEL = {
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
@@ -3707,20 +3707,20 @@ function telReset(){
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
     jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
     jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-    actFrames:{}, headers:0, shields:0, keeperHeld:0, carryTimeout:0, carryTimeout:0, hitWall:0, hitWall:0, throwsTaken:0, throwsTaken:0, ballRecovered:0, oobState:0, oobState:0, ballRecovered:0, intentional:0, incidental:0, incidental:0, foulMissed:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
+    actFrames:{}, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, carryTimeout:0, hitWall:0, hitWall:0, throwsTaken:0, throwsTaken:0, ballRecovered:0, oobState:0, oobState:0, ballRecovered:0, intentional:0, incidental:0, incidental:0, foulMissed:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
+  actFrames:{}, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
+  actFrames:{}, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
     unattributed:0, unattMax:0, portFrame:-1,
   unattributed:0, unattMax:0, portFrame:-1, deflected:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, woodwork:0, bars:0, posts:0, port:{},
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
@@ -3758,6 +3758,24 @@ function telUnattributed(dist2){
 }
 
 function telFrame(){
+  // ── LOOSE IS FOUR DIFFERENT THINGS ────────────────────────────────────────
+  // `loose` counted every frame with no owner, so a pass in flight — the ball doing exactly
+  // what it should — read as the ball being lost. With a lot of passing that pushes the figure
+  // to 85% and makes a healthy match look broken. John watched the game and said so.
+  //
+  // Four states, and only one of them is a problem:
+  //
+  //   owned      at somebody's feet
+  //   flight     travelling: a pass or a shot. This is football.
+  //   dead       a restart is staged
+  //   contested  slow, unowned, nobody has picked it up. THIS is the loose-ball problem.
+  //
+  // 8 / 32 / 4 / 56 on a typical match. The headline was 85%; the number worth working on is 56.
+  if(ball.owner) TEL.pOwned++;
+  else if(Math.hypot(ball.vx,ball.vy)>1.2) TEL.pFlight++;
+  else if(pendingRestart||freeKick||throwPending||cornerPending) TEL.pDead++;
+  else TEL.pContested++;
+
   TEL.frames++;
   if(ball.owner){ TEL.ownedFrames++; TEL.poss[ball.owner.team]++; if(ball.owner.role==="K") TEL.keeperFrames++; }
   else TEL.loose++;
