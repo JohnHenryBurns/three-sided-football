@@ -149,7 +149,45 @@ a second while a restart is being set up. A man who is walking somewhere should 
 walking there; flicker means two instructions are trading a player frame by frame, and it
 reads as indecision.
 
-### `pending the kick` — the design is right, the wiring is not
+### `pending the kick` — traced, one gate found, still not shipped
+
+**The trace finally, and it found a real bug that predates the pending work.**
+
+```
+`pending the throw` runs   15,041 frames
+throw-in action fires           0 times
+sidesSet() evaluated       15,043 times, TRUE ZERO TIMES
+```
+
+**`sidesSet()` counts the wrong men.** It waits for 40% of everybody to be back in their own
+third — but `positioning for a restart` sends **the taking side forward**, toward the mark,
+which is away from their own goal. **The gate could never open**, so the taker stood over
+the ball forever.
+
+**A restart waits for the OPPOSING sides to reset.** The taking side is supposed to be
+pushing up — that is what showing for a throw means — and counting them as "not set" is
+penalising them for doing their job.
+
+**Fixed, and it is not enough:**
+
+```
+                       flips/match   goals   loose
+working state (no pending)  11,183     6.5     81%
+pending, sidesSet broken     2,315     1.7     99%
+pending, sidesSet fixed      3,645     2.7     98%
+```
+
+**Loose at 98% says the ball still sits on the mark most of the match.** Something else in
+the chain is holding it, and `sidesSet` was one gate of at least two.
+
+**Reverted to the working state.** The `sidesSet` fix is correct and is worth applying on
+its own, separately from the pending work, where it can be measured without a second
+variable.
+
+**Next: the same trace, but on the frame the throw SHOULD fire** — print every clause of
+the action's `can()` and find which one returns false. Four clauses, one run.
+
+### Superseded: the design is right, the wiring is not
 
 **John's design, and it is the correct shape:** once the taker reaches his spot, hand him to
 a new instruction — `pending the throw`, `pending the corner`, `pending the kick` — which
