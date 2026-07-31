@@ -377,6 +377,15 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
 .ghlink{display:block;text-align:center;margin-top:.7rem;font-size:.72rem;
   color:var(--ink-dim);text-decoration:none;letter-spacing:.02em}
 .ghlink:hover{color:var(--hot)}
+
+    /* The speed pair reads as one control: a slower, a faster, and the truth between them.
+       A disabled arrow is dimmed rather than hidden, so the control keeps its shape and you can
+       see at a glance that you are at the limit. */
+    #spdwrap{display:inline-flex;align-items:center;gap:2px;vertical-align:middle}
+    #spdDown,#spdUp{min-width:34px;padding:6px 8px;font-size:15px;line-height:1}
+    #spdDown:disabled,#spdUp:disabled{opacity:.28;cursor:default}
+    #spdNow{min-width:42px;text-align:center;font-variant-numeric:tabular-nums;
+            font-size:13px;opacity:.92;padding:0 2px}
 </style>
 
 <header>
@@ -454,7 +463,16 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
     <svg viewBox="0 0 24 24" class="ico"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M7.5 10.5h6M15.5 15.5L21 21"/></svg></button>
   <button id="zoomIn" title="Zoom in" aria-label="Zoom in">
     <svg viewBox="0 0 24 24" class="ico"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M7.5 10.5h6M10.5 7.5v6M15.5 15.5L21 21"/></svg></button>
-  <button id="speed">1&times;</button>
+  <!-- ── SPEED: A SLOWER AND A FASTER, WITH THE TRUTH BETWEEN THEM ──────────────
+       One button that cycled meant you could only reach 0.25x by pressing through everything
+       else, and could not tell what the next press would do. Two buttons say it: the arrows
+       point the way each one moves, the number between them is where you are, and a button
+       greys out when there is nowhere further to go. -->
+  <span id="spdwrap">
+    <button id="spdDown" title="slower" aria-label="slower">&#171;</button>
+    <span id="spdNow">1&times;</span>
+    <button id="spdUp" title="faster" aria-label="faster">&#187;</button>
+  </span>
   <span class="hint">drag to orbit · pinch or wheel to zoom</span>
 </div>
 
@@ -462,7 +480,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=181"></script>
+<script src="engine.js?v=182"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -3029,12 +3047,26 @@ function openSetup(){
 document.getElementById('reset').addEventListener('click', openSetup);
 // Speed. The same five steps the flat page offers, and it multiplies the engine's own `speed`,
 // so a second of match clock and a second of football stay the same length as each other.
-const SPEEDS = [0.5, 1, 1.5, 2, 3];
-document.getElementById('speed').addEventListener('click', e => {
-  const i = (SPEEDS.indexOf(speed) + 1) % SPEEDS.length;
-  speed = SPEEDS[i < 0 ? 1 : i];
-  e.target.innerHTML = speed + '&times;';
-});
+// ── SPEED ───────────────────────────────────────────────────────────────────
+// 0.25x at the bottom, because John wants to watch transitions happen rather than infer them
+// from the aftermath — a restart that takes three seconds at 1x takes twelve at a quarter, and
+// the handoffs between instructions become visible.
+//
+// 5x at the top for the opposite reason: watching a whole match for shape rather than incident.
+const SPEEDS = [0.25, 0.5, 1, 1.5, 2, 3, 5];
+function setSpeed(i){
+  i = Math.max(0, Math.min(SPEEDS.length-1, i));
+  speed = SPEEDS[i];
+  document.getElementById('spdNow').innerHTML = speed + '&times;';
+  // a button with nowhere to go says so, rather than doing nothing when pressed
+  document.getElementById('spdDown').disabled = (i === 0);
+  document.getElementById('spdUp').disabled   = (i === SPEEDS.length-1);
+}
+document.getElementById('spdDown').addEventListener('click', () =>
+  setSpeed(SPEEDS.indexOf(speed) - 1));
+document.getElementById('spdUp').addEventListener('click', () =>
+  setSpeed(SPEEDS.indexOf(speed) + 1));
+setSpeed(SPEEDS.indexOf(1));
 
 // Fullscreen. On the STAGE rather than the document, so the pitch fills the screen and the
 // controls come with it — a fullscreen page that leaves its buttons behind is a trap on a phone,
