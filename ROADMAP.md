@@ -119,7 +119,28 @@ indecision because it is.
 - flat 150 — **identical to the multiply, also 140/s**, which means the commitment bonus is
   not the mechanism at all.
 
-**The lead worth following:** `job()` is called more than once per frame by design — there
+**Third attempt: hysteresis on the arrival predicate — also no change.** And instrumenting
+it produced the contradiction worth handing over:
+
+```
+`standing over it` applies      25,276 times a match
+its act() runs                       0 times
+the job label reads it           3,750 times
+```
+
+**It is chosen and its body never executes.** Three instructions outrank it —
+`fetching the ball` 4960, `carrying it to the mark` 4958, `standing over a free kick` 4960
+— but that explains it never being chosen, not being chosen and not running.
+
+**Ruled out:** the harness reads the engine fresh (`COMMIT=999999` changes the result), the
+scores are constants with no randomness, and only one `job()` call site remains.
+
+**The next thing to check is `runInstruction` itself** — specifically whether `job()` is
+set from a different instruction than the one whose `act()` is called. If the label and the
+body can disagree, then the flicker is in the label rather than the behaviour, and the
+players may not be flickering at all.
+
+**Old lead, now weaker:** `job()` is called more than once per frame by design — there
 is a comment saying so. If the flicker is instructions *within* a frame rather than across
 frames, the counter is measuring something real but not what it appears to, **and the fix
 is elsewhere entirely.** Confirm what a single frame actually does before changing anything
