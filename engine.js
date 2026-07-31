@@ -1530,7 +1530,17 @@ const PORTED = [
 
   { name:'penalty', tier:TIER.SCRIPT, ported:true,
     coach:T => 0,
-    can:p => !!(penaltyShooter===p && ball.owner===p),
+    // THE THIRD TIME THIS FAULT HAS APPEARED. The throw had it, the corner had it, and now the
+    // penalty: an action demanding ball.owner===p when the restart machine deliberately puts the
+    // ball DOWN and releases it. A man placing a ball on the spot is not holding it.
+    //
+    // He must be AT the spot, with the ball on it.
+    can:p => {
+      if(penaltyShooter!==p || ball.owner || !onPitch(p)) return false;
+      if(!pendingRestart || pendingRestart.kind!=='penalty') return false;
+      const m={x:pendingRestart.x, y:pendingRestart.y};
+      return dist(ball,m) <= 12 && dist(p,m) <= 26;
+    },
     score:p => ripeness(p.restartSince||clockSec, 33),
     act:p => {
       const gt=penaltyGoalTeam;
@@ -2382,6 +2392,18 @@ const INSTRUCTIONS = [
   //
   // Where they go depends on whose restart it is, which is the useful part: the taking side
   // spreads into space, the others drop toward their own goal. A restart becomes a shape.
+  // ── ON HIS LINE FOR A PENALTY ─────────────────────────────────────────────
+  // The keeper used to be teleported onto his line. He walks now — and he is the one player
+  // `positioning for a restart` must not sweep away, because his position IS the drama.
+  { name:'on his line', tier:TIER.SCRIPT, base:945,
+    applies:p => !!(pendingRestart && pendingRestart.kind==='penalty'
+                    && p.role==='K' && p.team===penaltyGoalTeam && !p.out && !p.sentOff),
+    score:p => 945,
+    act:p => {
+      const g=goalCenter(p.team), e=EDGES[GOAL_EDGE[p.team]];
+      steer(p, g.x+e.nx*12, g.y+e.ny*12, 2.4);
+      return true;
+    } },
   { name:'positioning for a restart', tier:TIER.SCRIPT, base:940,
     applies:p => !!(pendingRestart && !restartFree(p) && !p.out && !p.sentOff
                     && p.role!=='K'),
@@ -4893,20 +4915,26 @@ function stageCorner(ownerT,e,ex,ey){
   restartHold=nowMs()+2600;   // shortened once he's over the ball
 }
 function stagePenalty(){
+  // ── THE PENALTY IS A RESTART, NOT A TABLEAU ───────────────────────────────
+  // This teleported FIFTEEN PLAYERS in one frame: the ball to the spot, the shooter behind it,
+  // the keeper onto his line, and everybody else shoved to a radius of 178.
+  //
+  // It is the moment in a match most worth watching and it was the one that snapped hardest.
+  // Now: the ball is placed, the shooter walks to it, the keeper walks to his line, and
+  // everybody else clears the box under `positioning for a restart` — which already does
+  // exactly this job for throws and corners.
   const pen=pendingPenalty; pendingPenalty=null;
   const shooter=pen.shooter, conceder=pen.conceder;
   if(out[conceder]||shooter.out) return;
   const e=EDGES[GOAL_EDGE[conceder]], g=goalCenter(conceder);
   const sx=g.x+e.nx*110, sy=g.y+e.ny*110;
-  ball.owner=shooter; ball.lastTouch=shooter.team; ball.lastKicker=shooter;
-  telPort('corner'); ball.x=sx; ball.y=sy; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
-  ball.touchT=99;   // no dribble touches during the run-up
-  shooter.x=sx+e.nx*16; shooter.y=sy+e.ny*16; shooter.vx=0; shooter.vy=0;
-  const gk=players.find(q=>q.team===conceder&&q.role==="K"&&!q.out);
-  if(gk){ gk.x=g.x+e.nx*12; gk.y=g.y+e.ny*12; gk.vx=0; gk.vy=0; }
-  players.forEach(q=>{ if(q===shooter||q===gk||q.out)return;
-    const d=dist(q,g)||1;
-    if(d<170){ q.x=g.x+(q.x-g.x)/d*178; q.y=g.y+(q.y-g.y)/d*178; }});
+
+  // the ball is placed. Nothing else moves.
+  ball.owner=null; ball.lastTouch=shooter.team; ball.lastKicker=shooter;
+  ball.x=sx; ball.y=sy; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+  ball.touchT=99;                       // no dribble touches during the run-up
+
+  pendingRestart={ kind:'penalty', at:clockSec, p:shooter, x:sx, y:sy, team:shooter.team };
   penaltyShooter=shooter; penaltyGoalTeam=conceder;
   ENGINE_HOOKS.spawnNote(sx,sy-28,"PENALTY!","#ffd166");
   sayLogged(pick([
