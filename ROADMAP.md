@@ -149,7 +149,43 @@ a second while a restart is being set up. A man who is walking somewhere should 
 walking there; flicker means two instructions are trading a player frame by frame, and it
 reads as indecision.
 
-### `pending the kick` — traced, one gate found, still not shipped
+### `pending the kick` — three attempts, and the last one is the informative failure
+
+**Not shipped.** The design is right and something structural resists it.
+
+```
+                                    flips/match   goals   throws
+baseline (no pending)                    11,183     7.0      19
+attempt 1 — pending, sidesSet broken      2,315     1.7       -
+attempt 2 — pending, sidesSet fixed       3,645     2.7       -
+attempt 3 — pending on a working main    32,993     2.2       9
+attempt 3b — guard instead of ranking    68,701     2.8       8
+```
+
+**Attempt 3b is the one to understand.** John's correction was right — guard `standing over
+it` so it cannot apply to a man already on the spot, rather than making `pending` outrank
+it. Arbitration between two instructions that both believe they apply is a patch; a guard
+makes the contradiction impossible.
+
+**And the flips went to 68,701, in instructions that have nothing to do with restarts:**
+
+```
+20814  pushing up
+10299  getting depth
+ 7733  covering a roll lane
+```
+
+**Holding the taker still destabilises the rest of the pitch.** That is the finding: the
+problem is not the handoff, the threshold, the ranking or the gate — **a stationary taker
+changes the state that thirteen other men are reading**, and their predicates start
+oscillating instead.
+
+**Which suggests the next attempt should not be another variation on `pending`.** It should
+be finding out why `pushing up` and `getting depth` care whether one man is standing still —
+and those are two of the fourteen classification thresholds already listed above as needing
+hysteresis. **Fix those first, then try `pending` on a stable pitch.**
+
+### Superseded: traced, one gate found
 
 **The trace finally, and it found a real bug that predates the pending work.**
 
