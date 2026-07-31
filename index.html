@@ -480,7 +480,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=205"></script>
+<script src="engine.js?v=206"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -904,6 +904,15 @@ function buildPitch(){
     // The posts and crossbar stay white, so the frame identifies the goal and the mouth still
     // reads as a mouth.
     const barMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(TEAMS[t].color) });
+    // ── AND AN ACCENT BAND ON EACH STANCHION ──────────────────────────────
+    // The frame said whose goal it was in one colour. A side has two — every team carries an
+    // accent as well as a colour, and it is what tells the Bulldogs from anyone else in blue at
+    // a glance from the far end.
+    //
+    // A band around each stanchion, a third of the way up, in the accent. Solid, like the frame:
+    // a washed stripe reads as a rendering artefact rather than a choice.
+    const accMat = new THREE.MeshLambertMaterial({
+      color: new THREE.Color(TEAMS[t].accent || TEAMS[t].color) });
     const foot = [];                                    // where each stanchion meets the ground
     for (const sgn of [-1, 1]) {
       const topX = e.mx + e.ux*half*sgn,  topZ = e.my + e.uy*half*sgn;
@@ -918,6 +927,12 @@ function buildPitch(){
       st.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0),
         new THREE.Vector3(dx/len, dy/len, dz/len));
       scene.add(st);
+      // the accent band: a short fatter cylinder sharing the stanchion's placement, a third up
+      const bandLen = Math.max(6, len * 0.16);
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(3.1, 3.1, bandLen, 7), accMat);
+      band.position.set(topX + dx*0.34, HGT - HGT*0.34, topZ + dz*0.34);
+      band.quaternion.copy(st.quaternion);
+      scene.add(band);
     }
     // the ground bar joining the two feet, which is what the bottom of the net is tied to
     {
@@ -1522,13 +1537,20 @@ function buildGround(){
     benchAt[t] = B;
     const dug = new THREE.Mesh(new THREE.BoxGeometry(78, 4, 26),
       new THREE.MeshLambertMaterial({ color: 0x1a2229 }));
-    dug.position.set(bx, 44, by);           // raised: see the note on the seat below
+    // ── THE ROOF SITS ON THE POSTS ────────────────────────────────────────
+    // It floated. The roof is 4 deep centred at 44, so its underside was at 42 — and the posts
+    // are 30 tall centred at 15, so their tops are at 30. A TWELVE-UNIT GAP, and a dugout roof
+    // hanging in the air over its own pillars.
+    //
+    // The posts define the height because they are what holds it up: tops at 30, so the roof
+    // centre is 30 + half its own depth.
+    dug.position.set(bx, 32, by);
     dug.rotation.y = -Math.atan2(e.uy, e.ux);
     scene.add(dug);
     for (const s of [-1, 1]) {
       const post = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 30, 6),
         new THREE.MeshLambertMaterial({ color: 0x1a2229 }));
-      post.position.set(bx + e.ux * 37 * s, 15, by + e.uy * 37 * s);
+      post.position.set(bx + e.ux * 37 * s, 15, by + e.uy * 37 * s);   // 30 tall, top at 30
       scene.add(post);
     }
     // ── ROOM TO SIT ──────────────────────────────────────────────────────
