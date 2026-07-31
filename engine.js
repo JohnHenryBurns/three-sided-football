@@ -738,6 +738,33 @@ function stam(p,d){ p.stamina=Math.max(0,Math.min(1,p.stamina+d)); }
 //
 // This is the goalkeeping equivalent of the fetch having no end: the restart cleared, and nobody
 // put the ball back.
+// ── THE STADIUM WALL ────────────────────────────────────────────────────────
+// John: "it should have been stopped by the stadium wall and picked up by a fetcher."
+//
+// A ball 281 units past the touchline is in the car park. Every downstream rule then has to cope
+// with a ball nobody can reach — the restart staging, the fetch, the recovery — and each of them
+// has failed at it in turn today. The ball simply should not be able to get there.
+//
+// A HARD BOUND AT 34 UNITS OUTSIDE THE PITCH. Hoardings. It stops dead and drops, and everything
+// after this can assume the ball is somewhere a man could walk to.
+//
+// This is the same lesson as out-of-play being a state: make the bad situation impossible rather
+// than handling it everywhere it turns up.
+const WALL_OUT = 34;
+function stadiumWall(){
+  for(const e of EDGES){
+    const d=(ball.x-e.p1.x)*e.nx + (ball.y-e.p1.y)*e.ny;
+    if(d < -WALL_OUT){
+      const push = (-WALL_OUT) - d;
+      ball.x += e.nx*push; ball.y += e.ny*push;
+      // it hits the boards and stops rather than bouncing back into play
+      ball.vx *= -0.18; ball.vy *= -0.18;
+      ball.z = 0; ball.zv = 0;
+      TEL.hitWall++;
+    }
+  }
+}
+
 function ballOutOfPlayCheck(){
   // ── OUT OF PLAY IS A STATE, NOT A CROSSING ────────────────────────────────
   // The out-of-bounds test fires when the ball CROSSES a line. So a ball that is ALREADY
@@ -2394,6 +2421,7 @@ function physics(dt){
   stepJumps(S);          // heads move before anybody reaches with one
   stepBench();           // and the disgraced watch from the side
   stepRestartWatchdog(); // and no restart may hang the match
+  stadiumWall();         // and it cannot leave the ground at all
   ballOutOfPlayCheck();  // outside is out of play, however it got there
   players.forEach(p=>{
     if(p.out)return;
@@ -3086,7 +3114,7 @@ const TEL = {
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
@@ -3097,20 +3125,20 @@ function telReset(){
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
     jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
     jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-    actFrames:{}, headers:0, shields:0, keeperHeld:0, throwsTaken:0, throwsTaken:0, ballRecovered:0, oobState:0, oobState:0, ballRecovered:0, intentional:0, incidental:0, incidental:0, foulMissed:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
+    actFrames:{}, headers:0, shields:0, keeperHeld:0, hitWall:0, hitWall:0, throwsTaken:0, throwsTaken:0, ballRecovered:0, oobState:0, oobState:0, ballRecovered:0, intentional:0, incidental:0, incidental:0, foulMissed:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
     unattributed:0, unattMax:0, portFrame:-1,
   unattributed:0, unattMax:0, portFrame:-1, deflected:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, woodwork:0, bars:0, posts:0, port:{},
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
@@ -3791,6 +3819,17 @@ function ambientChatter(){
   speak(line,"low");
 }
 function outOfBounds(k,e){
+  // ── ONE STAGING PER BALL-OUT ──────────────────────────────────────────────
+  // This was called 7,191 times in a single match — essentially every frame the ball was
+  // outside. The crossing test fires while the ball is still travelling out, so it staged, the
+  // staging was cleared or superseded, and it staged again. John watched a corner roll into the
+  // stands with nothing happening, and this is why: the restart was being rebuilt from scratch
+  // every frame, so it never reached stage two.
+  //
+  // A ball that is already out of play cannot go out of play again. One staging, until somebody
+  // takes it.
+  if(pendingRestart || throwPending || cornerPending || ball.fetch) return;
+
   // ONCE PER DEPARTURE. The ball used to be lifted inside the pitch the instant it went out, so
   // this could not fire twice for the same ball. Now it STAYS where it stopped — which is
   // outside — and the boundary check saw it there every frame and staged a fresh throw-in each
