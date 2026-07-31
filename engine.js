@@ -2078,6 +2078,35 @@ const PORTED = [
       // HE MIGHT GET THE MAN INSTEAD. A tackle is the commonest way to give a foul away, and it
       // is not a separate decision — it is this one going wrong.
       if(incidentalFoul(p, victim, 1.0)) return false;
+
+      // ── A TACKLE IS A CONTEST, NOT A FORMALITY ────────────────────────────
+      // John: it is too easy for a defender to take the ball away — lots of pokes and tackles.
+      // He is right, and the reason is that THIS ACTION HAD NO CONTEST AT ALL. If it fired, the
+      // ball changed hands. `beating his man` is a duel of ratings and the tackle was a
+      // formality, which is exactly backwards: the man on the ball should be favoured.
+      //
+      //   0.46 base, so a tackle is closer to a coin than a certainty
+      //   +/- 0.40 on the ratings gap, so a good defender beats a poor carrier and not the
+      //            other way round
+      //   -0.18 if the carrier is shielding, because that is what shielding is for
+      //   +0.10 if the carrier has nowhere to go
+      //
+      // A failed tackle is not free either: he has committed, and a beaten tackler is out of the
+      // play for a moment, which is what makes a poke a decision rather than a reflex.
+      const rk=(p.rating||0.5), vk=(victim.rating||0.5);
+      let odds = 0.46 + 0.40*(rk-vk);
+      if(victim.lastAction==='shield it') odds -= 0.18;
+      if(!bestPass(victim)) odds += 0.10;
+      TEL.tackles=(TEL.tackles||0)+1;
+      if(RNG() > Math.max(0.10, Math.min(0.88, odds))){
+        // beaten. He has thrown himself at it and the carrier goes past.
+        p.fooled = clockSec + 0.7;
+        stam(p,-0.05);
+        TEL.tacklesLost=(TEL.tacklesLost||0)+1;
+        ENGINE_HOOKS.spawnNote(p.x, p.y-24, "rides the tackle", "#8fa0ae");
+        return false;
+      }
+      TEL.tacklesWon=(TEL.tacklesWon||0)+1;
       ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.isShot=false;
       if(p.role==='K'){
         ENGINE_HOOKS.spawnNote(p.x,p.y-20,"smothered!",TEAMS[p.team].color,TEAMS[p.team].accent);
