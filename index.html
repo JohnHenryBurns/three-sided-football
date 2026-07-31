@@ -480,7 +480,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=211"></script>
+<script src="engine.js?v=212"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1343,14 +1343,57 @@ function drawPolish(now){
 //
 // Built entirely from the engine's V and EDGES, so it cannot drift from the shape the ball
 // bounces off, and so it stays right if the pitch ever changes size.
+// ── THE HOARDINGS ───────────────────────────────────────────────────────────
+// Tripled, and drawn from the same well as the commentary: the family, the property, the
+// Westerns, the wasteland riffs, the running jokes of this game. A hoarding is the cheapest
+// worldbuilding there is — it says who is watching without anybody having to mention them.
+//
+// Rules the list keeps to itself: SHORT, because a board is 512px wide and a long name shrinks
+// until it is unreadable; and every one has to sound like somebody actually paid for it.
 const SPONSORS = [
-  "CANBY HAZELNUTS","MAX FC","ATLAS K9 SECURITY","JORN & SONS","HEX\u2022COLA","THE THIRD SIDE",
-  "BURNS FAMILY FARMS","WILLAMETTE TURF CO.","TRAEGER SMOKE SIGNALS","PUMPKIN PATCH XXL",
-  "GRAMPY CLIFF'S TRACTOR PARTS","NANNY'S BAKING SHOP","FRESH EGGS DAILY","HOME GYM IRONWORKS",
-  "LONESOME DOVE OUTFITTERS","BLUEBERRY ROW","THE DIP STATION","REMUDA RENTALS",
-  "QUIRT SPORTING GOODS","GOLDEN CONCESSIONS","WALK OF SHAME INSURANCE","TACTICAL HUGS LLC",
-  "ROW Z AIRLINES","KEEPER WARS PPV","HORSECAMP","HELLFIRE CLUB",
+  // the property and the people on it
+  "CANBY HAZELNUTS","BURNS FAMILY FARMS","GRAMPY CLIFF'S TRACTORS","NANNY'S BAKING SHOP",
+  "FRESH EGGS DAILY","PUMPKIN PATCH XXL","WILLAMETTE TURF CO.","BLUEBERRY ROW",
+  "ATLAS K9 SECURITY","RUBY'S FEED & TACK","THE BACK FORTY","HAZELNUT ROW IRRIGATION",
+  "CINNAMON QUEEN HATCHERY","BARNYARD WEED CONTROL","THE OUTBUILDING GYM","DRIP LINE SUPPLY",
+  // the smoker and the kitchen
+  "TRAEGER SMOKE SIGNALS","BURNT ENDS BBQ","GOCHUJANG GLAZE CO.","BOSC PEAR MARINADE",
+  "RESERVE MARINADE SAUCE","BLACKBERRY CRUMBLE","THE REVERSE SEAR","PICKLED RADISH DELI",
+  // the iron
+  "HOME GYM IRONWORKS","THE DIP STATION","FRACTIONAL PLATES LTD","BUMPER PLATE CO.",
+  "DEAD-HANG PULL-UP BARS","150g PROTEIN DAILY","THE MUSCLE-UP FUND",
+  // the Westerns
+  "LONESOME DOVE OUTFITTERS","REMUDA RENTALS","QUIRT SPORTING GOODS","HAT CREEK CATTLE CO.",
+  "ST. ELMO'S FIRE INSURANCE","BLUE DUCK BAIL BONDS","GUS McCRAE'S SIGN PAINTING",
+  "PLAINS CROSSING FORD","THE CATTLE DRIVE","YELLOWSTONE FENCING",
+  // the wasteland
+  "GUZZOLINE","SHINY & CHROME","WITNESS ME MOTORS","THE THUNDERDOME",
+  "OMNI CONSUMER PRODUCTS","BUY THAT FOR A DOLLAR","CYBERDYNE SYSTEMS","HASTA LA VISTA TOURS",
+  "T-1000 LIQUID METAL","PRIME DIRECTIVE SECURITY",
+  // the game itself
+  "MAX FC","THE THIRD SIDE","HEX\u2022COLA","GOLDEN CONCESSIONS","WALK OF SHAME INSURANCE",
+  "KEEPER WARS PPV","ROW Z AIRLINES","TACTICAL HUGS LLC","THE MORALE OFFICER",
+  "GEGENPRESS ENERGY","PARK THE BUS TRANSIT","TIKI-TAKA TILEWORKS","ROUTE ONE HAULAGE",
+  "THE FORM GUIDE","OVERTIME UNDERWRITERS","GOLDEN CONCESSION ODDS","GLASSWING GLAZIERS",
+  // the rest of the universe
+  "HORSECAMP","HELLFIRE CLUB","DAMPY THE DOLPHIN","SPARKLE PRINCESS PAINT",
+  "THE HOLY HAND GRENADE","COUNT TO THREE LTD","JORN & SONS","WHISKEY HILL BREWING",
+  "MESA BOWL CATERING","THE COUNTY ROAD","STRANGER TAPES","YELLOWJACKET APIARY",
+  "CONTINENTAL HOTELS","PENCIL & CO.","TAU CETI TRAVEL","DE-EXTINCTION LABS",
 ];
+// The order the boards are lettered in, reshuffled at every kick-off. Fisher-Yates on a copy,
+// drawn from Math.random rather than the match stream — a sponsor board must never move a
+// football, and RNG_COS exists in the engine for exactly this reason.
+let boardOrder = SPONSORS.slice();
+function shuffleBoards(){
+  boardOrder = SPONSORS.slice();
+  for(let i=boardOrder.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [boardOrder[i], boardOrder[j]] = [boardOrder[j], boardOrder[i]];
+  }
+}
+shuffleBoards();
+
 const BOARD_INK = [["#c8102e","#ffd166"],["#0a2a66","#ffffff"],["#ffd166","#1a1a1a"],
   ["#0b6e3f","#ffffff"],["#ffffff","#0a2a66"],["#5b2a86","#ffd166"],["#e8600a","#ffffff"]];
 
@@ -1362,7 +1405,17 @@ function boardTexture(text, bg, fg){
   const x = c.getContext('2d');
   x.fillStyle = bg; x.fillRect(0, 0, 512, 64);
   x.fillStyle = fg;
-  x.font = '700 40px "Barlow Condensed","Arial Narrow",sans-serif';
+  // ── AND IT HAS TO FIT ─────────────────────────────────────────────────────
+  // 40px fixed on a 512px canvas, so GRAMPY CLIFF'S TRACTOR PARTS ran off the end and John saw
+  // "MPY CLIFF'S TRACTOR P" on a hoarding. A board that cannot hold its own name is worse than a
+  // shorter name.
+  //
+  // Shrink until it fits, down to 22px, and only then accept the overflow — at which point the
+  // name is genuinely too long for a hoarding and belongs on a shorter list.
+  let fpx = 40;
+  const setF = () => { x.font = '700 ' + fpx + 'px "Barlow Condensed","Arial Narrow",sans-serif'; };
+  setF();
+  while(fpx > 22 && x.measureText(text).width > c.width - 40){ fpx -= 2; setF(); }
   x.textAlign = 'center'; x.textBaseline = 'middle';
   x.fillText(text, 256, 34);
   const t = new THREE.CanvasTexture(c);
@@ -1429,7 +1482,18 @@ function buildGround(){
   // they do — a board square to the ground is invisible from a raised camera.
   EDGES.forEach((e, k) => {
     const [bg, fg] = BOARD_INK[k % BOARD_INK.length];
-    const text = SPONSORS[(k * 7 + 3) % SPONSORS.length];
+    // ── SHUFFLED PER MATCH, NOT A FORMULA ─────────────────────────────────
+    // It was SPONSORS[(k*7+3) % length] — no RNG anywhere. Board 0 was always sponsor 3, board 1
+    // always 10, forever. Eighteen boards drawing from a fixed cycle, so EIGHT SPONSORS HAD
+    // NEVER ONCE APPEARED: MAX FC, THE THIRD SIDE, WILLAMETTE TURF CO., HOME GYM IRONWORKS,
+    // BLUEBERRY ROW, WALK OF SHAME INSURANCE, ROW Z AIRLINES, HELLFIRE CLUB.
+    //
+    // A stride of 7 through 26 does eventually visit everything — but only if you draw 26
+    // boards, and there are 18. The cycle was cut off before it came round.
+    //
+    // Now: shuffled once per match from the cosmetic stream, so the boards differ every time and
+    // nothing in the football moves because of it.
+    const text = boardOrder[k % boardOrder.length];
     // A BOX, NOT A PLANE. A hoarding has a thickness and an edge that catches the light, and a
     // plane seen edge-on from a low camera simply vanishes. Six materials, one per face: the two
     // long faces carry the advertisement and the rest are the board's own colour, darkened.
