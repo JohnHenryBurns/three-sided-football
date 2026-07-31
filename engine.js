@@ -552,9 +552,20 @@ function pick(a){return a[Math.floor(RNG()*a.length)];}
 // than one.
 const CIRCLE_R = 70;
 
-function kickoff(toTeam){
+function kickoff(toTeam, firstWhistle){
+  // ── FORMATION ONLY AT THE FIRST WHISTLE ───────────────────────────────────
+  // John: formation() is right for the start of a match; after a goal and in overtime the
+  // players should position themselves through mandatory instructions.
+  //
+  // Snapping fifteen men to coordinates is the game placing them. Walking them there is the
+  // game telling them where to be — and `taking up position` already exists to do it, SCRIPT
+  // tier, one third of the hex each, spread by the usual stable hash.
+  //
+  // So the snap happens once. Every kick-off after that is a restart like any other.
   let i=0;
-  for(let t=0;t<3;t++){ formation(t).forEach(f=>{const p=players[i++]; p.x=f.x;p.y=f.y;p.vx=0;p.vy=0;}); }
+  if(firstWhistle){
+    for(let t=0;t<3;t++){ formation(t).forEach(f=>{const p=players[i++]; p.x=f.x;p.y=f.y;p.vx=0;p.vy=0;}); }
+  }
   // NOBODY BUT THE KICKING SIDE INSIDE THE CIRCLE. The formation puts each team's forward about
   // 44 units from the centre spot, which is inside a circle of 70 — so all three forwards began
   // every kick-off standing in it, including the two who had no business being there.
