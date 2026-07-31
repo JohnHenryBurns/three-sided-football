@@ -164,6 +164,59 @@ no-op; `score + 50` does not. The intentional foul already proved this — an ex
 run each identity against itself and require the pass/shot/punt mix to differ by more than
 the seed spread. That is measurable, and it is the honest first target.
 
+## Rock, paper, scissors — the plan
+
+**The triangle exists as commentary and nothing else.** `styleLines()` asserts counters
+from "the lab's matchup matrix", a matrix that no longer exists. The game tells you
+patience eats the press and then plays a match where it does not.
+
+### The key insight: build it in the channel that works
+
+```
+instructions   coach moves the TARGET   act() reads T()      WORKS — 72% of frames
+actions        coach moves the WEIGHT   coach: T => const    SWAMPED
+```
+
+**A counter should be a consequence of where men stand, not a bonus applied to a matchup.**
+If Gegenpress beats TikiTaka because pressing bodies crowd short passing lanes, that falls
+out of `bestPass`'s crowding term — which already exists — meeting a defensive line that
+sits high. **No matchup table, no special case, and it survives any future change to either
+side.**
+
+A hardcoded "+15% when A plays B" would be the other approach and it is the wrong one: it
+is unfalsifiable, it cannot surprise anybody, and the commentary would be describing a
+number rather than a match.
+
+### The triangle, and why each edge should hold on its own
+
+```
+GEGENPRESS  beats  TIKI-TAKA     bodies near the carrier kill short passing
+TIKI-TAKA   beats  BUNKER        patient circulation finds a low block's gap
+ROUTE ONE   beats  GEGENPRESS    a high line leaves grass behind it
+```
+
+**Each is already half-built.** Crowding penalises passes into pressure. `the back line`
+reads coaching and sets depth. `hoof it` and `gk-punt` go long. **What is missing is that
+none of the three dials is big enough to produce the shape that makes the counter bite.**
+
+### Sequence
+
+**1. Multiplicative coach terms.** `score*(0.4+1.2*T.direct)` instead of `score+50`. This
+is the prerequisite — nothing below is measurable until identities differ by more than seed
+noise. The intentional foul proved a 300:1 table was needed where a linear multiplier
+failed.
+
+**2. Defensive depth must span.** `the back line` reads `T()` already; check the range is
+wide enough that a Bunker and a Gegenpress line are genuinely tens of units apart, not
+five.
+
+**3. Measure the matrix, do not assert it.** Nine matchups, eight seeds each, and record
+who wins. **The commentary should be regenerated from that table rather than the reverse.**
+If patience does not eat the press, the line comes out.
+
+**4. Only then tune.** With a measured matrix and dials that bite, adjusting for balance
+becomes an experiment rather than a guess.
+
 ## Still owed, in order
 
 **1. The loose ball.** Above. Everything else waits.
