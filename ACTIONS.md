@@ -608,7 +608,44 @@ straight out of the geometry, no tuned probability required.
 recorded here before the next step begins. Any step that does not move its own measure
 gets reverted rather than kept "because it is more correct".
 
-## The sweep has no answer — something is missing, not mistuned
+## RETRACTED: "the carrier has no default"
+
+**Wrong.** John: *"I figured the no-op was effectively the dribble action and they'd follow
+their instructions to dribble intelligently."* That is exactly what happens.
+
+```
+seed   held%   carrying it / owner-frames
+9000      1%   118 / 133   (89%)
+9001     27%   2900 / 2921 (99%)
+9002     10%   1035 / 1043 (99%)
+9003     30%   3186 / 3232 (99%)
+9004      4%   441 / 452   (98%)
+9005      1%   103 / 123   (84%)
+```
+
+**The dribble runs on 84–99% of owner-frames in every seed.** The no-op is the dribble, the
+carrier follows `carrying it`, and there is no missing "keep it" action.
+
+**I reported 5% possession from seed 9000 alone** and concluded a whole design gap from it —
+after writing the eight-seed rule this morning, and after retracting the loose-ball chain
+for exactly this mistake.
+
+### The real shape: it is bimodal
+
+```
+matches that work    27%, 30%, 10% held
+matches that do not   1%,  4%,  1%
+```
+
+**Not a spectrum. Two states.** And it is the same signature as the "degenerate match"
+found this morning, which was never solved — only filtered out by the `ok` flag so sweeps
+would stop averaging it in.
+
+**So the question is not how much possession a side keeps.** It is why a match sometimes
+never establishes possession at all — and that predates the action port, the cascade
+deletion and every weight tried today.
+
+## Superseded: the sweep has no answer
 
 **John is right on both counts:** a completed pass is not a turnover, and the weights were
 derived against a cascade that ran every frame so they were always going to be too eager.
