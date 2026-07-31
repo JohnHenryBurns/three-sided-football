@@ -2593,6 +2593,12 @@ const INSTRUCTIONS = [
       pendingRestart.placed=true;
       ball.fetch=null;
       throwPending=p;
+      // THE CLOCK THE RIPENING READS, and the whole bug. `restartSince` was read by two score()
+      // functions and set by nothing, so ripeness((clockSec - clockSec)^2 * rate) was always
+      // ZERO. The throw-in's can() passes — the trace shows him owning the ball at the mark —
+      // but its score never rose above nothing, so it never won a lottery and he stood there
+      // for seventeen seconds until something else cleared him.
+      p.restartSince = clockSec;
       ENGINE_HOOKS.spawnNote(mx, my-22, "on the mark", TEAMS[p.team].color);
       return true;
     } },
