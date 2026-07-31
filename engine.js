@@ -1364,7 +1364,7 @@ const PORTED = [
     can:p => {
       if(p.role!=='K' || ball.owner!==p) return false;
       const f=gkOutlets(p);
-      return !!(f.far && ((f.fd>255 && (f.nd>140 || RNG()<0.11))   /* a coin-flip between outlets, not a rate */ || (f.crowded && f.fd>150)));
+      return !!(f.far && ((f.fd>255 && (f.nd>140 || RNG()<0.11)) || (f.crowded && f.fd>150)));
     },
     score:p => 310,
     act:p => {
@@ -1666,12 +1666,7 @@ const PORTED = [
       const dGoal=dist(p,tgt);
       if(dGoal>=230) return false;
       const RK=p.rating||0.5;
-      // NO RNG HERE. The cascade's per-frame probability belongs in score(), not can() — that was
-      // the whole point of the port. Left in both, a shot had to pass a 1.6% roll AND THEN win the
-      // no-op lottery at 2.4%: a net 0.04%, which is why nobody has taken a shot all session.
-      //
-      // THE RATE IS CHARGED ONCE, IN THE SCORE. can() is prerequisites only.
-      return shotLaneClear(p,tgt);
+      return shotLaneClear(p,tgt) && RNG() < 0.016*(0.4+1.2*RK);
     },
     score:p => 360,
     act:p => {
@@ -1705,7 +1700,7 @@ const PORTED = [
       const dGoal=dist(p,tgt);
       if(dGoal>=260) return false;
       const RK=p.rating||0.5;
-      return shotLaneClear(p,tgt) ;
+      return shotLaneClear(p,tgt) && RNG() < 0.016*(0.4+1.2*RK)*(1/60)*60*0.5;
     },
     score:p => 370,
     act:p => {
