@@ -2892,7 +2892,8 @@ const INSTRUCTIONS = [
   // is a different instruction from chasing one, and the target is the only thing that says so.
   { name:'intercepting', tier:TIER.PLAYER, base:480,
     applies:p => !p.out && !p.sentOff && p.role!=='K' && !ball.owner
-              && Math.hypot(ball.vx,ball.vy)>2.5 && dist(p,ball)<120,
+              && Math.hypot(ball.vx,ball.vy)>2.5 && dist(p,ball)<120
+    && p===chaser[p.team],
     score:p => 480 - dist(p,ball)*0.4,           // the nearest man wants it most
     act:p => { steer(p, ball.x+ball.vx*6, ball.y+ball.vy*6, 2.3); return true; } },
 
@@ -3498,6 +3499,17 @@ function think(dt){
   for(let t=0;t<3;t++){
     let best=null,bd=1e9;
     players.forEach(p=>{ if(p.team===t&&(p.role!=="K"||FL[t]===0)&&!p.out&&!p.sentOff){const d=dist(p,ball); if(d<bd){bd=d;best=p;}}});
+    // ── THE CHASER COMMITS ────────────────────────────────────────────────
+    // Recomputed from scratch every frame, so two near-equidistant men traded the role forever —
+    // 20,271 flips a match on `closing it down`, and on screen it reads as both of them starting
+    // and stopping. Nobody arrives.
+    //
+    // The man already chasing keeps it unless somebody is a clear 22 closer. A chase is a
+    // commitment; changing your mind about who is making it is how neither of them does.
+    const prev = chaser[t];
+    if(prev && !prev.out && !prev.sentOff && best && best!==prev){
+      if(dist(prev,ball) - dist(best,ball) < 22) best = prev;
+    }
     chaser[t]=best;
   }
   // settle last frame's job before this frame's decisions overwrite it
