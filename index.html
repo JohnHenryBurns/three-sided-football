@@ -480,7 +480,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=212"></script>
+<script src="engine.js?v=213"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1394,8 +1394,36 @@ function shuffleBoards(){
 }
 shuffleBoards();
 
-const BOARD_INK = [["#c8102e","#ffd166"],["#0a2a66","#ffffff"],["#ffd166","#1a1a1a"],
-  ["#0b6e3f","#ffffff"],["#ffffff","#0a2a66"],["#5b2a86","#ffd166"],["#e8600a","#ffffff"]];
+// ── THE INK ─────────────────────────────────────────────────────────────────
+// Seven pairs against eighteen boards, so every seventh hoarding looked identical to the one
+// before it and the ring read as a repeating pattern rather than a row of advertisers.
+//
+// Sixteen now, and chosen the way real pitch-side boards are: SATURATED GROUND, HIGH-CONTRAST
+// INK, because a hoarding has to read from the far stand at a glance and in a photograph. That
+// is why real ones are red-on-white, white-on-blue, black-on-yellow — and never anything subtle.
+//
+// A few deliberately loud ones (cyan, magenta, lime) because an advertising ring that is all
+// club colours looks like bunting. The contrast floor is what keeps them legible rather than
+// garish: every pair below is at least 0.45 apart in luminance.
+const BOARD_INK = [
+  ["#c8102e","#ffd166"],   // pillarbox red / gold
+  ["#0a2a66","#ffffff"],   // navy / white
+  ["#ffd166","#1a1a1a"],   // gold / near-black
+  ["#0b6e3f","#ffffff"],   // bottle green / white
+  ["#ffffff","#0a2a66"],   // white / navy
+  ["#5b2a86","#ffd166"],   // purple / gold
+  ["#e8600a","#ffffff"],   // orange / white
+  ["#111827","#f7c948"],   // charcoal / amber
+  ["#0077a3","#ffffff"],   // deep cyan / white — cyan is only 0.33 luminance, so no dark ink
+                           // can clear the floor against it. White can, and it is what a real board does.
+  ["#d81b60","#ffffff"],   // magenta / white
+  ["#a4d65e","#101a08"],   // lime / near-black — the olive was 0.43, just under the floor
+  ["#f2f2f2","#c8102e"],   // off-white / red
+  ["#1b4332","#b7e4c7"],   // forest / mint
+  ["#7c2d12","#fed7aa"],   // rust / peach
+  ["#0f4c81","#ffd166"],   // steel blue / gold
+  ["#fdf0d5","#003049"],   // cream / deep navy
+];
 
 /** Text on a coloured board. There is no mirror argument any more: BoxGeometry already orients
  *  each face's UVs to read from outside it, so one plain texture serves both sides. */
