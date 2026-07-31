@@ -1097,7 +1097,18 @@ const ACTIONS_LIVE = true;
 //
 // I picked 2800 by eye when the only actions were a header and a shield, and never revisited it
 // when eleven more arrived. That is what made ten actions look broken when one number was.
-const PLAY_ON_WEIGHT = 60000;
+// BACK TO 2800, which is what it was designed as: the weight that aligned action rates with the
+// cascade's per-frame probabilities. I raised it to 60,000 to stop possession collapsing — and
+// that worked only because THE CASCADE WAS STILL THERE TO DO THE WORK. With actions firing on
+// 0.6% of frames the game ran on the fallback, and every measurement after that point was of the
+// wrong code.
+//
+// John's reading, and it is right: the cascade was evaluated EVERY FRAME, so a probabilistic
+// action set against it could never fire at a sane weight without being drowned out.
+//
+// Now there is no fallback. If 2800 is wrong the ball will visibly stop, which is the honest
+// failure mode and the one this framework was supposed to have from the start.
+const PLAY_ON_WEIGHT = 2800;
 
 // THE SETUP NO-OP. A mandated action competes against this while it ripens, so a restart is
 // taken on a sampled frame rather than a scheduled one. Smaller than PLAY_ON_WEIGHT because a
