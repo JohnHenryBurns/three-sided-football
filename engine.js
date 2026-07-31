@@ -2071,17 +2071,18 @@ const INSTRUCTIONS = [
       // Whatever stops him arriving — clamping, separation, stamina, a mark he cannot stand on —
       // the restart cannot depend on it. Four seconds and he puts it down where he is, which is
       // legal enough: he is on the pitch and the ball is at his feet.
-      if(pendingRestart.carryFrom===undefined) pendingRestart.carryFrom=clockSec;
-      const carried = clockSec - pendingRestart.carryFrom;
-      if(dist(p,{x:mx,y:my}) > 9 && carried < 4){ steer(p, mx, my, 2.6); return true; }
-      if(carried >= 4){
-        ball.x=p.x; ball.y=p.y; ball.z=0; ball.vx=0; ball.vy=0; ball.zv=0;
-        ball.owner=null; ball.fetch=null;
-        if(pendingRestart.since===undefined) pendingRestart.since=clockSec;
-        pendingRestart.x=p.x; pendingRestart.y=p.y;      // the mark is where it ended up
-        TEL.carryTimeout++;
-        return true;
-      }
+      // ── AN ARRIVAL THRESHOLD HE CAN ACTUALLY REACH ──────────────────────
+      // This was `> 9` with a four-second timeout that dropped the ball wherever he stood and
+      // MOVED THE MARK TO HIM. John said fix it, do not time-limit it — and he was right, because
+      // the timeout hid the real fault and shipped a rule where the mark follows the player.
+      //
+      // The fault: steer() decelerates as it closes, so the carrier asymptoted at 9.6 and never
+      // crossed 9. He carried the ball for 48% of a match. A player's body radius is about 11 —
+      // HE CANNOT STAND ON THE MARK. He stands beside it and puts the ball down.
+      //
+      // 14 is within arm's reach and outside the deceleration band. No timeout, no moved mark.
+      if(dist(p,{x:mx, y:my}) > 14){ steer(p, mx, my, 2.6); return true; }
+
       // DOWN ON THE MARK, and he lets go. Putting it down is the point.
       ball.x=mx; ball.y=my; ball.z=0; ball.vx=0; ball.vy=0; ball.zv=0;
       ball.owner=null;
