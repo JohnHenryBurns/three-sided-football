@@ -917,7 +917,15 @@ function kick(tx,ty,power,isShot){
 function restartSpot(p){
   const R=pendingRestart;
   if(!R) return {x:p.x, y:p.y};
-  if(R.kind==='corner' || cornerTaker===p) return {x:R.x, y:R.y};
+  // A CORNER TAKER STANDS BESIDE THE BALL, NOT ON IT. restartSpot used to return the mark
+  // itself, so `corner-swing` required him within 10 of a ball at his own feet — and a body
+  // radius of 23 makes that hard to satisfy. One corner staged and none taken, all match.
+  //
+  // Just outside it, on the goal side, which is where a taker actually stands.
+  if(R.kind==='corner' || cornerTaker===p){
+    const gx=CX-R.x, gy=CY-R.y, gl=Math.hypot(gx,gy)||1;
+    return { x:R.x + gx/gl*14, y:R.y + gy/gl*14 };
+  }
   const odx=R.x-CX, ody=R.y-CY, ol=Math.hypot(odx,ody)||1;
   return { x:R.x + odx/ol*22, y:R.y + ody/ol*22 };
 }
@@ -1310,7 +1318,7 @@ const PORTED = [
       if(pendingRestart.kind!=='corner') return false;
       const m={x:pendingRestart.x, y:pendingRestart.y};
       if(dist(ball,m) > 12) return false;
-      return dist(p, restartSpot(p)) <= 10;
+      return dist(p, restartSpot(p)) <= 16;   // a swing needs room, not precision
     },
     score:p => ripeness(pendingRestart.at !== undefined ? pendingRestart.at : clockSec,
                         180 + 260*T(p.team).direct),   // a corner ripens slower than a throw
@@ -1587,6 +1595,7 @@ const PORTED = [
       if(!onPitch(p) || p.role==='K') return false;
       const o=ball.owner;
       if(!o || o.team===p.team) return false;
+      if(ball.fetch && ball.fetch.by===o) return false;      // nor a man carrying it to a mark
       if(o.role==='K' && gkHolding()) return false;         // you cannot rob a keeper holding it
       if(suppress && suppress.team===p.team && clockSec<suppress.until) return false;
       if(holdingPlay()) return false;
@@ -1921,6 +1930,13 @@ const ACTIONS = [
 // The no-op exists at PLAYER tier only — "the game acts" stays certain, "he chooses" becomes
 // probabilistic, which is the distinction the tiers were for.
 function runAction(p){
+  // ── A RESTART LOCKS EVERYBODY BUT THE TAKER ──────────────────────────────
+  // No actions at all for anyone who is not taking it. That is what makes `positioning for a
+  // restart` a lock rather than a suggestion — without it a defender can still tackle the
+  // fetcher, which is exactly the loop that stopped corners being taken all session.
+  //
+  // The taker is exempt because his restart IS an action.
+  if(pendingRestart && pendingRestart.p!==p) return false;
   const list = ACTIONS_LIVE ? ACTIONS.concat(PORTED) : ACTIONS;
   const T9 = TACTICS(p.team);
 
@@ -2029,6 +2045,44 @@ const INSTRUCTIONS = [
     },
     score:p => 956,
     act:p => { const q=restartSpot(p); steer(p, q.x, q.y, 2.6); return true; } },
+
+  // ── POSITIONING FOR A RESTART ─────────────────────────────────────────────
+  // John's rule, and it is the right one: do not protect the fetcher with a special case —
+  // give everybody else a MANDATORY instruction that leaves them nothing else to do.
+  //
+  // The corner was failing because the fetcher picked the ball up and was immediately robbed:
+  // he reached it at 13 units, and two samples later the ball was 127 away and he was fetching
+  // again. Forever. A tackle does not know a restart is in progress.
+  //
+  // SCRIPT tier, so it outranks every player decision, and `runAction` declines for anyone
+  // holding it — which is what makes it a lock rather than a suggestion. No guard on the ball,
+  // no exception in the tackle: the situation simply cannot arise.
+  //
+  // Where they go depends on whose restart it is, which is the useful part: the taking side
+  // spreads into space, the others drop toward their own goal. A restart becomes a shape.
+  { name:'positioning for a restart', tier:TIER.SCRIPT, base:940,
+    applies:p => !!(pendingRestart && pendingRestart.p!==p && !p.out && !p.sentOff
+                    && p.role!=='K'),
+    score:p => 940,
+    act:p => {
+      const R=pendingRestart, mine = (p.team===R.team);
+      const own=goalCenter(p.team);
+      if(mine){
+        // show for it: fan out from the mark, at a distance worth throwing to
+        const ax=CX-R.x, ay=CY-R.y, al=Math.hypot(ax,ay)||1;
+        const px=-ay/al, py=ax/al;
+        const lat=((p.k1*911)%1-0.5)*200;
+        const dep=70 + ((p.k2*631)%1)*90;
+        steer(p, R.x+ax/al*dep+px*lat, R.y+ay/al*dep+py*lat, 2.0);
+      } else {
+        // and everybody else gets goal-side, which is what defending a restart means
+        const ax=R.x-own.x, ay=R.y-own.y, al=Math.hypot(ax,ay)||1;
+        const px=-ay/al, py=ax/al;
+        const lat=((p.k1*829)%1-0.5)*150;
+        steer(p, own.x+ax/al*(al*0.55)+px*lat, own.y+ay/al*(al*0.55)+py*lat, 2.0);
+      }
+      return true;
+    } },
 
   // ── OFFERING AFTER A RESTART ──────────────────────────────────────────────
   // NOT explicit: he has taken it and is choosing to make himself available rather than chase.
@@ -2659,6 +2713,13 @@ function physics(dt){
         best.mustKick = true;
         TEL.backPass++;
       } else if(best.role==='K') best.mustKick = false;
+      // A BALL BEING CARRIED TO A MARK CANNOT BE CLAIMED. The fetcher reached it, picked it up,
+      // and somebody else took it off him on the next frame — so he dropped back to fetching and
+      // chased it for the rest of the match. That is why John saw "nobody went to fetch it": he
+      // went, arrived, and the ball left.
+      //
+      // A restart is not a contest. Nobody tackles a man carrying the ball to a throw-in.
+      if(ball.fetch && ball.fetch.by && ball.fetch.by!==best) return;
       ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
       if(ball.flameShot&&best.role==="K") ENGINE_HOOKS.spawnNote(best.x,best.y-24,"🔥 extinguished!","#ffd166");
       ball.flameShot=false;
