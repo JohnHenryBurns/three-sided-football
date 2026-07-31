@@ -2850,6 +2850,18 @@ function think(dt){
     // A fired action ends his frame; a declined one leaves him free, which is most frames.
     if(runAction(p)) return;
 
+    // ── THE LIST DECIDES; THE CASCADE IS THE FALLBACK ────────────────────────
+    // This call sat at the END of five hundred lines of cascade, so every cascade branch ran
+    // first and returned, and the instruction list only ever saw what fell through.
+    //
+    // THE INSTRUCTIONS WERE THE FALLBACK AND THE CASCADE WAS THE GAME. John saw cascade players
+    // completing matches, chasing and passing — that is exactly what they were doing: the whole
+    // of football, in branches I believed I had replaced.
+    //
+    // One line, moved to the top. Anything the list declines still falls through to whatever
+    // remains below, so nothing is lost — but the list is asked first.
+    if(runInstruction(p)) return;
+
     // ── AND IT GOES BACK BEHIND THE SIXTEEN ───────────────────────────────────
     // Moving it to the top was the right experiment and the answer was chaos. Normalised per
     // player per second — which is the only way these numbers compare — switching went 1.2 -> 11.4
@@ -3012,7 +3024,7 @@ function think(dt){
       // ── A FREE KICK IS BEING SET UP ───────────────────────────────────────
       // The taker walks to the ball. His side offers itself. THE OFFENDING SIDE RETREATS — ten
       // yards, which is the only rule in football that exists purely to make a restart possible.
-      if(runInstruction(p)) return;
+      
       TEL.jobFallback++;
       job(p, 'cascade', 0);
 
