@@ -678,10 +678,16 @@ function kickoff(toTeam, firstWhistle){
   // is the state the instructions expect rather than one they have to unpick.
   if(koCands.length){
     const kp = koCands[0];
-    const t9 = targets[koTeam];
-    const g9 = (t9===null||t9===undefined) ? {x:CX, y:CY-1} : goalCenter(t9);
+    // ── HIS OWN THIRD, NOT SOMEBODY ELSE'S ────────────────────────────────
+    // This stood him 17 units back from the goal he ATTACKS. With three goals that is not the
+    // same as toward his own: team 2 attacks goal 0 and ended up nearest goal 1 — kicking off
+    // from another side's third, which is not a kick-off, it is an invasion.
+    //
+    // He stands between the ball and HIS OWN goal. That is his third by definition, and it is
+    // also where a kicker actually stands: behind the ball, facing the pitch.
+    const g9 = goalCenter(koTeam);   // HIS OWN goal
     const bx = CX-g9.x, by = CY-g9.y, bl = Math.hypot(bx,by)||1;
-    kp.x = CX + bx/bl*17; kp.y = CY + by/bl*17; kp.vx=0; kp.vy=0;
+    kp.x = CX - bx/bl*17; kp.y = CY - by/bl*17; kp.vx=0; kp.vy=0;
     ball.owner = null;                     // and nobody starts holding it
     pendingRestart = { kind:'kickoff', at:clockSec, p:kp, x:CX, y:CY, team:koTeam };
   }
@@ -1105,10 +1111,10 @@ function restartSpot(p){
   // A kicker at a kick-off stands behind the ball relative to the goal he is attacking. There is
   // no outward at the centre spot, so the direction has to come from somewhere else.
   if(R.kind==='kickoff'){
-    const t9=targets[p.team];
-    const g9 = (t9===null||t9===undefined) ? {x:CX,y:CY-1} : goalCenter(t9);
+    // HIS OWN goal, matching the staged placement — the two must agree or he walks away
+    const g9 = goalCenter(p.team);
     const bx=R.x-g9.x, by=R.y-g9.y, bl=Math.hypot(bx,by)||1;
-    return { x:R.x + bx/bl*17, y:R.y + by/bl*17 };
+    return { x:R.x - bx/bl*17, y:R.y - by/bl*17 };
   }
   const odx=R.x-CX, ody=R.y-CY, ol=Math.hypot(odx,ody)||1;
   return { x:R.x + odx/ol*22, y:R.y + ody/ol*22 };
