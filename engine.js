@@ -991,6 +991,17 @@ function kick(tx,ty,power,isShot){
   const dx=tx-ball.x, dy=ty-ball.y, d=Math.hypot(dx,dy)||1;
   ball.vx=dx/d*power; ball.vy=dy/d*power;
   ball.lastTouch=o.team; ball.lastKicker=o; ball.isShot=!!isShot;
+  // ── AND THE KEEPERS HAVE TO SEE IT FIRST ──────────────────────────────────
+  // A keeper reacted the instant isShot went true, which is a machine's reflexes. Measured: he
+  // was 98 UNITS FROM THE BALL when the shot was struck and 16 when he caught it — eighty-two
+  // units of ground covered during the flight, and one save that started 299 units away.
+  //
+  // Legal frame by frame and impossible in aggregate, which is exactly what John kept describing.
+  //
+  // A quarter-second before he moves. Median flight before a save is 0.45s, so this leaves most
+  // saves untouched and removes the seven in thirty-two that arrived in under 0.25s — the
+  // close-range shots a real keeper is simply beaten by.
+  if(isShot) players.forEach(q=>{ if(q.role==='K') q.reactAt = clockSec + 0.25; });
   // WHO SHOT IT, kept apart from who last touched it. A keeper who gets a hand to a shot and
   // fails becomes `lastTouch`, and the goal was then credited against his own side as an OWN
   // GOAL — a striker's finish turned into the keeper's mistake because a deflection is a touch.
@@ -3392,6 +3403,15 @@ const INSTRUCTIONS = [
               && dist(p,ball)<55 && (!ball.owner || ball.owner.team!==p.team),
     score:p => 410,
     act:p => {
+      // ── HE WAITS, THEN GOES WHERE IT WILL BE ────────────────────────────
+      // Two changes together. He cannot move until he has SEEN the shot — a quarter-second — and
+      // then he leads it rather than chasing where it is. A keeper's advantage is anticipation,
+      // not reflexes; he had the reflexes of a machine and the anticipation of none.
+      if(p.reactAt && clockSec < p.reactAt) return true;
+      { const lead = Math.min(14, dist(p,ball)/9);
+        const tx = ball.x + ball.vx*lead, ty = ball.y + ball.vy*lead;
+        steer(p, tx, ty, 2.2);
+        return true; }
       const e=EDGES[GOAL_EDGE[p.team]];
       let along=(ball.x-e.mx)*e.ux+(ball.y-e.my)*e.uy;
       const lim=e.len*GOAL_HALF*0.9; along=Math.max(-lim,Math.min(lim,along));
@@ -5027,6 +5047,14 @@ function knockOut(t){
   coached[t]=false; coachTarget[t]=null; if(activeCoach===t) activeCoach=null;
   players.forEach(p=>{ if(p.team===t){ p.out=true; if(ball.owner===p) ball.owner=null; }});
   if(ball.lastKicker&&ball.lastKicker.out) ball.isShot=false;
+  // ── A SHOT THAT HAS STOPPED BEING A SHOT ──────────────────────────────────
+  // Nothing cleared isShot when a ball simply slowed down. Measured: the longest "shot" a keeper
+  // reacted to had been in the air 18.3 SECONDS — an ordinary loose ball still carrying the flag
+  // across a whole passage of play, with a keeper treating it as something to dive at.
+  //
+  // A shot is a ball travelling with intent. Below 3.2 it is rolling, and a keeper who sprints
+  // at it is not making a save, he is collecting.
+  if(ball.isShot && Math.hypot(ball.vx,ball.vy) < 3.2) ball.isShot=false;
   ENGINE_HOOKS.eliminateTeam(t);        // now purely the announcement
 }
 
