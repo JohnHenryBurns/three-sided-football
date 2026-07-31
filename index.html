@@ -386,6 +386,12 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
     #spdDown:disabled,#spdUp:disabled{opacity:.28;cursor:default}
     #spdNow{min-width:42px;text-align:center;font-variant-numeric:tabular-nums;
             font-size:13px;opacity:.92;padding:0 2px}
+
+    /* Edit mode reads as armed rather than merely pressed: the accent fills it, because a mode
+       you can leave the pitch in needs to be obvious that you are in it. */
+    #editBtn{min-width:38px;font-size:15px;line-height:1}
+    #editBtn.on{background:var(--accent,#ffd166);color:#10151a;border-color:var(--accent,#ffd166)}
+    #editBtn:disabled{opacity:.28;cursor:default}
 </style>
 
 <header>
@@ -468,6 +474,8 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
        else, and could not tell what the next press would do. Two buttons say it: the arrows
        point the way each one moves, the number between them is where you are, and a button
        greys out when there is nowhere further to go. -->
+  <!-- Edit mode: only meaningful while paused, so it says so by being disabled. -->
+  <button id="editBtn" title="edit: drag the ball" aria-label="edit mode">&#9998;</button>
   <span id="spdwrap">
     <button id="spdDown" title="slower" aria-label="slower">&#171;</button>
     <span id="spdNow">1&times;</span>
@@ -480,7 +488,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=214"></script>
+<script src="engine.js?v=215"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2622,6 +2630,14 @@ let drawGL = function drawGL(){
     by += headPop;
   }
   ballGL.position.set(netFly ? netFly.x : ball.x, by, netFly ? netFly.y : ball.y);
+  // the grab ring sits under the ball while editing, and brightens once you have hold of it
+  if (editHalo) {
+    editHalo.visible = editMode;
+    if (editMode) {
+      editHalo.position.set(ball.x, 1.6, ball.y);
+      editHalo.material.opacity = grabbed === 'ball' ? 1 : 0.6;
+    }
+  }
 
   // ── THE BURNING BALL ──────────────────────────────────────────────────────
   // The engine sets ball.flameShot when somebody spends burst on a shot, and ball.flameShe so a
@@ -3205,6 +3221,9 @@ function setPlayIcon(){
 }
 document.getElementById('play').addEventListener('click', () => {
   running = !running; setPlayIcon(); keepAwake(running);
+  // starting the match leaves edit mode — you cannot drag a ball that is in play
+  if (running) setEdit(false);
+  syncEditBtn();
 });
 // Reset opens the menu rather than restarting the same match: a reset is the moment you might
 // want different teams or a different length, and the flat page treats it the same way.
@@ -3237,6 +3256,8 @@ function setSpeed(i){
   document.getElementById('spdDown').disabled = (i === 0);
   document.getElementById('spdUp').disabled   = (i === SPEEDS.length-1);
 }
+document.getElementById('editBtn').addEventListener('click', () => { setEdit(!editMode); syncEditBtn(); });
+syncEditBtn();
 document.getElementById('spdDown').addEventListener('click', () =>
   setSpeed(SPEEDS.indexOf(speed) - 1));
 document.getElementById('spdUp').addEventListener('click', () =>
@@ -3457,11 +3478,101 @@ function panAllowed(){ return !follow; }   // following overwrites the target ev
 //
 // Fixed by counting fingers. One finger orbits. Two fingers pinch and pan, and the pointer
 // handler steps aside entirely while more than one is down rather than trying to share.
+// ── EDIT MODE, PHASE ONE: THE BALL ──────────────────────────────────────────
+// Pause the match and reach in. Phase one moves ONE object, deliberately: the whole of picking
+// and dragging proved on a single thing, with none of the questions that a player raises about
+// what a drop means to the instruction list.
+//
+// Three rules from the plan, and they are enforced here rather than remembered:
+//
+//   ONLY WHILE PAUSED — the toggle is disabled when the match is running, and starting the match
+//   leaves edit mode. No dragging a ball mid-flight.
+//
+//   NO RNG() — nothing in here touches the match stream. If placing the ball shifted the seeded
+//   sequence, every A/B comparison in the harness would become meaningless.
+//
+//   A DROP MUST LEAVE A STATE THE ENGINE COULD HAVE REACHED ITSELF — so the ball lands still,
+//   unowned, on the floor, with a brief no-claim window. A ball that appears under a man's feet
+//   and is instantly his is not a placement, it is a gift.
+let editMode = false, grabbed = null;
+const editPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const editRay = new THREE.Raycaster();
+const editHit = new THREE.Vector3();
+
+/** The button reflects the two things that matter: whether edit mode is ON, and whether it is
+ *  even available. Disabled while the match runs, because phase one only moves a ball and a ball
+ *  in flight is not a thing you place. */
+function syncEditBtn(){
+  const b = document.getElementById('editBtn');
+  if (!b) return;
+  b.disabled = running;
+  b.classList.toggle('on', editMode && !running);
+  b.title = running ? 'pause to edit' : (editMode ? 'editing: drag the ball' : 'edit: drag the ball');
+}
+
+function setEdit(on){
+  editMode = !!on && !running;
+  const b = document.getElementById('editBtn');
+  if (b) b.classList.toggle('on', editMode);
+  if (!editMode) grabbed = null;
+  if (editHalo) editHalo.visible = editMode;
+}
+
+// A ring under the ball while editing, so it is obvious what can be grabbed. 26 across, because
+// the ball is 9 and a finger is a great deal wider than that on a phone.
+const editHalo = new THREE.Mesh(
+  new THREE.RingGeometry(13, 17, 28),
+  new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.85,
+                                side: THREE.DoubleSide, depthTest: false }));
+editHalo.rotation.x = Math.PI / 2;
+editHalo.visible = false;
+editHalo.renderOrder = 999;
+scene.add(editHalo);
+
+/** Where on the turf a screen point lands. Null if the ray misses the ground entirely, which it
+ *  does when the camera is low and the pointer is above the horizon. */
+function turfAt(clientX, clientY){
+  const r = cv.getBoundingClientRect();
+  const nx = ((clientX - r.left) / r.width) * 2 - 1;
+  const ny = -((clientY - r.top) / r.height) * 2 + 1;
+  editRay.setFromCamera({ x: nx, y: ny }, camera);
+  return editRay.ray.intersectPlane(editPlane, editHit) ? { x: editHit.x, y: editHit.z } : null;
+}
+
+/** Is this screen point on the ball? Generous: 34 world units, which is about a fingertip at the
+ *  default zoom and still small enough that you cannot grab it from the far side of the pitch. */
+function overBall(clientX, clientY){
+  const t = turfAt(clientX, clientY);
+  return !!t && Math.hypot(t.x - ball.x, t.y - ball.y) < 34;
+}
+
 let drag = null, pinch = 0, touching = 0;
 cv.addEventListener('touchstart', e => { touching = e.touches.length; }, { passive: true });
 cv.addEventListener('touchend',   e => { touching = e.touches.length; }, { passive: true });
-cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); });
-cv.addEventListener('pointerup',   () => { drag = null; });
+cv.addEventListener('pointerdown', e => {
+  // ── EDIT MODE TAKES THE POINTER FIRST ─────────────────────────────────────
+  // Only if the finger actually landed on the ball. Anywhere else on the pitch still orbits the
+  // camera, because a mode that steals every gesture is a mode you cannot see out of.
+  if (editMode && overBall(e.clientX, e.clientY)) {
+    grabbed = 'ball';
+    cv.setPointerCapture(e.pointerId);
+    return;
+  }
+  drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener('pointerup', () => {
+  // ── THE DROP ──────────────────────────────────────────────────────────────
+  // A state the engine could have reached itself: still, on the floor, unowned, and briefly
+  // unclaimable. Without the no-claim window the nearest man takes it the instant play resumes,
+  // which makes placing the ball a gift to whoever happened to be standing there.
+  if (grabbed === 'ball') {
+    ball.vx = 0; ball.vy = 0; ball.z = 0; ball.zv = 0;
+    ball.owner = null; ball.isShot = false; ball.flameShot = false;
+    ball.noClaim = null; ball.noClaimF = 20;
+    grabbed = null;
+  }
+  drag = null;
+});
 // ── PANNING ─────────────────────────────────────────────────────────────────
 // Free look can move the point it is looking AT, not just orbit around it. Without that, "free"
 // only meant free to circle the centre spot — which is not much freedom on a pitch where the
@@ -3488,6 +3599,21 @@ function panBy(dx, dy){
 }
 
 cv.addEventListener('pointermove', e => {
+  // ── THE BALL FOLLOWS THE FINGER ───────────────────────────────────────────
+  // Before the camera gets a look, and it returns rather than falling through: a drag that both
+  // moved the ball and orbited the camera would be unusable.
+  if (grabbed === 'ball') {
+    const t = turfAt(e.clientX, e.clientY);
+    if (t) { ball.x = t.x; ball.y = t.y; ball.z = 0; ball.vx = 0; ball.vy = 0; }
+    return;
+  }
+  // the ball follows the finger, clamped to the stadium so it cannot be put in the car park
+  if (grabbed === 'ball') {
+    const t = turfAt(e.clientX, e.clientY);
+    if (t) { ball.x = t.x; ball.y = t.y; ball.z = 0; }
+    return;
+  }
+
   if (!drag) return;
   if (touching > 1) { drag = { x: e.clientX, y: e.clientY }; return; }   // two fingers: touchmove owns it
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
