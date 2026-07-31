@@ -244,7 +244,38 @@ on drop               ball.vx = ball.vy = 0, owner cleared, noClaim for ~20 fram
 
 **Deliberately not in phase 1:** players, the bench, undo, anything that persists.
 
-### Phase 2 — players on the turf
+### Phase 2 — players on the turf — DONE
+
+**The drop question is answered: a held override with a decay.**
+
+A snapshot would have been honest and unsatisfying — the instruction list reclaims a man
+within two seconds and he walks straight back to his line, so placing him would look like it
+did nothing.
+
+Instead `where he was told`, COACH tier, and he **gives the hold up early when the football
+demands it**:
+
+```
+the ball comes within 90    you cannot stand still while the game arrives at your feet
+he becomes his side's chaser  somebody has to go, and it is him
+he gets the ball            play
+six seconds                 otherwise
+```
+
+**That is what an instruction from the touchline actually is:** a strong suggestion with a
+shelf life, not a command.
+
+**The split is strict.** `index.html` only ever *writes* `heldUntil`; every decision about
+what it means lives in the engine. Six seeds are identical with and without the instruction,
+because nothing sets it unless a finger does.
+
+**Picking:** ball at 34 units, players at 30 — slightly tighter, so a finger between the two
+takes the ball, which is the smaller target and the one you are more likely aiming at.
+
+**Still open from the plan:** a man dragged off the pitch. `onPitch(p)` gates most
+instructions so he will stand inert. Not yet decided whether that is the joke or a bug.
+
+### Superseded: phase 2 as planned
 
 ```
 pick a player         a "grabbed" highlight, because fifteen men at that camera angle

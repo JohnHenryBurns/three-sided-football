@@ -3462,6 +3462,41 @@ const INSTRUCTIONS = [
   //
   // COACH tier, above the ordinary player decisions and below the scripts — a defensive
   // emergency outranks positioning but does not outrank a restart.
+  // ── WHERE HE WAS TOLD ─────────────────────────────────────────────────────
+  // A man placed by hand in edit mode. He stands where he was put and gives it up early when the
+  // football demands it — which is what an instruction from the touchline actually is: a strong
+  // suggestion with a shelf life, not a command.
+  //
+  // COACH tier, so it outranks ordinary positioning and loses to anything scripted. A restart
+  // still gathers him; a defensive emergency still moves him; the ball arriving still wakes him.
+  //
+  // He surrenders the hold when:
+  //   the ball comes within 90 — you cannot stand still while the game arrives at your feet
+  //   he is his side's chaser — somebody has to go, and it is him
+  //   the six seconds run out
+  //
+  // index.html only ever WRITES heldUntil. Every decision about what it means is here.
+  { name:'where he was told', tier:TIER.COACH, base:600,
+    applies:p => {
+      if(!p.heldUntil || clockSec >= p.heldUntil) return false;
+      if(p.out || p.sentOff) return false;
+      if(ball.owner === p) { p.heldUntil = 0; return false; }        // he has the ball; play
+      if(dist(p, ball) < 90) { p.heldUntil = 0; return false; }      // the game came to him
+      if(chaser[p.team] === p) { p.heldUntil = 0; return false; }    // he is the one who must go
+      return true;
+    },
+    score:p => 600,
+    act:p => {
+      const tx = (p.heldX !== undefined) ? p.heldX : p.x;
+      const ty = (p.heldY !== undefined) ? p.heldY : p.y;
+      const d = dist(p, {x:tx, y:ty});
+      if(d > 6) steer(p, tx, ty, 1.6);       // drift back if he was nudged off it
+      else { p.vx *= 0.6; p.vy *= 0.6; }     // otherwise he simply stands there
+      // face the ball while he waits, like anybody standing still on a football pitch
+      const bx=ball.x-p.x, by=ball.y-p.y, bl=Math.hypot(bx,by)||1;
+      p.hx=p.hx*0.9+(bx/bl)*0.1; p.hy=p.hy*0.9+(by/bl)*0.1;
+      return true;
+    } },
   { name:'covering the danger', tier:TIER.COACH, base:520,
     applies:p => {
       if(!onPitch(p) || p.role==='K' || ball.owner || holdingPlay()) return false;
