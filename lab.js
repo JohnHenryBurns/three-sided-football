@@ -42,7 +42,7 @@ function play(opts){
              get pendingKickoff(){return pendingKickoff}, set pendingKickoff(v){pendingKickoff=v},
              get resumeAt(){return resumeAt}, set resumeAt(v){resumeAt=v},
              get walkPending(){return walkPending}, set walkPending(v){walkPending=v},
-             seedRNG, dist,
+             seedRNG, dist, TEL,
              get NEUTRAL_COACHING(){return NEUTRAL_COACHING},
              set NEUTRAL_COACHING(v){NEUTRAL_COACHING=v} };`)();
 
@@ -252,6 +252,15 @@ function play(opts){
     why: 100*loose/frames > 75 ? 'nobody chasing'
        : 100*loose/frames < 45 ? 'ball held too long'
        : crowd/frames < 1.4    ? 'nobody near the ball' : null,
+    // THE FOUR STATES, because `loose` alone conflates a pass in flight with a ball nobody
+    // wants. John watched a match full of passing and correctly said it did not look like a
+    // ball on the floor for six-sevenths of the time — because it was not.
+    phases: (function(){
+      const T=(typeof E.TEL!=='undefined'&&E.TEL)?E.TEL:{pOwned:0,pFlight:0,pDead:0,pContested:0};
+      const t=(T.pOwned+T.pFlight+T.pDead+T.pContested)||1;
+      return { owned:100*T.pOwned/t, flight:100*T.pFlight/t,
+               dead:100*T.pDead/t, contested:100*T.pContested/t };
+    })(),
     loosePct: 100 * loose / frames,
     aerialPct: 100 * aerial / frames,
     keeperPct: 100 * keeper / owned,
