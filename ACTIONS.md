@@ -164,6 +164,54 @@ no-op; `score + 50` does not. The intentional foul already proved this — an ex
 run each identity against itself and require the pass/shot/punt mix to differ by more than
 the seed spread. That is measurable, and it is the honest first target.
 
+## Step 1 done: the coach multiplies. And the noise floor is the real obstacle.
+
+**The coach term is now a multiplier, read as a shift around zero:** `+50` means half
+again, applied as `score * (1 + coach/45)`. The same numbers already written on every
+action now span meaningfully:
+
+```
+pass    TikiTaka x1.94 = 408  (12.7% of frames)
+        Balanced x1.56 = 327  (10.4%)
+        RouteOne x1.06 = 222  ( 7.3%)
+
+shot    TikiTaka x1.23        RouteOne x2.48
+```
+
+**1.74:1 on pass, 2:1 on shot** — against 1.2:1 before, and it needed one line rather than
+rewriting twenty-one coach terms.
+
+### But the measurement says it is still not enough
+
+```
+passes per match, ten seeds each
+
+TikiTaka   92.7 ± 70.0
+RouteOne   65.5 ± 59.8
+
+separation: 0.42 standard deviations — INSIDE THE NOISE
+```
+
+**A three-minute match varies by ±75% seed to seed.** A 1.74:1 difference in intent cannot
+be seen through that, and no amount of careful tuning will make it visible.
+
+**This is the obstacle for the whole RPS project**, and it was invisible until now: every
+identity comparison all session, mine and the ones before, has been reading noise.
+
+### What that changes about the plan
+
+**Longer matches for calibration.** Ten minutes rather than three cuts the relative spread
+by roughly the square root — enough to resolve 1.74:1. Slower to run, and the only honest
+way to see a matchup matrix.
+
+**Or bigger dials.** `/45` could become `/25`, spanning 3:1. That risks caricature — a
+Route One side that never passes is not a strategy, it is a gimmick — but it would be
+visible in three minutes.
+
+**My instinct is longer matches for measurement and the current dials for play**, because
+the dial exists to make football, not to make measurement convenient. But that is a
+judgement about feel and John's eye is better than my numbers here.
+
 ## Rock, paper, scissors — the plan
 
 **The triangle exists as commentary and nothing else.** `styleLines()` asserts counters

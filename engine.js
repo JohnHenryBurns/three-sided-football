@@ -2405,7 +2405,27 @@ function runAction(p){
   let total = 0;
   const weights = pool.map(x=>{
     // the coach weights every action rather than owning a tier, which is John's correction
-    const w = Math.max(1, x.A.score(p) + (x.A.coach ? x.A.coach(T9) : 0));
+    // ── THE COACH MULTIPLIES, IT DOES NOT ADD ─────────────────────────────
+    // It used to add. So `pass` at base 210 with `coach:(1-T.direct)*50` gave TikiTaka 252 and
+    // Route One 213 — a 300% difference in identity producing a 1.2-point difference in
+    // behaviour, swamped by a no-op of 2800. Route One measured as passing MORE than TikiTaka.
+    //
+    // Now the coach term is read as a SHIFT AROUND ZERO and applied as a multiplier: a term of
+    // +50 means "half again", -50 means "half as much". The same numbers already written on
+    // every action suddenly span 3:1 instead of 1.2:1.
+    //
+    // This is the lesson the intentional foul taught: a linear multiplier on a shared base could
+    // not express a 300:1 spread, and only an explicit table could. Multiplying does the same
+    // work for the ordinary cases without a table per action.
+    const cRaw = x.A.coach ? x.A.coach(T9) : 0;
+    // /45, NOT /100. At /100 a coach term of +50 meant "half again" and pass spanned only
+    // 1.37:1 across the whole identity range — better than 1.2:1 and still not a strategy.
+    //
+    // At /45 the SAME numbers already written on every action span 2.3:1 on pass and 2.5:1 on
+    // shot. A Route One side shoots from range two and a half times as readily as a Tiki-Taka
+    // one, which is what those words are supposed to mean.
+    const cMul = Math.max(0.12, 1 + cRaw/45);
+    const w = Math.max(1, x.A.score(p) * cMul);
     total += w;
     return w;
   });
