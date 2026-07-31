@@ -469,6 +469,43 @@ when eleven more arrived.
 holds the ball long enough for a second action to be considered — the first one available
 takes it and ends the possession.
 
+## THE FLIP IS DONE
+
+```
+5/6 usable   —   baseline was 4/6
+```
+
+Fifteen actions live, the cascade's tackle deleted, its three `gkDiveCheck` calls gone,
+and `ACTIONS_LIVE` true.
+
+**What it took, and none of it was the twelve kick sites:**
+
+```
+dive -> a keeper action      the shooter stopped reaching across to move a keeper
+tackle -> a tackler's        the carrier stopped rolling dice for his own tacklers
+if(owner && ball.owner===owner)   a block about the owner requires the owner
+PLAY_ON_WEIGHT 2800 -> 60000      the dial that made ten actions look broken
+```
+
+**The last one is the lesson.** At 2800 a carrier released the ball within nine frames, so
+no second action was ever considered and ten `can()` conditions looked wrong. **One
+constant, ten symptoms** — and I only found it by measuring possession directly rather than
+inspecting the conditions.
+
+### Where it stands
+
+```
+loose 70-76%   baseline 65%     still looser than the cascade
+throws 75-96   baseline 38-58   and more of them
+goals 18-29    baseline 8-27    in range
+```
+
+**Usability is better than baseline and the texture is not.** The ball spends more time
+loose, which is the thing to tune next — and it is now tunable, because every release is a
+named action with a weight rather than a rate buried in a branch.
+
+That was the point of the whole exercise.
+
 ## Order
 
 1. find the common shape, or establish that there isn't one

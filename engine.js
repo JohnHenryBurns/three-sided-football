@@ -977,13 +977,19 @@ function TACTICS(t){ return T(t); }
 //
 // To finish: flip ACTIONS_LIVE, delete the thirteen cascade sites, run the six seeds against
 // baseline.json. One commit, and it either holds or it reverts whole.
-const ACTIONS_LIVE = false;
+const ACTIONS_LIVE = true;
 
 // THE NO-OP'S WEIGHT — the dial that sets how often anything happens at all. A PLAYER action
 // scoring 300 against this fires on about a tenth of the frames it is available. Every rate in
 // the old cascade is expressible as a ratio to this one number, which is why it is a constant
 // rather than a per-action hesitance.
-const PLAY_ON_WEIGHT = 2800;
+// DERIVED, NOT CHOSEN. The cascade holds the ball about 100 frames a possession; a 360-point
+// action against 30,000 fires on 1.2% of frames, which is a hold of ~84. 2800 gave nine frames —
+// a fifth of a second — and every ball-releasing action fired the instant a man got it.
+//
+// I picked 2800 by eye when the only actions were a header and a shield, and never revisited it
+// when eleven more arrived. That is what made ten actions look broken when one number was.
+const PLAY_ON_WEIGHT = 60000;
 
 // THE SETUP NO-OP. A mandated action competes against this while it ripens, so a restart is
 // taken on a sampled frame rather than a scheduled one. Smaller than PLAY_ON_WEIGHT because a
@@ -2360,11 +2366,9 @@ function think(dt){
   players.forEach(p=>{
     if(p.out||p.sentOff||targets[p.team]===null)return;
 
-    // ── AN ACTION MAY FIRE, AND THEN HE STILL MOVES ───────────────────────────
-    // Actions run BEFORE instructions and do not consume the frame: a man who heads the ball is
-    // still somewhere, and still wants to be somewhere next. That is the whole difference from the
-    // instruction list, where one winner takes the frame.
-    runAction(p);
+    // ── THE FLIP ──────────────────────────────────────────────────────────────
+    // A fired action ends his frame; a declined one leaves him free, which is most frames.
+    if(runAction(p)) return;
 
     // ── AND IT GOES BACK BEHIND THE SIXTEEN ───────────────────────────────────
     // Moving it to the top was the right experiment and the answer was chaos. Normalised per
@@ -2713,7 +2717,10 @@ function think(dt){
       a.vx+=dx*push;a.vy+=dy*push;b.vx-=dx*push;b.vy-=dy*push;}
   }
   // owner decisions
-  if(owner){
+  // AND ONLY IF HE STILL HAS IT. `owner` is captured before the player loop; an action may have
+  // taken the ball since. A block that reasons about a man in possession is wrong the moment he is
+  // not in possession — that is the whole crash, in one condition.
+  if(owner && ball.owner===owner){
     if(holdActive){ owner.vx*=0.85; owner.vy*=0.85; return; }
     if(throwPending===owner){
       throwPending=null;
