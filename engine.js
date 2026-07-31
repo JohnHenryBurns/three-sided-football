@@ -1929,14 +1929,25 @@ const ACTIONS = [
 // simply not. So the highest available tier wins outright and the weighting happens WITHIN it.
 // The no-op exists at PLAYER tier only — "the game acts" stays certain, "he chooses" becomes
 // probabilistic, which is the distinction the tiers were for.
+/** Who may still act during a restart: the taker, and a fetcher who has not finished fetching.
+ *  Everyone else is on `positioning for a restart` and has nothing to do. */
+function restartFree(p){
+  if(!pendingRestart) return true;
+  if(pendingRestart.p===p) return true;                       // he is taking it
+  if(ball.fetch && ball.fetch.by===p) return true;            // he is still going to get it
+  return false;
+}
+
 function runAction(p){
-  // ── A RESTART LOCKS EVERYBODY BUT THE TAKER ──────────────────────────────
-  // No actions at all for anyone who is not taking it. That is what makes `positioning for a
-  // restart` a lock rather than a suggestion — without it a defender can still tackle the
-  // fetcher, which is exactly the loop that stopped corners being taken all session.
+  // ── A RESTART LOCKS EVERYBODY BUT THE TAKER AND THE FETCHER ──────────────
+  // John's correction, and the lock was wrong without it: I wrote it as "everybody but
+  // pendingRestart.p", which assumes the fetcher and the taker are the same man. They happen to
+  // be today, and nothing guarantees it — a re-staging or a changed taker splits them, and then
+  // the lock freezes the very player who is supposed to be carrying the ball.
   //
-  // The taker is exempt because his restart IS an action.
-  if(pendingRestart && pendingRestart.p!==p) return false;
+  // THE FETCHER IS UNLOCKED UNTIL HE HAS FETCHED. After that he locks like everybody else,
+  // unless he is also taking it.
+  if(pendingRestart && !restartFree(p)) return false;
   const list = ACTIONS_LIVE ? ACTIONS.concat(PORTED) : ACTIONS;
   const T9 = TACTICS(p.team);
 
@@ -2061,7 +2072,7 @@ const INSTRUCTIONS = [
   // Where they go depends on whose restart it is, which is the useful part: the taking side
   // spreads into space, the others drop toward their own goal. A restart becomes a shape.
   { name:'positioning for a restart', tier:TIER.SCRIPT, base:940,
-    applies:p => !!(pendingRestart && pendingRestart.p!==p && !p.out && !p.sentOff
+    applies:p => !!(pendingRestart && !restartFree(p) && !p.out && !p.sentOff
                     && p.role!=='K'),
     score:p => 940,
     act:p => {
