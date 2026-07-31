@@ -87,8 +87,16 @@ goals — which should not fall.
 
 **1. The loose ball.** Above. Everything else waits.
 
-**2. `burst` / `sprint` as an instruction.** Absent entirely since the cascade was cut —
-by our boundary rule the decision to spend burst is a steering decision. Nobody sprints.
+**2. ~~`burst` / `sprint`~~ — DONE.** `chasing at pace`, PLAYER tier. The chaser spends
+0.35 burst to close a ball he is racing for: within 30–190, an opponent within a stride of
+his own distance, and legs to pay for it. **When it is worth it is the whole instruction** —
+a sprint is a bet, and burst is the stake.
+
+```
+sprints        11 a match
+goals          9.8  ->  10.8
+loose          89%  ->  83%
+```
 
 **3. `stepStats()`.** ~25 stamina and GKSTAT counters, bookkeeping rather than decisions.
 
