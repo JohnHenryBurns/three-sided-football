@@ -2733,7 +2733,17 @@ const INSTRUCTIONS = [
       return true;
     } },
   { name:'positioning for a restart', tier:TIER.SCRIPT, base:940,
-    applies:p => !!(pendingRestart && !restartFree(p) && !p.out && !p.sentOff
+    // ── NOT AT A KICK-OFF ─────────────────────────────────────────────────
+    // A kick-off has its OWN positioning — `walking back for the kick-off`, which sends every man
+    // to his resting spot. This generic one fans them out around the mark, which at a kick-off
+    // means fanning out around the centre circle: fifteen men in a ring at the middle of the
+    // pitch, which is why crowding jumped to 2.94 when the kick-off joined the machine.
+    //
+    // It outranked the specific instruction 942 to 930 and won 73% of kick-off frames. The fix
+    // is not to re-rank them — it is that this does not apply at all when a better-informed
+    // instruction owns the situation.
+    applies:p => !!(pendingRestart && pendingRestart.kind!=='kickoff'
+                    && !restartFree(p) && !p.out && !p.sentOff
                     && p.role!=='K'),
     score:p => 940,
     act:p => {
