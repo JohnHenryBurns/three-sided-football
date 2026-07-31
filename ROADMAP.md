@@ -94,6 +94,39 @@ harness.
 
 ---
 
+## THE GOAL-KICK HANG — open, and it freezes the match
+
+**John saw it in the browser and the harness confirms it:**
+
+```
+goal-kick frames in the worst match: 41,466
+a 3-minute match is 10,800 frames
+last state: d:23  job:"pending the kick"  ballToMark:0
+```
+
+**The goal kick never ends, and the match runs on past full time** — the harness guard at
+400,000 frames is what stops it, not the whistle.
+
+**One real cause found and fixed, and it was not enough:** the `goal-kick` action required
+the keeper within **20** while `pending the kick` holds him at up to **22**. A keeper who
+settled at 21 was too far to kick and close enough that nothing walked him in. Every other
+restart action was aligned to 22 when this fault appeared at the throw; this one was missed
+because no goal kick had completed to expose it.
+
+**After the fix: 40,110 frames. Barely moved.**
+
+**What is known:** the keeper reaches the mark (`ballToMark:0`), the ball is placed and
+unowned, and his job reads `pending the kick`. So he is in the right state, at the right
+place, with the ball where it should be — and the action does not fire.
+
+**What has not been checked:** whether `ripeness` ever reaches SETUP_WEIGHT for a goal
+kick. Its rate is 50 + 70*direct, needing about 3.4s — but `pendingRestart.at` is set at
+staging, and if anything re-stages the goal kick the clock resets and it can never ripen.
+**That is the same fault that made the throw-in unable to fire, and it would look exactly
+like this.**
+
+**Trace `pendingRestart.at` across a goal kick before changing anything else.**
+
 ## New priorities — from watching matches
 
 **1. Instruction state flickers during transitions — MEASURED, NOT FIXED.**

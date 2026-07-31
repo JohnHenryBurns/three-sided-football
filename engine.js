@@ -1778,7 +1778,14 @@ const PORTED = [
       if(!pendingRestart || pendingRestart.kind!=='goalkick' || pendingRestart.p!==p) return false;
       if(ball.owner) return false;
       const m={x:pendingRestart.x, y:pendingRestart.y};
-      return dist(p,m) <= 20;
+      // ── 22, MATCHING `pending the kick` ───────────────────────────────────
+      // 20 while pending holds him at up to 22 left a two-unit dead band: a keeper who settled at
+      // 21 was too far to kick and close enough that nothing walked him in. THE GOAL KICK NEVER
+      // ENDED — 41,466 frames of it in a match that should be 10,800, which is John's freeze.
+      //
+      // Every other restart action was aligned to 22 when this fault appeared at the throw. This
+      // one was missed because no goal kick had completed yet to expose it.
+      return dist(p,m) <= 22;
     },
     score:p => pendingRestart ? ripeness(pendingRestart.at!==undefined?pendingRestart.at:clockSec,
                                         50 + 70*T(p.team).direct) : 0,
@@ -2774,7 +2781,14 @@ const INSTRUCTIONS = [
         const ax=CX-R.x, ay=CY-R.y, al=Math.hypot(ax,ay)||1;
         const px=-ay/al, py=ax/al;
         const lat=((p.k1*911)%1-0.5)*200;
-        const dep=70 + ((p.k2*631)%1)*90;
+        // ── SPREAD, NOT A HUDDLE ──────────────────────────────────────────
+        // 70-160 deep and 200 wide was a throw-in's shape, taken from a touchline where the
+        // pitch is only in front of you. A goal kick launches from the six-yard box into a
+        // whole hex, and gk-punt reaches 76 — so the men it is aimed at need to be spread
+        // across that range, not standing in a bunch at 100.
+        //
+        // John's screenshot: eight men in a huddle, all labelled with this instruction.
+        const dep=110 + ((p.k2*631)%1)*210;
         steer(p, R.x+ax/al*dep+px*lat, R.y+ay/al*dep+py*lat, 2.0);
       } else {
         // and everybody else gets goal-side, which is what defending a restart means
