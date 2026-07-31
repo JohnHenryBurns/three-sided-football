@@ -480,7 +480,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=209"></script>
+<script src="engine.js?v=210"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -3057,11 +3057,16 @@ function loop(now){
     if (pendingKickoff !== null && typeof pendingKickoff !== 'undefined') {
       kickoff(pendingKickoff); pendingKickoff = null; resumeAt = now + 900;
     } else {
-      // The 2D page's step, verbatim: dt * speed * 0.75. `speedMult` is a PLAYER speed
-      // multiplier and taking it for a clock rate was a guess from its name — it wants a player
-      // and returns how fast that one runs. The clock and the simulation take the same step, so
-      // the match clock and the football agree about how long a second is.
-      const step = dt * speed * 0.75;
+      // ── 1x MEANS ONE SECOND PER SECOND ────────────────────────────────────
+      // It was `dt * speed * 0.75`, so a match second took 1.33 real seconds and the button
+      // marked 1x had never run at 1x. John: that was a mistake, and he is right — a label that
+      // lies is worse than a slow default, because you cannot reason about anything downstream
+      // of it. Every ripening figure quoted in seconds this session was 33% out.
+      //
+      // The 0.75 is gone from the step and moved into the SPEED LIST, where it is a choice
+      // rather than a hidden constant. 0.75x is the new default: the same pace the game has
+      // always run at, now honestly named.
+      const step = dt * speed;
       clockSec += step;
       retargetTimer += step;
       if (retargetTimer > 6) { retargetTimer = 0; computeTargets(); }
@@ -3119,7 +3124,9 @@ document.getElementById('reset').addEventListener('click', openSetup);
 // the handoffs between instructions become visible.
 //
 // 5x at the top for the opposite reason: watching a whole match for shape rather than incident.
-const SPEEDS = [0.25, 0.5, 1, 1.5, 2, 3, 5];
+// 0.75 added, and it is the DEFAULT — the pace the game has always run at, which used to be
+// what the button called 1x. Everything above it is now genuinely faster than real time.
+const SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5];
 function setSpeed(i){
   i = Math.max(0, Math.min(SPEEDS.length-1, i));
   speed = SPEEDS[i];
@@ -3132,7 +3139,7 @@ document.getElementById('spdDown').addEventListener('click', () =>
   setSpeed(SPEEDS.indexOf(speed) - 1));
 document.getElementById('spdUp').addEventListener('click', () =>
   setSpeed(SPEEDS.indexOf(speed) + 1));
-setSpeed(SPEEDS.indexOf(1));
+setSpeed(SPEEDS.indexOf(0.75));   // the pace it has always been, now named correctly
 
 // Fullscreen. On the STAGE rather than the document, so the pitch fills the screen and the
 // controls come with it — a fullscreen page that leaves its buttons behind is a trap on a phone,
