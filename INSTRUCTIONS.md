@@ -509,7 +509,43 @@ with proper sampling. **Two of the four open items were already dead.**
 behaviour. Three moves in one direction is not noise. Suspects: the clearance path, the
 area clamp, the crowded-keeper rule.
 
-**WOODWORK: the ball DOES cross the plane. John was right and my measurement was wrong.**
+**WOODWORK: it works. It is rare, and the arithmetic says how rare.**
+
+Counted from **inside the engine** rather than a patched copy — which is what three
+sessions of this should have started with:
+
+```
+eight matches
+  crossings reaching the woodwork test    8      one a match
+  closest any came to a POST             11      a hit needs < 4.2
+  closest to the CROSSBAR                10
+  woodwork                                0
+```
+
+**The test fires. It has been firing.** The ball simply never arrives within 4.2 of the
+frame.
+
+**And that is geometry, not a bug:**
+
+```
+goal mouth        143 units wide
+post band         8.4 wide, so 5.9% of the mouth per post
+shot offset       uniform over roughly ±71
+```
+
+**A shot lands on the woodwork about 6% of the time it is on target** — and the test sees
+one crossing a match. **So one woodwork every eight to sixteen matches is the correct
+answer**, and eight matches producing zero is unremarkable.
+
+**What was actually wrong, across three sessions:** the geometry (fixed), the tunnelling
+(real, fixed), the `d<7` guard (real, fixed). Three genuine faults, each found while
+chasing a symptom that was never a fault at all.
+
+**Remaining question, and it is small:** only ~8 of ~120 goals produce a crossing the test
+sees. Worth understanding, but it is a factor of fifteen on an event that is already rare
+— not the reason the woodwork "never fires".
+
+**Superseded: the ball never crosses the plane / the ball does cross but the test misses it**
 
 Traced frame by frame into a goal, on the conceding edge:
 
