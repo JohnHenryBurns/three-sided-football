@@ -1272,14 +1272,30 @@ function gkOutlets(gk){
 
 const PORTED = [
   // ── SCRIPT: the game takes these ──────────────────────────────────────────
+  // ── THE CORNER, ON THE SAME MACHINE ───────────────────────────────────────
+  // It used to require ball.owner===p — and the state machine puts the ball DOWN on the mark, so
+  // that could never be true. Same fault the throw had. A corner taker stands at the flag with
+  // the ball on it; he does not hold it.
   { name:'corner-swing', tier:TIER.SCRIPT, ported:true,
     coach:T => T.direct*30,
-    can:p => !!(cornerPending===p && ball.owner===p),
-    score:p => 400,
+    can:p => {
+      if(!pendingRestart || pendingRestart.p!==p || ball.owner || !onPitch(p)) return false;
+      if(pendingRestart.kind!=='corner') return false;
+      const m={x:pendingRestart.x, y:pendingRestart.y};
+      if(dist(ball,m) > 12) return false;
+      return dist(p, restartSpot(p)) <= 10;
+    },
+    score:p => ripeness(pendingRestart.at !== undefined ? pendingRestart.at : clockSec,
+                        180 + 260*T(p.team).direct),   // a corner ripens slower than a throw
     act:p => {
       const e=EDGES[GOAL_EDGE[cornerGoal]], g=goalCenter(cornerGoal);
       const cx2=g.x+e.nx*46, cy2=g.y+e.ny*46;
+      ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p;   // struck, for the instant
       kick(cx2, cy2, 11.5, false);
+      ball.zv=3.6;                                              // it swings in high
+      ball.owner=null;
+      pendingRestart=null; cornerPending=null; cornerTaker=null; // the corner is over
+      justDelivered={p, at:clockSec};
       return true;
     } },
 
@@ -1300,11 +1316,15 @@ const PORTED = [
   // old version never did: pendingRestart is cleared by the ball being struck, by nothing else.
   { name:'throw-in', tier:TIER.SCRIPT, ported:true,
     coach:T => 0,
+    // A THROW, NOT ANY RESTART. Without the kind test this action fired on corners too — the
+    // state machine gets a corner taker to stage 4 exactly like a thrower, and whichever action
+    // matched first took it. A corner delivered as a throw-in is not a corner.
     can:p => {
       if(!pendingRestart || pendingRestart.p!==p || ball.owner || !onPitch(p)) return false;
+      if(pendingRestart.kind && pendingRestart.kind!=='throw') return false;
       const m={x:pendingRestart.x, y:pendingRestart.y};
-      if(dist(ball,m) > 12) return false;              // not on the mark
-      return dist(p, restartSpot(p)) <= 10;            // and he is in position
+      if(dist(ball,m) > 12) return false;
+      return dist(p, restartSpot(p)) <= 10;
     },
     // THE CLOCK IS THE STAGING TIME, ALWAYS SET. `since` was only assigned in the carry stage —
     // and when the ball is staged already on the mark, which is most restarts, that stage never
@@ -3909,7 +3929,7 @@ function stageCorner(ownerT,e,ex,ey){
   ball.owner=null;
   ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
   ball.fetch={ by:taker, sx:cx2, sy:cy2, team:att, at:clockSec, ground:true };
-  pendingRestart={ at:clockSec,p:taker, x:cx2, y:cy2, team:att, fetch:true, ground:true,
+  pendingRestart={ kind:'corner', at:clockSec,p:taker, x:cx2, y:cy2, team:att, fetch:true, ground:true,
                   cap:nowMs()+20000, readyAt:nowMs()};
   cornerTaker=taker; cornerGoal=ownerT;
   // The ceremony starts when the ball reaches the flag, not when the corner is awarded — he
