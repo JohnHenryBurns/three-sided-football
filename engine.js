@@ -3545,12 +3545,21 @@ function physics(dt){
       const kx=o.x-og.x, ky=o.y-og.y, kd=Math.hypot(kx,ky);
       const AREA=112;
       if(kd>AREA){
-        const f=AREA/(kd||1);
-        o.x=og.x+kx*f; o.y=og.y+ky*f;
-        // My own keeper-area clamp drags the ball 70 per cent of the way back to him, which
-        // for a keeper hauled in from 400 out is a jump of nearly 300. Counted now.
-        if(Math.hypot(ball.x-o.x,ball.y-o.y)*0.7>25) telPort('keeper hauled back into his area');
-        ball.x=o.x+(ball.x-o.x)*0.3; ball.y=o.y+(ball.y-o.y)*0.3;
+        // ── HE CANNOT HANDLE IT OUT HERE, SO HE PUTS IT DOWN ──────────────
+        // This hauled the keeper back to the area edge and dragged the ball 70% of the way with
+        // him — a jump of nearly 300 units for a keeper who had wandered, eight times a match.
+        //
+        // The football answer is simpler and needs no teleport: a keeper outside his area is an
+        // outfielder, and an outfielder cannot pick the ball up. So he drops it, at his feet,
+        // and plays on. He keeps possession and loses his hands, which is exactly the rule.
+        //
+        // He is not moved. Nothing is moved. The ball is simply no longer in his gloves.
+        ball.owner=null;
+        ball.x=o.x + (o.hx||0)*11; ball.y=o.y + (o.hy||0)*11;
+        ball.vx=o.vx*0.6; ball.vy=o.vy*0.6; ball.z=0; ball.zv=0;
+        if(gkHolder===o){ gkHolder=null; gkHoldUntil=-1; }
+        ENGINE_HOOKS.spawnNote(o.x, o.y-24, "out of his area!", "#ffd166");
+        TEL.gkOutOfArea=(TEL.gkOutOfArea||0)+1;
       }
     }
     // KEEP IT OUT OF HIM. The carry point is 15 ahead, but the ball SPRINGS toward it — so on a
