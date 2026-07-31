@@ -4127,6 +4127,18 @@ function physics(dt){
       if(suppress&&suppress.team===p.team&&clockSec<suppress.until)return;
     if(ball.z>(p.role==="K"?28:12))return;   // sailing over their heads
 
+    // ── AND A KEEPER CANNOT PICK IT UP OUTSIDE HIS AREA ───────────────────
+    // I built the drop rule without the matching don't-pick-it-up rule, so a keeper outside his
+    // area claimed the ball, was told to drop it, claimed it again — 236 TIMES A MATCH. Half of
+    // all ball-losses in the game, and a large part of the possession flicker John saw.
+    //
+    // A rule that undoes an action every frame is not a rule, it is an argument. He simply
+    // cannot gather it out here, which is the actual law and needs no correction afterwards.
+    if(p.role==="K"){
+      const og9=goalCenter(p.team);
+      if(dist(p,og9) > 112) return;
+    }
+
     // ── A BALL ON A RESTART MARK IS NOT CLAIMABLE ─────────────────────────
     // It is placed and waiting for its taker. Without this the nearest man picks it up — which
     // for a goal kick is the keeper standing beside it — and the restart machine cycles him
