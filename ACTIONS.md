@@ -32,6 +32,43 @@ have never functioned; the cascade has been doing their job.
 block disabled*, proven on the same six seeds, **before** cutting it. I cut first and
 assumed, which is what produced all of the above.
 
+### The corner: still not taken, and what has been ruled out
+
+```
+corners staged   2 across six matches
+corners taken    0
+```
+
+**Traced.** The taker does go, and gets there:
+
+```
+toBall:146  fetching
+toBall: 68  fetching
+toBall: 13  carrying it to the mark    <- he reached it
+toBall:127  fetching                   <- the ball is 127 away again
+toBall:213  fetching                   <- and going
+```
+
+**He picks it up and is instantly robbed**, then chases forever.
+
+**Three fixes attempted, none changed the number:**
+
+1. `restartSpot` returned the mark itself, so the taker had to stand within 10 of a ball at
+   his own feet against a body radius of 23 — **fixed, still 0**
+2. corner tolerance widened 10 → 16 — **still 0**
+3. **John's rule:** everybody but the taker gets a mandatory SCRIPT position and
+   `runAction` declines for them, so nobody can rob the fetcher — **still 0**
+
+That third one is right regardless and is shipped: no guard on the ball, no exception in
+the tackle, the situation simply cannot arise.
+
+**Still unexplained.** Throws work through the identical machine — 0.5 a match, restarts in
+0.7s — so the difference is corner-specific. Candidates not yet checked: `cornerGoal` being
+cleared before `corner-swing` reads it, `cornerTaker` disagreeing with `pendingRestart.p`,
+or the taker never reaching stage 4 at all.
+
+**A per-stage trace of one corner would settle it**, the way it settled the throw.
+
 ### The stadium wall
 
 John: *"it should have been stopped by the stadium wall and picked up by a fetcher."*
