@@ -545,7 +545,7 @@ function formation(t){
   ];
 }
 function tm(t){return `<span class="tm" style="color:${TEAMS[t].color}">${TEAMS[t].name}</span>`;}
-function pick(a){return a[Math.floor(RNG()*a.length)];}
+function pick(a){return a[Math.floor(RNG_COS()*a.length)];}   // line choice is theatre
 
 // The centre circle, which nothing used to respect. In two-goal football only the side kicking
 // off may stand inside it; the same rule here just has two sets of opponents to hold back rather
@@ -979,8 +979,30 @@ function holdingPlay(){
 //
 // The harness seeds it. That is the whole point: reproducible where it matters, random where it
 // does not.
+// ── TWO STREAMS: THE MATCH, AND THE THEATRE ─────────────────────────────────
+// Eleven RNG() calls are cosmetic — which line the commentator picks, whether a sprint gets a
+// flame, whether a note pops. They decide nothing about the football and they all draw from the
+// same sequence as the simulation.
+//
+// So ADDING A COMMENTARY LINE CHANGES THE MATCH. Every before/after I have run on a fixed seed
+// across a change that touched commentary was comparing two different games, and I have treated
+// those comparisons as exact all session.
+//
+// A second stream fixes it. RNG() is the match. RNG_COS() is the theatre, seeded alongside but
+// drawn separately, so a match plays identically whatever the commentator says.
 let __rngState = null;
-function seedRNG(n){ __rngState = (n>>>0) || 1; }
+let __cosState = null;
+function seedRNG(n){ __rngState = (n>>>0) || 1; __cosState = ((n>>>0)^0x9E3779B9) || 7; }
+
+/** The cosmetic stream: commentary choices, flame flags, note pops. Never consulted by anything
+ *  that moves a player or a ball. */
+function RNG_COS(){
+  if(__cosState===null) return Math.random();
+  __cosState |= 0; __cosState = (__cosState + 0x6D2B79F5) | 0;
+  let t = Math.imul(__cosState ^ (__cosState >>> 15), 1 | __cosState);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
 function RNG(){
   if(__rngState===null) return Math.random();
   __rngState |= 0; __rngState = (__rngState + 0x6D2B79F5) | 0;
@@ -2101,7 +2123,7 @@ const ACTION_SAY = {
 
 function sayAction(name, p){
   const e=ACTION_SAY[name];
-  if(!e || RNG()>e.rate) return;
+  if(!e || RNG_COS()>e.rate) return;
   sayLogged(pick(e.lines(p)));
 }
 
@@ -2831,7 +2853,7 @@ const INSTRUCTIONS = [
     score:p => 415,
     act:p => {
       if(!p.sprint&&p.burst>0.25){
-        p.sprint={why:'sweep',blaze:RNG()<0.12};
+        p.sprint={why:'sweep',blaze:RNG_COS()<0.12};
         GKSTAT.b_sweep=(GKSTAT.b_sweep||0)+1;
         if(p.sprint.blaze) blazeCall(p);
       }
@@ -2985,7 +3007,7 @@ const INSTRUCTIONS = [
     score:p => 398 + (1-Math.min(1,dist(p,ball)/190))*40,   // keener the closer he is
     act:p => {
       if(!p.sprint && p.burst>0.35){
-        p.sprint={why:'chase', blaze:RNG()<0.10};
+        p.sprint={why:'chase', blaze:RNG_COS()<0.10};
         p.burst -= 0.35;
         GKSTAT.b_chase=(GKSTAT.b_chase||0)+1;
         if(p.sprint.blaze) blazeCall(p);
@@ -3327,7 +3349,7 @@ function physics(dt){
           const tgt2=goalCenter(targets[win.team]??win.team);
           ball.lastTouch=win.team; ball.lastKicker=win;
           ENGINE_HOOKS.spawnNote(ball.x,ball.y-24,"header!",TEAMS[win.team].color,TEAMS[win.team].accent);
-          if(RNG()<0.4) sayLogged(pick([
+          if(RNG_COS()<0.4) sayLogged(pick([
             `${win.name} rises highest!`,
             `Up goes ${win.name} — wins it in the air!`,
             `${win.name} climbs above the crowd!`,
@@ -3449,7 +3471,7 @@ function physics(dt){
           }
           kick(kx9, ky9, 7.6, false);
           ball.clearT=clockSec+0.4;                            // the escape guarantee: no claims, no headers, just OUT
-          if(RNG()<0.18) sayLogged(pick([
+          if(RNG_COS()<0.18) sayLogged(pick([
             `${best.name} wants none of that scramble — hoofed clear!`,
             `No dwelling from ${best.name}. First time, out of the furnace.`,
             `${best.name} clears ${PRN(best).his} lines. Tidy is for open field.`]),false);
@@ -3484,7 +3506,7 @@ function physics(dt){
           ball.vx=dx3/dl3*spd*0.68; ball.vy=dy3/dl3*spd*0.68;
           ball.noClaim=best; ball.noClaimF=10; ball.isShot=false;
           ENGINE_HOOKS.spawnNote(best.x,best.y-22,"tipped wide!","#ffd166");
-          if(RNG()<0.6) sayLogged(pick([
+          if(RNG_COS()<0.6) sayLogged(pick([
             `${best.name} can only parry it away!`,
             `Strong hands from ${best.name} — pushed wide, still live!`,
             `${best.name} tips it around... danger not cleared!`,
@@ -3495,7 +3517,7 @@ function physics(dt){
           return;
         }
         ENGINE_HOOKS.spawnNote(best.x,best.y-20,"SAVE!","#ffd166");
-        if(RNG()<0.5) sayLogged(pick([
+        if(RNG_COS()<0.5) sayLogged(pick([
           `<span class="goal">SAVE!</span> ${best.name} denies ${kicker.name}!`,
           `What a stop by ${best.name} — ${kicker.name} can't believe it!`,
           `${kicker.name} lets fly... ${best.name} gets a strong hand to it!`,
@@ -4701,7 +4723,7 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
                   cap:nowMs()+20000, readyAt:nowMs()};
   suppress={team:toucher,until:clockSec+0.8};
   ENGINE_HOOKS.spawnNote(sx,sy-24,"throw-in!",TEAMS[thr.team].color,TEAMS[thr.team].accent);
-  if(RNG()<0.4) sayLogged(pick([
+  if(RNG_COS()<0.4) sayLogged(pick([
     `Out of play — throw-in ${tm(thr.team)}, quickly taken.`,
     `Into touch. ${thr.name} hurls it back in for ${tm(thr.team)}.`,
     `${tm(thr.team)} with the throw — no time wasted.`,
@@ -4717,7 +4739,7 @@ function stageGoalKick(t){
   // the keeper, which from the far corner is most of the width of the pitch.
   telPort('goal kick'); ball.x=gk.x; ball.y=gk.y; ball.touchT=0.4;
   ENGINE_HOOKS.spawnNote(gk.x,gk.y-24,"goal kick",TEAMS[t].color,TEAMS[t].accent);
-  if(RNG()<0.35) sayLogged(pick([
+  if(RNG_COS()<0.35) sayLogged(pick([
     `Behind for a goal kick — ${tm(t)} restart.`,
     `${gk.name} places it for the goal kick. Deep breath.`,
     `Nothing doing — goal kick ${tm(t)}.`,
