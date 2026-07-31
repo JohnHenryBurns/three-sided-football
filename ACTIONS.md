@@ -1,151 +1,83 @@
-# ⚠ THE CASCADE IS NOT GONE
+# Actions and instructions — status
 
-**PR #192 said "THE CASCADE IS GONE". It was wrong.**
-
-Sixty-eight lines survive in the **per-player loop** — the fetch and the carry-to-mark —
-after the 495-line owner block was cut. They run **before** the instruction list, so they
-win.
-
-**Found from a colour.** `fetching the ball` is SCRIPT tier and should draw red. John's
-screenshot showed it **green**, which is PLAYER, which is what `job()` defaults an absent
-tier to. That block calls `job()` with no tier.
-
-**And the extracted instructions do not work.** Disabling the block:
+**Measured through `lab.js` on six seeds, 3-minute matches, identities on.**
 
 ```
-                        held%   freeze    throws
-cascade block live        6%     7.6s      1.0
-cascade block disabled    1%   128.5s      0.0
+instructions   42
+actions        19
+goals          9.7 / match
+corners        2.7
+throw-ins      34.5
+loose          85%      target ~35
+usable         0 / 6
 ```
 
-**178-second freezes — the whole match.** `fetching the ball` and `carrying it to the mark`
-have never functioned; the cascade has been doing their job.
+## What is done
 
-**Consequences for anything read below or in INSTRUCTIONS.md:**
+**The cascade is gone.** 240 lines deleted plus the 495-line owner block. No `steer()`
+exists outside `INSTRUCTIONS`, `ACTIONS` and `PORTED`, and `jobFallback` fires **zero**
+times a match — the list has an answer for every player on every frame.
 
-- every restart measurement this session described the **cascade**, not the actions
-- three fixes to the restart path were made to code that was not running
-- the block **stays** until the instructions work — a broken restart is worse than a
-  duplicated one
+**Restarts work.** Throws and corners run the four-stage machine: fetch → carry → stand →
+take. The stalls are gone; the mark is reachable at 14 rather than an unreachable 9.
 
-**The next piece of work, and the order matters:** make the two instructions work *with the
-block disabled*, proven on the same six seeds, **before** cutting it. I cut first and
-assumed, which is what produced all of the above.
+**Goals are goals.** The out-of-play state check no longer swallows a ball in the net.
 
-### The corner: traced, and the mark is the problem
+**The tier colours are honest.** An untiered `job()` draws grey, which is how the last two
+surviving cascade blocks were found — both from screenshots.
 
-```
-job:fetching the ball  own:none  ballToMark:87  meToSpot:108  fetch:y  cG:0
-job:fetching the ball  own:none  ballToMark:87  meToSpot:107
-...
-job:fetching the ball  own:none  ballToMark:87  meToSpot: 88
-```
-
-**`ballToMark` is 87 and never changes.** `stageCorner` puts the mark on the corner
-**vertex** and leaves the ball where it went out — which is right, that is what a corner
-is — so the fetcher has 87 units to carry it.
-
-**But he never picks it up.** `own:none` throughout, and `meToSpot` counts steadily down
-while `ballToMark` stays fixed: he is walking toward the SPOT, not toward the BALL.
-
-`fetching the ball` claims to steer him to `ball.x, ball.y`, and the job label says it is
-the instruction running. Those two facts disagree, and that disagreement is the bug.
-
-**Candidates, in order:** another SCRIPT instruction outscoring it and steering elsewhere
-while the label lags; `dist(p,ball) > 12` being false so it silently takes the pick-up
-branch without setting `ball.owner`; or `positioning for a restart` catching the taker
-through a `restartFree` that does not hold for corners.
-
-**Ruled out already:** the rob (John's lock stops it), the taker standing on the ball,
-tolerance, and fetcher/taker being different people (they are the same).
-
-### Superseded: what had been ruled out
+## THE ONE NUMBER THAT MATTERS
 
 ```
-corners staged   2 across six matches
-corners taken    0
+loose 85%, target ~35, and 0/6 usable
 ```
 
-**Traced.** The taker does go, and gets there:
+**The ball is on the floor for six-sevenths of a match.** Every other figure is downstream
+of it. Nothing else in this document is worth doing before this.
 
-```
-toBall:146  fetching
-toBall: 68  fetching
-toBall: 13  carrying it to the mark    <- he reached it
-toBall:127  fetching                   <- the ball is 127 away again
-toBall:213  fetching                   <- and going
-```
+**What is known about it:** it is not the restarts, which now complete in about a second.
+It is not the carrier, who dribbles correctly when he has it. **It is that a loose ball is
+rarely picked up** — and the last measurement of that showed the nearest man to a loose
+ball sitting at a flat 45 units, which is a formation distance, not a chase.
 
-**He picks it up and is instantly robbed**, then chases forever.
+**The candidate:** `closing it down` and `intercepting` are PLAYER-tier instructions
+competing against `finding space` and `the back line`, which are also PLAYER tier. A side
+holding its shape outscores a side going for the ball. That is a weight question and the
+first honest one available, now that nothing is hiding behind a cascade.
 
-**Three fixes attempted, none changed the number:**
+## Still owed, in order
 
-1. `restartSpot` returned the mark itself, so the taker had to stand within 10 of a ball at
-   his own feet against a body radius of 23 — **fixed, still 0**
-2. corner tolerance widened 10 → 16 — **still 0**
-3. **John's rule:** everybody but the taker gets a mandatory SCRIPT position and
-   `runAction` declines for them, so nobody can rob the fetcher — **still 0**
+**1. The loose ball.** Above. Everything else waits.
 
-That third one is right regardless and is shipped: no guard on the ball, no exception in
-the tackle, the situation simply cannot arise.
+**2. `burst` / `sprint` as an instruction.** Absent entirely since the cascade was cut —
+by our boundary rule the decision to spend burst is a steering decision. Nobody sprints.
 
-**Still unexplained.** Throws work through the identical machine — 0.5 a match, restarts in
-0.7s — so the difference is corner-specific. Candidates not yet checked: `cornerGoal` being
-cleared before `corner-swing` reads it, `cornerTaker` disagreeing with `pendingRestart.p`,
-or the taker never reaching stage 4 at all.
+**3. `stepStats()`.** ~25 stamina and GKSTAT counters, bookkeeping rather than decisions.
 
-**A per-stage trace of one corner would settle it**, the way it settled the throw.
+**4. Commentary as a consequence layer.** 15 call sites went with the cascade. It should
+hang off action names so it works for every future action, not be ported line by line.
 
-### The stadium wall
+**5. Mayhem + Filthy weights.** Three Filthy sides under a Mayhem referee should often
+finish a three-minute match with only the goalkeepers. Currently unmet and unmeasured:
+incidental fouls on shots, headers and tackles are wired and **have never been observed
+firing**.
 
-John: *"it should have been stopped by the stadium wall and picked up by a fetcher."*
+## Method notes worth keeping
 
-The ball was reaching **281 units** past the touchline — the car park. Every downstream
-rule then had to cope with a ball nobody could reach, and each has failed at it in turn:
-the staging, the fetch, the recovery.
+**A trace beats an inference.** Four inferences on the corner moved nothing; one trace
+found two bugs in a single run. Same for the goal line, the woodwork, and the restart
+stall.
 
-**A hard bound at 34 units out.** It stops dead and drops. Everything after it can now
-assume the ball is somewhere a man could walk to.
+**A measurement showing no change means nothing until the change is confirmed on disk.**
+Four silent anchor failures today produced four false "the hypothesis is wrong".
 
-```
-furthest the ball got out    before 281    after 36
-```
+**Ad-hoc measurement loops lie.** They skip the celebration hold that `lab.js` and both
+browsers honour, and they produce a different match. Measure through `lab.js` only.
 
-**Same lesson as out-of-play being a state:** make the bad situation impossible rather than
-handling it everywhere it turns up.
-
-**And it exposed a stall it had been masking.** Seed 9004 went from a 38s freeze to 175s —
-the runaway ball was ending passages that now continue into whatever is wrong. That is a
-trace for next time, and it is the last known stall.
-
-### Which restarts are on the state machine
-
-```
-throw-in     YES — staged kind:'throw', all four stages, action fires
-corner       YES — staged kind:'corner', but ZERO occurred in six seeds, so UNVERIFIED
-goal kick    NO  — still uses telPort, never touches pendingRestart
-free kick    partial — its own action, does not use the four stages
-kick-off     NO  — its own path
-```
-
-**Two faults found and fixed while checking:**
-
-The `throw-in` action asked only `pendingRestart.p===p` and **would have taken a corner as a
-throw-in.** The state machine gets a corner taker to stage 4 exactly like a thrower, and
-whichever action matched first took it.
-
-And `corner-swing` required `ball.owner===p` — **which the state machine makes permanently
-false**, because placing the ball releases it. The same fault the throw had, in a second
-place. Both now test `pendingRestart.kind`.
-
-**Still owed here:** the goal kick does not use the machine at all, and corners have never
-been observed running through it.
+**One seed is an anecdote.** Six mutually consistent observations from one seed are one
+observation.
 
 ---
-
-# Action instructions — design
-
-**Not built.** This is the analysis John asked for after the position extraction landed.
 
 ## The question
 
