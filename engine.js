@@ -423,11 +423,18 @@ const AGG_PRESETS={Clean:{f:.55,t:.92},Firm:{f:1,t:1},Nasty:{f:1.8,t:1.18},Filth
 // MAYHEM calls everything intentional and most of what is not. PLAY ON calls nothing, even when
 // it plainly was — which makes a Filthy side under a Play On referee the most dangerous
 // combination in the game, and a Clean side under Mayhem an unlucky one.
+// WIDER SPREAD, John's numbers: 5, 25, 60, 80, 100. The old set ran 10/45/80/95/100 and the top
+// three were nearly the same referee — Fair and Strict differed by fifteen points and Mayhem by
+// five more, so three of the five choices barely changed the game.
+//
+// At 5% a professional foul is essentially free and a cynical side should take every one going.
+// At 60% it is a real gamble. The gap between Play On and Fair is now TWELVEFOLD, which is what
+// makes choosing a referee a decision rather than a flavour.
 const REF_PRESETS = {
-  "Play On":   { sees:0.10, zeal:0.15, blurb:"Lets it go. All of it." },
-  "Lenient":   { sees:0.45, zeal:0.45, blurb:"Gives you a warning first." },
-  "Fair":      { sees:0.80, zeal:0.80, blurb:"Calls what he sees." },
-  "Strict":    { sees:0.95, zeal:1.25, blurb:"Book first, ask later." },
+  "Play On":   { sees:0.05, zeal:0.15, blurb:"Lets it go. All of it." },
+  "Lenient":   { sees:0.25, zeal:0.45, blurb:"Gives you a warning first." },
+  "Fair":      { sees:0.60, zeal:0.80, blurb:"Calls what he sees." },
+  "Strict":    { sees:0.80, zeal:1.25, blurb:"Book first, ask later." },
   "Mayhem":    { sees:1.00, zeal:1.80, blurb:"Calls everything, and some things that never happened." }
 };
 let refLevel = "Fair";
