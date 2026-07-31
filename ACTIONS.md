@@ -103,7 +103,33 @@ loose          89%  ->  83%
 **4. Commentary as a consequence layer.** 15 call sites went with the cascade. It should
 hang off action names so it works for every future action, not be ported line by line.
 
-**5. Mayhem + Filthy weights.** Three Filthy sides under a Mayhem referee should often
+**5. Mayhem + Filthy weights — PARTIAL.** Both dials raised: the incidental foul base
+0.05 → 0.18, the professional foul score 26 → 85 per aggression point. Fouls went from
+7 a match to 11–49 depending on referee.
+
+```
+Filthy x3 / Mayhem     fouls 11.3   sent off 2.3 of 12
+Filthy x3 / Play On    fouls 49.5   sent off 0.0
+Clean  x3 / Mayhem     fouls 11.3   sent off 2.3     <- IDENTICAL to Filthy
+Firm   x3 / Fair       fouls 27.5   sent off 0.8
+```
+
+**Two things are wrong and both are worth knowing:**
+
+**Clean and Filthy under Mayhem are bit-identical.** `teamAGG` is read in `incidentalFoul`
+and nothing overwrites it, so aggression *should* reach the outcome. It evidently does not
+— **and until that is understood, no foul weight can be tuned**, because the dial that is
+supposed to separate a cynical side from a clean one is doing nothing.
+
+**Mayhem produces fewer fouls than Play On.** That is real and slightly delicious: a called
+foul stops play, so the strict referee suppresses the very count he punishes. It also means
+"fouls per match" is the wrong measure — **fouls per minute of open play** is the honest
+one.
+
+**The target is unmet.** 2.3 sent off against 12. The gap is the aggression dial, not the
+weights.
+
+**Superseded: Mayhem + Filthy weights** Three Filthy sides under a Mayhem referee should often
 finish a three-minute match with only the goalkeepers. Currently unmet and unmeasured:
 incidental fouls on shots, headers and tackles are wired and **have never been observed
 firing**.
