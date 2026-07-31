@@ -94,7 +94,36 @@ harness.
 
 ---
 
-## THE GOAL-KICK HANG — open, and it freezes the match
+## The goal-kick hang — FIXED. Two rules measured different things.
+
+```
+pending the kick   holds him at  dist(p, restartSpot(p)) <= 22
+goal-kick action   required      dist(p, MARK) <= 22
+```
+
+**`restartSpot()` puts a taker 22 units *from* the mark.** So `pending the kick` parked the
+keeper exactly on the action's boundary and he sat at 23 — **held in position by one rule,
+one unit too far for the other.**
+
+```
+goal-kick frames, worst match   40,110  ->  775     a match is 10,800
+goals                              1.0  ->  7.0
+loose                              91%  ->  79%
+```
+
+**The goal kick was running four times the length of the match** on a two-unit disagreement
+about what to measure. Both now measure the distance to his spot, which is the thing that
+is actually held.
+
+**Ruled out on the way, and each took a run:** the ripening clock ages to 7.5s against 3.4s
+needed; `stageGoalKick` fires twice a match with no re-staging loop; and the earlier 20-vs-22
+radius gap was real but worth only 1,356 frames of the 41,466.
+
+**The lesson, and it is the third time today:** when a hold and an action disagree about
+distance, they must disagree about *nothing else* — same origin, same target. A gap of one
+unit between two correct-looking rules stops the game.
+
+## Superseded: the hang while it was open
 
 **John saw it in the browser and the harness confirms it:**
 
