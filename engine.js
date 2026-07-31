@@ -3441,6 +3441,48 @@ const INSTRUCTIONS = [
   // The same man when play is NOT held: he leads the ball by six frames rather than chasing
   // where it is, and how hard he presses comes from his side's tactics. Extractable for the same
   // reason — the chaser is now a fact anything can read.
+  // ── A BALL ROLLING AT YOUR OWN GOAL IS EVERYBODY'S PROBLEM ────────────────
+  // John, watching: the ball rolls toward goal and the defenders run AWAY from it.
+  //
+  // I caused this. When he asked to stop the clustering I gated `intercepting` and `closing it
+  // down` on `p===chaser[p.team]` — one man a side — which is right for a loose ball in midfield
+  // and WRONG FOR A BALL HEADING INTO YOUR NET. The other defenders were left with nothing but
+  // shape-holding instructions, so they held their shape while the ball rolled in.
+  //
+  // This is the exception, and it earns its exception: unowned, moving, and its path takes it
+  // toward this man's own goal inside a hundred and eighty. Then whoever is nearest goes,
+  // chaser or not.
+  //
+  // COACH tier, above the ordinary player decisions and below the scripts — a defensive
+  // emergency outranks positioning but does not outrank a restart.
+  { name:'covering the danger', tier:TIER.COACH, base:520,
+    applies:p => {
+      if(!onPitch(p) || p.role==='K' || ball.owner || holdingPlay()) return false;
+      const sp=Math.hypot(ball.vx,ball.vy);
+      if(sp < 1.5) return false;                       // rolling, not sitting
+      const og=goalCenter(p.team);
+      const dg=dist(ball,og);
+      if(dg > 180) return false;                       // not yet a danger
+      // is it actually coming this way? the ball's own direction, toward my goal
+      const tox=og.x-ball.x, toy=og.y-ball.y, tl=Math.hypot(tox,toy)||1;
+      if((ball.vx*tox + ball.vy*toy)/(sp*tl) < 0.25) return false;
+      // and am I the man for it? nearest of my side to the ball
+      let best=null, bd=1e9;
+      players.forEach(q=>{ if(q.team!==p.team||!onPitch(q)||q.role==='K') return;
+        const d=dist(q,ball); if(d<bd){ bd=d; best=q; } });
+      return best===p;
+    },
+    score:p => {
+      const og=goalCenter(p.team);
+      return 520 + (1 - Math.min(1, dist(ball,og)/180)) * 260;   // keener the closer it gets
+    },
+    act:p => {
+      // go where it is going, not where it is — the same lead the keeper now uses
+      const lead=Math.min(12, dist(p,ball)/9);
+      steer(p, ball.x+ball.vx*lead, ball.y+ball.vy*lead, 2.7);
+      if(!p.sprint && p.burst>0.3){ p.sprint={why:'danger',blaze:RNG_COS()<0.15}; p.burst-=0.3; }
+      return true;
+    } },
   { name:'closing it down', tier:TIER.PLAYER, base:395,
     applies:p => !!(!holdingPlay() && p===chaser[p.team] && !p.out && !p.sentOff
                     && (!ball.owner || ball.owner.team!==p.team)),
