@@ -693,7 +693,22 @@ function kickoff(toTeam, firstWhistle){
     ||players.find(p=>p.team===toTeam&&p.role!=="K"&&!p.out&&!p.sentOff)
     ||players.find(p=>p.team===toTeam&&p.role==="K"&&!p.out);
   if(!fwd) return;
-  fwd.x=CX-8; fwd.y=CY; ball.owner=fwd; ball.lastTouch=toTeam;
+  // ── THE OLD KICK-OFF, REMOVED ─────────────────────────────────────────────
+  // This handed the ball to a forward and stood him on the centre spot:
+  //
+  //   fwd.x=CX-8; fwd.y=CY; ball.owner=fwd; ball.lastTouch=toTeam;
+  //
+  // It ran a few lines AFTER the new staging, so it overwrote both the ball's placement and the
+  // taker's position — and it is why the kicker owned the ball at t=0.0 and the restart machine
+  // had to walk him through putting down something he should never have held.
+  //
+  // John watched the whole sequence and described it exactly: on the ball, annotation, count,
+  // annotation again, a step back, "on the mark", then the kick. Every step was the machine
+  // correctly unpicking a state this line created.
+  //
+  // The staging above already names a taker, places him behind the ball and leaves the ball
+  // unowned. Nothing else is needed.
+  ball.lastTouch = toTeam;
   // EVERYONE LOOKS AT THE BALL, and this has to come LAST — after the circle has been cleared
   // and after the taker has been walked onto the spot, or the two players who move afterwards
   // keep the heading they were given before they moved.
