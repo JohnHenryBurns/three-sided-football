@@ -1699,6 +1699,48 @@ const PORTED = [
       TEL.goalKicks=(TEL.goalKicks||0)+1;
       return true;
     } },
+  // ── HE SEES THE EDGE COMING ───────────────────────────────────────────────
+  // John: shouldn't the keeper kick it out rather than carry it to the line and drop it?
+  //
+  // Yes. Dropping it at the boundary is a keeper making a mistake — he has run out of area
+  // without noticing. A real one watches the line and gets rid of it while he still can.
+  //
+  // Nothing in his distribution knew where the edge was: punt 310, roll 300, clear 290, all
+  // flat wherever he stood. So he would carry to 112, hand himself an outfielder's problem, and
+  // look foolish.
+  //
+  // This ramps hard over the last thirty units. At 82 out he is thinking about it; at 105 it
+  // outscores everything he owns and he simply launches it. The old drop-it rule survives as
+  // what happens when he ignores this — a keeper caught in possession, which does happen.
+  { name:'clearing his lines', tier:TIER.PLAYER, ported:true,
+    coach:T => (1-T.press)*-20,          // a pressing side leaves it later; a cautious one earlier
+    can:p => {
+      if(p.role!=='K' || ball.owner!==p || !onPitch(p)) return false;
+      const og=goalCenter(p.team);
+      return dist(p,og) > 82;            // the last thirty units of his area
+    },
+    score:p => {
+      const og=goalCenter(p.team);
+      const d=dist(p,og);
+      const t=Math.min(1, Math.max(0, (d-82)/30));
+      return 260 + t*t*900;              // 260 at 82 out, 1160 at the line
+    },
+    act:p => {
+      const f=gkOutlets(p);
+      if(f.far && f.fd>180){
+        kick(f.far.x+f.far.vx*7, f.far.y+f.far.vy*7,
+             Math.min(9, Math.max(4.2, f.fd/108*1.1)), false);
+        ball.zv=4.4;
+      } else {
+        // nobody on: get it away from his own goal, high and long
+        const away={ x:p.x+(p.x-goalCenter(p.team).x), y:p.y+(p.y-goalCenter(p.team).y) };
+        kick(away.x, away.y, 8.4, false);
+        ball.zv=4.8;
+      }
+      gkHolder=null; gkHoldUntil=-1;
+      TEL.gkEdgeClears=(TEL.gkEdgeClears||0)+1;
+      return true;
+    } },
   { name:'gk-punt', tier:TIER.PLAYER, ported:true,
     coach:T => T.direct*80,
     can:p => {
