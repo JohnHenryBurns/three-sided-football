@@ -411,6 +411,53 @@ const DEF_PRESETS={Balanced:{line:.5,press:.5,bunker:0},Gegenpress:{line:.8,pres
 const ATK_AB={Balanced:"BAL",TikiTaka:"TT",RouteOne:"R1",Swashbuckle:"SB",Probe:"PR"};
 const DEF_AB={Balanced:"BAL",Gegenpress:"GP",ParkTheBus:"BUS",Trap:"TRP"};
 const AGG_PRESETS={Clean:{f:.55,t:.92},Firm:{f:1,t:1},Nasty:{f:1.8,t:1.18},Filthy:{f:2.8,t:1.38}};
+
+// ── THE REFEREE ─────────────────────────────────────────────────────────────
+// John's design: a side's aggression decides how often it fouls ON PURPOSE; the referee decides
+// what that costs. The two are independent, which is what makes a cynical side a gamble rather
+// than a fixed price.
+//
+//   sees   how much of what happens gets called at all
+//   zeal   how readily a call becomes a card
+//
+// MAYHEM calls everything intentional and most of what is not. PLAY ON calls nothing, even when
+// it plainly was — which makes a Filthy side under a Play On referee the most dangerous
+// combination in the game, and a Clean side under Mayhem an unlucky one.
+const REF_PRESETS = {
+  "Play On":   { sees:0.10, zeal:0.15, blurb:"Lets it go. All of it." },
+  "Lenient":   { sees:0.45, zeal:0.45, blurb:"Gives you a warning first." },
+  "Fair":      { sees:0.80, zeal:0.80, blurb:"Calls what he sees." },
+  "Strict":    { sees:0.95, zeal:1.25, blurb:"Book first, ask later." },
+  "Mayhem":    { sees:1.00, zeal:1.80, blurb:"Calls everything, and some things that never happened." }
+};
+let refLevel = "Fair";
+function REF(){ return REF_PRESETS[refLevel] || REF_PRESETS.Fair; }
+
+/** Award a free kick to the fouled side, at the spot. Extracted so an action can call it —
+ *  the cascade built this inline and nothing else could reach it. */
+function awardFreeKick(victim, offender){
+  const aimT = null;   // aim selection stays with the cascade for now; ported separately
+  freeKick = { taker:victim, x:ball.x, y:ball.y, team:victim.team, at:clockSec,
+               wall:offender.team, aim:(aimT!==null&&aimT!==undefined)?aimT:offender.team };
+  ball.owner=null; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+  TEL.freeKicks++;
+  restartHold = Math.max(restartHold, nowMs()+1200);
+}
+
+/** Book a man. `red` sends him off. The walk itself is the front end's, as before. */
+function bookPlayer(p, red){
+  if(red || p.yellows>=1){
+    p.yellows++;
+    p.sentOff=true; p.redCard=true; walkPending=p;
+    setWalking && setWalking(p);
+    ENGINE_HOOKS.spawnNote(p.x,p.y-26,"\u{1F7E5} RED","#e63946");
+    sayLogged(`${p.name} is sent off. ${PRN(p).He} knew what ${PRN(p).he} was doing.`, true);
+  } else {
+    p.yellows++;
+    ENGINE_HOOKS.spawnNote(p.x,p.y-26,"\u{1F7E8} booked","#f7c948");
+    sayLogged(`${p.name} goes into the book — a professional foul, and everyone saw it.`, true);
+  }
+}
 const ATK_D={Balanced:"No special instructions.",
   TikiTaka:"Rapid short passing — death by a thousand touches.",
   RouteOne:"Long balls over the press, straight to the striker.",
@@ -1294,6 +1341,58 @@ const PORTED = [
       gkHolder=p; gkHoldUntil=clockSec+1.6; GKSTAT.holds=(GKSTAT.holds||0)+1;
       ENGINE_HOOKS.spawnNote(p.x,p.y-26,"\u{1F9E4} secured!",TEAMS[p.team].color,TEAMS[p.team].accent);
       return false;                    // holding is not releasing: his frame continues
+    } },
+
+  // ── THE PROFESSIONAL FOUL ─────────────────────────────────────────────────
+  // John's design, and the distinction is his: a foul in the course of a normal tackle is a
+  // MISTIMED CHALLENGE — an accident, priced into the tackle. THIS is different. This is a man
+  // deciding to stop an attack by illegal means, and it is a defensive action with its own
+  // appetite and its own consequences.
+  //
+  //   HOW OFTEN     the side's aggression. A Filthy side does this five times as readily as a
+  //                 Clean one, and that is a coaching choice.
+  //   WHAT IT COSTS the REFEREE. Independent of the decision, which is what makes it a gamble:
+  //                 the same challenge is a shrug under Play On and a red under Mayhem.
+  //
+  // He does it when it is worth doing — an opponent breaking away, and nobody behind to cover.
+  // That is the condition that makes it professional rather than merely nasty.
+  { name:'an intentional foul', tier:TIER.PLAYER, ported:true,
+    coach:T => T.press*50,
+    can:p => {
+      if(!onPitch(p) || p.role==='K') return false;
+      const o=ball.owner;
+      if(!o || o.team===p.team || allied(p.team,o.team)) return false;
+      if(dist(p,o) > 30) return false;
+      if(holdingPlay()) return false;
+      // is he actually a threat? breaking toward a goal, with the man past him
+      const tgt=targets[o.team]!==null ? goalCenter(targets[o.team]) : null;
+      if(!tgt) return false;
+      if(dist(o,tgt) > 300) return false;
+      // and is anybody covering? a foul is only worth a card if the alternative is a goal
+      let cover=0;
+      players.forEach(q=>{ if(q.team!==p.team||q===p||!onPitch(q)) return;
+        if(dist(q,tgt) < dist(o,tgt)) cover++; });
+      return cover <= 1;
+    },
+    score:p => 26 * (AGG_PRESETS[teamAGG[p.team]].f),   // Clean 14, Firm 26, Nasty 47, Filthy 73
+    act:p => {
+      const victim=ball.owner;
+      if(!victim) return false;
+      const R=REF();
+      TEL.intentional++;
+      // he stops the attack whatever the referee thinks
+      victim.vx*=0.2; victim.vy*=0.2;
+      stam(victim,-0.05);
+      // AND THEN THE REFEREE DECIDES WHAT IT COST
+      if(RNG() > R.sees){
+        TEL.foulMissed++;
+        ENGINE_HOOKS.spawnNote(p.x,p.y-20,"play on!","#8fa0ae");
+        return false;                            // seen by nobody. The best kind.
+      }
+      awardFreeKick(victim, p);
+      const bookIt = RNG() < 0.30*R.zeal;
+      if(bookIt) bookPlayer(p, RNG() < 0.22*R.zeal);
+      return false;                              // the ball is dead; he does not gain it
     } },
 
   { name:'tackle', tier:TIER.PLAYER, ported:true,
@@ -3973,7 +4072,7 @@ const TEL = {
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
@@ -3984,20 +4083,20 @@ function telReset(){
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
     jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
     jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-    actFrames:{}, headers:0, shields:0, keeperHeld:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
+    actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, foulMissed:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
     unattributed:0, unattMax:0, portFrame:-1,
   unattributed:0, unattMax:0, portFrame:-1, deflected:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, woodwork:0, bars:0, posts:0, port:{},
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
