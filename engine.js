@@ -454,7 +454,35 @@ function REF(){ return REF_PRESETS[refLevel] || REF_PRESETS.Fair; }
 
 /** Award a free kick to the fouled side, at the spot. Extracted so an action can call it —
  *  the cascade built this inline and nothing else could reach it. */
+/** Is this spot inside somebody's penalty area? Returns the defending team, or null.
+ *
+ *  THE TRIGGER THAT DID NOT SURVIVE. `pendingPenalty` is declared, cleared at reset, and
+ *  consumed by stagePenalty() — and NOTHING EVER SET IT. John guessed exactly that: the
+ *  mechanism went with the cascade, and the penalty has been unreachable ever since.
+ *
+ *  The area is the region within PEN_R of a goal centre. Fouls there are penalties. */
+const PEN_R = 132;
+function penaltyAreaOf(x, y){
+  for(let t=0;t<3;t++){
+    if(out[t]) continue;
+    const g=goalCenter(t);
+    if(Math.hypot(x-g.x, y-g.y) < PEN_R) return t;
+  }
+  return null;
+}
+
 function awardFreeKick(victim, offender){
+  // ── A FOUL IN THE AREA IS A PENALTY ───────────────────────────────────────
+  // Only against the side who owns the area, and only if the offender is not defending his own
+  // — a man fouling inside his OWN box concedes; fouling inside somebody else's is just a free
+  // kick to them.
+  const area = penaltyAreaOf(ball.x, ball.y);
+  if(area !== null && area === offender.team && victim.team !== area){
+    pendingPenalty = { shooter:victim, conceder:offender.team, at:clockSec };
+    stagePenalty();
+    TEL.penalties=(TEL.penalties||0)+1;
+    return;
+  }
   const aimT = null;   // aim selection stays with the cascade for now; ported separately
   freeKick = { taker:victim, x:ball.x, y:ball.y, team:victim.team, at:clockSec,
                wall:offender.team, aim:(aimT!==null&&aimT!==undefined)?aimT:offender.team };
@@ -1541,15 +1569,49 @@ const PORTED = [
       const m={x:pendingRestart.x, y:pendingRestart.y};
       return dist(ball,m) <= 12 && dist(p,m) <= 26;
     },
-    score:p => ripeness(p.restartSince||clockSec, 33),
+    // THE DEAD CLOCK AGAIN. `p.restartSince` is read here and set nowhere — the same fault the
+    // throw-in had, in the last action still carrying it. Score was permanently zero, so a
+    // penalty could be AWARDED (2.38 a match) and never TAKEN.
+    //
+    // He ripens from the moment the ball is on the spot, and chooses his own moment.
+    score:p => pendingRestart ? ripeness(pendingRestart.at!==undefined?pendingRestart.at:clockSec, 33) : 0,
     act:p => {
       const gt=penaltyGoalTeam;
       const e=EDGES[GOAL_EDGE[gt]], g=goalCenter(gt);
-      const off2=(RNG()*2-1)*e.len*GOAL_HALF*1.0;
+      // ── WHERE HE PUTS IT, AND WHETHER THE KEEPER GUESSED RIGHT ────────────
+      // A shooter picks a side and a height. A keeper who guessed the same side gets there; one
+      // who also guessed the height gets it cleanly. Side right, height wrong is the fingertip
+      // that is not quite enough — the most agonising thing in football, and now expressible.
+      const shootSide = RNG()<0.44 ? -1 : RNG()<0.79 ? 1 : 0;
+      const shootHigh = RNG() < 0.38;
+      const off2 = shootSide * (0.45 + RNG()*0.42) * e.len*GOAL_HALF;
+      const gkP = players.find(q=>q.team===gt && q.role==='K' && !q.out);
+      const guess = gkP && gkP.penGuess;
+      const sideRight = guess && guess.side===shootSide;
+      const heightRight = guess && guess.high===shootHigh;
       stats.shots[p.team]++;
       penaltyShooter=null;
+      // HE STRIKES IT, so he owns it for the instant — kick() reads ball.owner to know who took
+      // it, and the restart machine had released the ball when he placed it.
+      ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p;
       kick(g.x+e.ux*off2, g.y+e.uy*off2, 10.8, true);
-      gkDiveCheck(gt, false);
+      if(shootHigh) ball.zv = 3.1;                   // over the keeper's standing reach
+
+      // THE SAVE, decided by the guess rather than by geometry.
+      if(sideRight && heightRight){
+        ball.vx*=-0.42; ball.vy*=-0.42; ball.zv=1.2;
+        stats.saves[gt]++;
+        sayLogged(`SAVED! ${gkP.name} went the right way \u2014 and the right height!`, true);
+        ENGINE_HOOKS.spawnNote(gkP.x, gkP.y-28, "\u{1F9E4} SAVED", "#7ee787");
+      } else if(sideRight){
+        ball.vx*=0.86; ball.vy*=0.86;                // a fingertip, not enough
+        sayLogged(`${gkP.name} guessed right and got a hand to it \u2014 not enough!`, true);
+      }
+      ball.owner=null;
+      pendingRestart=null;
+      // gkDiveCheck WAS DELETED WITH THE CASCADE and this still called it — the penalty would
+      // have thrown the moment one was awarded. It never was, so nobody found out.
+      // The keeper's own `dive` action handles this now: the ball is a shot, and he reads it.
       return true;
     } },
 
@@ -1839,6 +1901,45 @@ const PORTED = [
     act:p => { TEL.keeperHeld++; return false; }   // he stays where he is, and stays free
   },
 
+  // ── THE PENALTY DIVE: THREE CHOICES, MADE BLIND ───────────────────────────
+  // John's design. A keeper facing a penalty picks left, right, or stays — and he picks BEFORE
+  // the ball is struck, which is what makes a penalty a penalty. He is not reacting; he is
+  // guessing, and a good guess is worth more than good reflexes.
+  //
+  // Height is a second, independent guess: low or high. Getting the side right and the height
+  // wrong is the save that nearly was, which is the most agonising thing in football.
+  //
+  // Weighted so staying is rarer than diving, because a keeper who stands still looks foolish
+  // when beaten and heroic when right, and most of them dive.
+  { name:'penalty guess', tier:TIER.SCRIPT, ported:true,
+    coach:T => 0,
+    can:p => {
+      if(p.role!=='K' || !onPitch(p)) return false;
+      if(!pendingRestart || pendingRestart.kind!=='penalty') return false;
+      if(p.team !== penaltyGoalTeam) return false;
+      if(p.penGuess) return false;                   // he only guesses once
+      const m={x:pendingRestart.x, y:pendingRestart.y};
+      return dist(ball,m) <= 12;                     // the ball is on the spot
+    },
+    score:p => 700,
+    act:p => {
+      const r=RNG();
+      const side = r<0.42 ? -1 : r<0.84 ? 1 : 0;     // left, right, or stand
+      const high = RNG() < 0.34;                     // and a height, guessed separately
+      p.penGuess = { side, high, at:clockSec };
+      const g=goalCenter(p.team), e=EDGES[GOAL_EDGE[p.team]];
+      const half=e.len*GOAL_HALF;
+      if(side!==0){
+        p.diveUntil = clockSec + 1.2;
+        steer(p, g.x + e.ux*half*0.62*side, g.y + e.uy*half*0.62*side, 3.4);
+        GKSTAT.penDives=(GKSTAT.penDives||0)+1;
+        ENGINE_HOOKS.spawnNote(p.x, p.y-26, side<0?"dives left":"dives right", "#8fa0ae");
+      } else {
+        GKSTAT.penStands=(GKSTAT.penStands||0)+1;
+        ENGINE_HOOKS.spawnNote(p.x, p.y-26, "stands up!", "#ffd166");
+      }
+      return false;                                  // guessing is not an act on the ball
+    } },
   { name:'dive', tier:TIER.PLAYER, ported:true,
     coach:T => 0,
     can:p => {
@@ -2159,6 +2260,10 @@ function restartFree(p){
   if(!pendingRestart) return true;
   if(pendingRestart.p===p) return true;                       // he is taking it
   if(ball.fetch && ball.fetch.by===p) return true;            // he is still going to get it
+  // AND THE KEEPER FACING A PENALTY. He is not taking the restart, but he is the other half of
+  // it — the lock is there to stop players interfering with a set piece, and a keeper guessing
+  // is not interference, it is the set piece.
+  if(pendingRestart.kind==='penalty' && p.role==='K' && p.team===penaltyGoalTeam) return true;
   return false;
 }
 
@@ -4935,6 +5040,7 @@ function stagePenalty(){
   ball.touchT=99;                       // no dribble touches during the run-up
 
   pendingRestart={ kind:'penalty', at:clockSec, p:shooter, x:sx, y:sy, team:shooter.team };
+  players.forEach(q=>{ q.penGuess=null; });   // a fresh guess for a fresh penalty
   penaltyShooter=shooter; penaltyGoalTeam=conceder;
   ENGINE_HOOKS.spawnNote(sx,sy-28,"PENALTY!","#ffd166");
   sayLogged(pick([
