@@ -608,6 +608,50 @@ straight out of the geometry, no tuned probability required.
 recorded here before the next step begins. Any step that does not move its own measure
 gets reverted rather than kept "because it is more correct".
 
+## STILL OWED — the ledger
+
+**Nothing here is done. It is written down so it cannot quietly stop being owed.**
+
+### Not yet ported out of the old cascade
+
+**burst / sprint — an INSTRUCTION, not an action.** By our own boundary rule it is about
+*where a man goes and how fast*, so it belongs in the instruction list. The *spending* of
+burst already lives inside `dive`, `shot-power` and the sprint itself; what is missing is
+the decision to spend it, which is a steering decision. Eleven references went with the
+cascade and this behaviour is currently absent.
+
+**stamina and GKSTAT — bookkeeping, not decisions.** Neither is a choice; both are records
+kept alongside choices. They want a `stepStats()` that runs each frame, not porting into
+anything. Roughly 25 references, all of them counters.
+
+**commentary — a consequence layer.** Fifteen call sites went with the cascade. It should
+NOT be ported line by line: an action fires, and a commentary layer decides whether to say
+something about it. Hung off action names it works for every future action automatically,
+which porting each line would not.
+
+### Owed on the foul system
+
+**Mayhem + Filthy weights that produce a genuinely chaotic match.** John's target: three
+Filthy sides under a Mayhem referee should *often* finish a three-minute match with only
+the goalkeepers — twelve outfielders sent off.
+
+Also owed at that setting, and currently unverified because the actions never fired:
+
+```
+frequent goalie duels        flame shot meets flame dive
+unintentional fouls on       shots, headers and tackles — all three are wired,
+                             none has ever been observed firing
+```
+
+**The incidental foul is built and inert.** It hangs off `tackle`, `head it` and `shot`,
+and at 60,000 none of those fired. At 2800 they should — and that is the first thing to
+check now that there is no cascade to hide behind.
+
+### The rule that put this list here
+
+Everything above was described, agreed, and then not done — because a measurement went
+wrong and the session followed the measurement. **A ledger is cheaper than remembering.**
+
 ## Order
 
 1. find the common shape, or establish that there isn't one
