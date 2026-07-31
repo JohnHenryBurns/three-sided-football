@@ -430,12 +430,24 @@ const AGG_PRESETS={Clean:{f:.55,t:.92},Firm:{f:1,t:1},Nasty:{f:1.8,t:1.18},Filth
 // At 5% a professional foul is essentially free and a cynical side should take every one going.
 // At 60% it is a real gamble. The gap between Play On and Fair is now TWELVEFOLD, which is what
 // makes choosing a referee a decision rather than a flavour.
+// HOW READILY A SIDE FOULS ON PURPOSE. Not a multiplier on a shared base — an explicit weight
+// per identity, because the spread John wants is 300:1 and a multiplier cannot express that
+// while a linear one is also what made Clean and Filthy measure identically.
+const INTENT_W = { Clean:3, Firm:45, Nasty:260, Filthy:900 };
+
 const REF_PRESETS = {
   "Play On":   { sees:0.05, zeal:0.15, blurb:"Lets it go. All of it." },
   "Lenient":   { sees:0.25, zeal:0.45, blurb:"Gives you a warning first." },
   "Fair":      { sees:0.60, zeal:0.80, blurb:"Calls what he sees." },
   "Strict":    { sees:0.80, zeal:1.25, blurb:"Book first, ask later." },
-  "Mayhem":    { sees:1.00, zeal:1.80, blurb:"Calls everything, and some things that never happened." }
+  // MAYHEM'S ZEAL IS 3.6, NOT 1.8. At 1.8 a foul became a red 21% of the time, and because every
+  // called foul stops play for a free kick, only six fouls fit into three minutes — so a Filthy
+  // side finished with eleven men and a caution. The referee was suppressing the very count he
+  // was supposed to punish.
+  //
+  // At 3.6: booked on essentially every foul, red on most of those. Six fouls become four or
+  // five sendings-off, and a side that keeps fouling runs out of players. Which is the setting.
+  "Mayhem":    { sees:1.00, zeal:3.60, blurb:"Calls everything, and some things that never happened." }
 };
 let refLevel = "Fair";
 function REF(){ return REF_PRESETS[refLevel] || REF_PRESETS.Fair; }
@@ -1635,59 +1647,57 @@ const PORTED = [
       return false;                    // holding is not releasing: his frame continues
     } },
 
-  // ── THE PROFESSIONAL FOUL ─────────────────────────────────────────────────
-  // John's design, and the distinction is his: a foul in the course of a normal tackle is a
-  // MISTIMED CHALLENGE — an accident, priced into the tackle. THIS is different. This is a man
-  // deciding to stop an attack by illegal means, and it is a defensive action with its own
-  // appetite and its own consequences.
+  // ── AN INTENTIONAL FOUL ───────────────────────────────────────────────────
+  // John: a Filthy side's defining behaviour. Available to EVERY player against any opponent
+  // with the ball — not the narrow professional-foul condition it had, which required a man
+  // breaking away with nobody covering and therefore almost never fired.
   //
-  //   HOW OFTEN     the side's aggression. A Filthy side does this five times as readily as a
-  //                 Clean one, and that is a coaching choice.
-  //   WHAT IT COSTS the REFEREE. Independent of the decision, which is what makes it a gamble:
-  //                 the same challenge is a shrug under Play On and a red under Mayhem.
+  // THE SPREAD IS THE POINT, and a linear aggression multiplier could not deliver it:
   //
-  // He does it when it is worth doing — an opponent breaking away, and nobody behind to cover.
-  // That is the condition that makes it professional rather than merely nasty.
+  //   Clean      3   essentially never. A Clean side does not do this.
+  //   Firm      45   a cynical challenge now and then
+  //   Nasty    260   regularly, and they know what they are doing
+  //   Filthy   900   24% of the frames it is available. Constant.
+  //
+  // ── AND AN UNCAUGHT FOUL MUST PAY ─────────────────────────────────────────
+  // Previously an unseen foul slowed the victim and nothing else, so fouling was a pure cost:
+  // caught, you concede; unseen, you gained nothing. That makes Play On a softer Mayhem rather
+  // than a different game.
+  //
+  // Now an unseen foul WINS THE BALL. Which is what a foul is for, and it makes Filthy under a
+  // Play On referee a genuine strategy: you take the ball off people illegally, all match, and
+  // nobody stops you.
   { name:'an intentional foul', tier:TIER.PLAYER, ported:true,
-    coach:T => T.press*50,
+    coach:T => T.press*40,
     can:p => {
       if(!onPitch(p) || p.role==='K') return false;
       const o=ball.owner;
       if(!o || o.team===p.team || allied(p.team,o.team)) return false;
-      if(dist(p,o) > 30) return false;
-      if(holdingPlay()) return false;
-      // is he actually a threat? breaking toward a goal, with the man past him
-      const tgt=targets[o.team]!==null ? goalCenter(targets[o.team]) : null;
-      if(!tgt) return false;
-      if(dist(o,tgt) > 300) return false;
-      // and is anybody covering? a foul is only worth a card if the alternative is a goal
-      let cover=0;
-      players.forEach(q=>{ if(q.team!==p.team||q===p||!onPitch(q)) return;
-        if(dist(q,tgt) < dist(o,tgt)) cover++; });
-      return cover <= 1;
+      if(o.role==='K' && gkHolding()) return false;
+      if(holdingPlay() || pendingRestart) return false;
+      return dist(p,o) < 30;
     },
-    // 26 -> 85. Clean 47, Firm 85, Nasty 153, Filthy 238 — which at PLAY_ON 2800 is 1.6% to
-    // 7.8% of the frames a professional foul is even available, and it is only available when an
-    // opponent is breaking away with nobody covering. A Filthy side takes almost every one.
-    score:p => 85 * (AGG_PRESETS[teamAGG[p.team]].f),
+    score:p => INTENT_W[teamAGG[p.team]] || 45,
     act:p => {
       const victim=ball.owner;
       if(!victim) return false;
       const R=REF();
       TEL.intentional++;
-      // he stops the attack whatever the referee thinks
       victim.vx*=0.2; victim.vy*=0.2;
       stam(victim,-0.05);
-      // AND THEN THE REFEREE DECIDES WHAT IT COST
+
       if(RNG() > R.sees){
+        // SEEN BY NOBODY. He takes the ball, which is the entire point of doing it.
         TEL.foulMissed++;
-        ENGINE_HOOKS.spawnNote(p.x,p.y-20,"play on!","#8fa0ae");
-        return false;                            // seen by nobody. The best kind.
+        ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.isShot=false;
+        suppress={team:victim.team, until:clockSec+1.0};
+        ENGINE_HOOKS.spawnNote(p.x,p.y-20,"got away with it","#8fa0ae");
+        return false;
       }
+
       awardFreeKick(victim, p);
-      const bookIt = RNG() < 0.30*R.zeal;
-      if(bookIt) bookPlayer(p, RNG() < 0.22*R.zeal);
-      return false;                              // the ball is dead; he does not gain it
+      if(RNG() < 0.30*R.zeal) bookPlayer(p, RNG() < 0.22*R.zeal);
+      return false;
     } },
 
   { name:'tackle', tier:TIER.PLAYER, ported:true,
