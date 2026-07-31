@@ -103,7 +103,45 @@ loose          89%  ->  83%
 **4. Commentary as a consequence layer.** 15 call sites went with the cascade. It should
 hang off action names so it works for every future action, not be ported line by line.
 
-**5. Mayhem + Filthy weights — PARTIAL.** Both dials raised: the incidental foul base
+**5. The intentional foul — the Play On strategy works; Mayhem hits a ceiling.**
+
+Rebuilt as an action available to **every player against any opponent with the ball**,
+weighted by an explicit table rather than a multiplier, because the spread wanted is 300:1:
+
+```
+Clean      3    0.1% of available frames — a Clean side does not do this
+Firm      45    1.6%
+Nasty    260    8.5%
+Filthy   900   24.3%   constant
+```
+
+**And an uncaught foul now WINS THE BALL.** Previously an unseen foul slowed the victim and
+nothing else, so fouling was a pure cost — caught you conceded, unseen you gained nothing,
+which made Play On a softer Mayhem rather than a different game.
+
+```
+Filthy / Play On    fouls 203   unpunished 212   sent off 0.0
+```
+
+**That is the viable strategy John asked for**: rob people all match, nobody stops you.
+
+### The Mayhem ceiling, which is real and blocks the target
+
+```
+Filthy / Mayhem     fouls 2   sent off 1.7
+Clean  / Mayhem     fouls 2   sent off 1.7    <- still identical
+```
+
+**Under a referee who calls everything, every foul stops play for a free kick.** So the
+foul count is capped by the STOPPAGE RATE, not by appetite — and Clean and Filthy hit the
+same ceiling from opposite directions. Raising Mayhem's zeal from 1.8 to 3.6 made it worse,
+because each red removes a player who might have fouled.
+
+**Twelve sendings-off in three minutes needs one of:** restarts that take under a second,
+fouls that do not stop play when unpunished (already true), or a longer match. **It is not
+a weights problem.** The weights now span 300:1 and work.
+
+**Superseded: Mayhem + Filthy weights** Both dials raised: the incidental foul base
 0.05 → 0.18, the professional foul score 26 → 85 per aggression point. Fouls went from
 7 a match to 11–49 depending on referee.
 
