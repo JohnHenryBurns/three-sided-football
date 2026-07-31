@@ -1274,6 +1274,29 @@ function ripeness(since, rate){
  *  in latent faults that surface only on the flip. Better to know that now than during it. */
 /** The cascade's pass search, lifted whole. Both can() and act() need it, the same way the
  *  keeper's outlets are needed by three of his four actions. */
+/** The best mate BEHIND the ball — further from the goal he is attacking than the carrier is,
+ *  and with room. Used by `pass backwards` when the front is blocked. */
+function backPass(p){
+  const t9=targets[p.team];
+  if(t9===null||t9===undefined) return null;
+  const tgt=goalCenter(t9);
+  let best=null, bs=-1e9;
+  players.forEach(m=>{
+    if(m.team!==p.team||m===p||!onPitch(m)) return;
+    const back = dist(m,tgt) - dist(p,tgt);
+    if(back < 25) return;                       // he must actually be behind
+    const d=dist(m,p);
+    if(d < 40 || d > 220) return;
+    let cover=1e9;
+    players.forEach(o=>{ if(o.team!==p.team&&onPitch(o)&&!allied(p.team,o.team))
+      cover=Math.min(cover, dist(o,m)); });
+    if(cover < 40) return;                      // no point recycling into another scrum
+    const sc = Math.min(cover,120) - Math.abs(back-70)*0.4;   // space first, sensible depth
+    if(sc>bs){ bs=sc; best=m; }
+  });
+  return best;
+}
+
 function bestPass(p){
   const t9=targets[p.team];
   if(t9===null||t9===undefined) return null;
@@ -1293,7 +1316,19 @@ function bestPass(p){
         if(Math.hypot(o.x-lx,o.y-ly) < (30-12*TT.risk)+5*(T(o.team).press-0.5)*2) laneOk=false;
       }
     });
-    const sc=gain*(0.6+0.8*TT.direct)+(laneOk?0:-500)+RNG()*30;
+    // ── HOW CROWDED IS HE? ────────────────────────────────────────────────
+    // The search scored on ground gained and a clear lane, and never asked what the receiver
+    // was walking into. A man forty yards forward with three opponents round him scored well
+    // on gain and got the ball — which is John's "bad passing into contested territory", and
+    // it is where the scrums come from.
+    //
+    // A pass to a covered man should lose to a pass to a free one, even if the free one is
+    // square. 34 per opponent inside 45 is enough to make that true without forbidding a
+    // contested pass outright: sometimes it is the only ball on.
+    let crowd=0;
+    players.forEach(o2=>{ if(o2.team===p.team||!onPitch(o2)||allied(p.team,o2.team)) return;
+      if(dist(o2,m) < 45) crowd++; });
+    const sc=gain*(0.6+0.8*TT.direct)+(laneOk?0:-500)-crowd*34+RNG()*30;
     if(sc>bs){ bs=sc; best=m; }
   });
   return (best && bs>-100) ? best : null;
@@ -1353,8 +1388,8 @@ const PORTED = [
       if(dist(ball,m) > 12) return false;
       return dist(p, restartSpot(p)) <= 16;   // a swing needs room, not precision
     },
-    score:p => ripeness(pendingRestart.at !== undefined ? pendingRestart.at : clockSec,
-                        180 + 260*T(p.team).direct),   // a corner ripens slower than a throw
+    score:p => pendingRestart ? ripeness(pendingRestart.at !== undefined ? pendingRestart.at : clockSec,
+                        180 + 260*T(p.team).direct) : 0,   // a corner ripens slower than a throw
     act:p => {
       const e=EDGES[GOAL_EDGE[cornerGoal]], g=goalCenter(cornerGoal);
       const cx2=g.x+e.nx*46, cy2=g.y+e.ny*46;
@@ -1399,9 +1434,9 @@ const PORTED = [
     // runs. So `since` stayed undefined, ripeness got clockSec, elapsed was zero, and the throw
     // could never ripen. The same fault as `restartSince`, one layer further down, and the trace
     // showed it as `since:n` for nineteen consecutive frames.
-    score:p => ripeness(pendingRestart.since !== undefined ? pendingRestart.since
+    score:p => pendingRestart ? ripeness(pendingRestart.since !== undefined ? pendingRestart.since
                         : (pendingRestart.at !== undefined ? pendingRestart.at : clockSec),
-                        240 + 300*T(p.team).direct),
+                        240 + 300*T(p.team).direct) : 0,
     act:p => {
       const best=bestPass(p);
       const tgt = best || players.find(m=>m.team===p.team && m!==p && onPitch(m) && m.role!=='K');
@@ -1739,7 +1774,10 @@ const PORTED = [
   { name:'pass', tier:TIER.PLAYER, ported:true,
     coach:T => (1-T.direct)*50,
     can:p => ball.owner===p && p.role!=='K' && targets[p.team]!==null && !!bestPass(p),
-    score:p => 320,
+    // 320 -> 210. At 320 a carrier passed on 10% of frames and a possession lasted about eight
+    // frames; at 210 it is 7% and about fourteen. He carries longer, which is what "weight
+    // dribbling higher" means when the dribble is the no-op.
+    score:p => 210,
     act:p => {
       const best=bestPass(p);
       if(!best) return false;
@@ -1753,6 +1791,41 @@ const PORTED = [
   // the middle and gives it to him. The cascade's rate was RNG()<0.22*dt*60, which is 13 a
   // second — a score of about 460, and by far the most eager thing in the list. That is right:
   // a man pinned on the touchline should be looking to escape almost immediately.
+  // ── PASS BACKWARDS ────────────────────────────────────────────────────────
+  // The option the engine has never had. A carrier under pressure could shoot, hoof, shield, or
+  // pass forward into trouble — there was NO WAY TO KEEP THE BALL BY GOING BACKWARDS, which is
+  // the first thing a real side does when the front is blocked.
+  //
+  // can(): the way forward is crowded. Opponents in the forward arc, and no open mate ahead.
+  // act(): the best mate BEHIND the ball, preferring one with space.
+  //
+  // Scored below `pass` deliberately. Going backwards is what you do when forward is not on,
+  // not a preference — and a side that recycles constantly is as wrong as one that hoofs.
+  { name:'pass backwards', tier:TIER.PLAYER, ported:true,
+    coach:T => (1-T.direct)*60,        // a patient side recycles; a direct one would rather hoof
+    can:p => {
+      if(ball.owner!==p || p.role==='K' || targets[p.team]===null) return false;
+      const tgt=goalCenter(targets[p.team]);
+      const fx=tgt.x-p.x, fy=tgt.y-p.y, fl=Math.hypot(fx,fy)||1;
+      // how many opponents are in the forward arc, within 80?
+      let ahead=0;
+      players.forEach(o=>{ if(o.team===p.team||!onPitch(o)||allied(p.team,o.team)) return;
+        const dx=o.x-p.x, dy=o.y-p.y, d=Math.hypot(dx,dy);
+        if(d>80) return;
+        if((dx*fx+dy*fy)/(d*fl||1) > 0.35) ahead++;   // roughly in front of him
+      });
+      if(ahead < 2) return false;                     // the way forward is open enough
+      return !!backPass(p);
+    },
+    score:p => 240,
+    act:p => {
+      const b=backPass(p);
+      if(!b) return false;
+      kick(b.x+b.vx*6, b.y+b.vy*6, Math.min(7, Math.max(3, dist(b,p)/66*1.1)), false);
+      TEL.backPasses=(TEL.backPasses||0)+1;
+      return true;
+    } },
+
   { name:'pass-safe', tier:TIER.PLAYER, ported:true,
     coach:T => 0,
     can:p => {
@@ -1770,7 +1843,9 @@ const PORTED = [
       players.forEach(o=>{ if(o.team!==p.team && onPitch(o)) pressure=Math.min(pressure, dist(o,p)); });
       return pressure<58;
     },
-    score:p => 460,
+    // 460 -> 380. Still the most eager thing in the list, because a man pinned on the touchline
+    // should be looking to escape — but not so eager that being near a wall means passing.
+    score:p => 380,
     act:p => {
       let best=null, bs=1e9;
       players.forEach(m=>{
