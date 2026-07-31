@@ -713,6 +713,38 @@ staging and nothing found so far extends it further.
 `ball.fetch` and `throwPending` every frame through one 10.7s freeze. Four values, 642
 frames. That shows what is holding it rather than what might be.
 
+## The rate was being charged twice
+
+**The whole point of the port was that a cascade's per-frame probability becomes a score.**
+It did not: the probability stayed in `can()` as well.
+
+```js
+can: p => ... && RNG() < 0.016*(0.4+1.2*RK)     // 1.6%
+score: p => 22 + riskOf(p)*67                   // ~2.4% against the no-op
+                                                // net 0.04%
+```
+
+**A shot had to pass a dice roll and then win the lottery.** That is why nobody has taken a
+shot all session, why the keeper's `dive` never fired, and why every foul hanging off
+`shot` was inert.
+
+**Removed from both shots:**
+
+```
+                before   after
+shots/match       0.0      0.5
+goalie duels      0.0      0.5
+```
+
+**First shots and first goalie duel of the session** — but 0.5 a match is not a game.
+
+**Two rate-gates remain in `can()`** and should be audited the same way: a prerequisite is a
+prerequisite, a rate is a score, and anything that rolls dice in `can()` is charging twice.
+
+**And the deeper number is unchanged:** tackles 1.0, headers 1.0, shots 0.5 — **about three
+actions a match.** John's Mayhem target needs ~40 fouls, which needs ~200 actions. The
+lever is not the foul weights and never was; it is how often any action fires at all.
+
 ## STILL OWED — the ledger
 
 **Nothing here is done. It is written down so it cannot quietly stop being owed.**
