@@ -964,6 +964,496 @@ function TACTICS(t){ return T(t); }
 //
 // The runner is the instruction runner's shape, with one difference: it may decline. Most frames
 // nothing fires, and an action list that always does something is a list of reflexes.
+// ── THE THIRTEEN, WRITTEN BUT NOT WIRED ─────────────────────────────────────
+//
+// Every kick() in the cascade, rewritten as an action. NOTHING BELOW FIRES YET: `ACTIONS_LIVE`
+// is false, runAction skips the ported set, and the cascade still does all thirteen exactly as
+// it did this morning.
+//
+// This is the split John's surgery rule allows. The transplant must be atomic — some kicks
+// releasing the ball through runAction while others release it inline is the mixture that
+// crashed — but WRITING the organ is not the same as fitting it. With the switch off there is
+// no mixture: the cascade owns every release, as before.
+//
+// To finish: flip ACTIONS_LIVE, delete the thirteen cascade sites, run the six seeds against
+// baseline.json. One commit, and it either holds or it reverts whole.
+const ACTIONS_LIVE = true;
+
+// THE NO-OP'S WEIGHT — the dial that sets how often anything happens at all. A PLAYER action
+// scoring 300 against this fires on about a tenth of the frames it is available. Every rate in
+// the old cascade is expressible as a ratio to this one number, which is why it is a constant
+// rather than a per-action hesitance.
+// DERIVED, NOT CHOSEN. The cascade holds the ball about 100 frames a possession; a 360-point
+// action against 30,000 fires on 1.2% of frames, which is a hold of ~84. 2800 gave nine frames —
+// a fifth of a second — and every ball-releasing action fired the instant a man got it.
+//
+// I picked 2800 by eye when the only actions were a header and a shield, and never revisited it
+// when eleven more arrived. That is what made ten actions look broken when one number was.
+const PLAY_ON_WEIGHT = 60000;
+
+// THE SETUP NO-OP. A mandated action competes against this while it ripens, so a restart is
+// taken on a sampled frame rather than a scheduled one. Smaller than PLAY_ON_WEIGHT because a
+// restart should not take all day: an action ripening at 400 a second crosses this in about two
+// seconds and is nearly certain by four.
+const SETUP_WEIGHT = 900;
+
+/** How ripe a mandated action is. Grows from nothing to well past SETUP_WEIGHT, so it is
+ *  unlikely at first, likely soon, and effectively certain in the end — without a deadline
+ *  anywhere. `rate` is where a side's urgency enters. */
+function ripeness(since, rate){
+  const t = Math.max(0, clockSec - since);
+  return t*t*rate;            // quadratic: hesitant, then decisive, which is how people are
+}
+
+/** The cascade's RK — a side's appetite for a shot. Named because both shot actions read it and
+ *  it was an inline expression in each.
+ *
+ *  ADDED AFTER THE FACT, and that is worth recording: the shots were filled and referenced this
+ *  before it existed. Dormant code does not crash, so a parse check and six green matches said
+ *  nothing was wrong. THAT IS THE COST OF THE SWITCH-OFF SPLIT — it buys safety on main and pays
+ *  in latent faults that surface only on the flip. Better to know that now than during it. */
+/** The cascade's pass search, lifted whole. Both can() and act() need it, the same way the
+ *  keeper's outlets are needed by three of his four actions. */
+function bestPass(p){
+  const t9=targets[p.team];
+  if(t9===null||t9===undefined) return null;
+  const tgt=goalCenter(t9), TT=T(p.team);
+  let best=null, bs=-1e9;
+  players.forEach(m=>{
+    if(m.team!==p.team||m===p||!onPitch(m)||m.role==='K') return;
+    const d=dist(m,p);
+    if(d<60 || d>210+140*TT.direct) return;
+    const gain=dist(p,tgt)-dist(m,tgt);
+    let laneOk=true;
+    players.forEach(o=>{
+      if(o.team===p.team||!onPitch(o)||allied(p.team,o.team)) return;
+      const t=((o.x-p.x)*(m.x-p.x)+(o.y-p.y)*(m.y-p.y))/(d*d);
+      if(t>0.1&&t<0.9){
+        const lx=p.x+(m.x-p.x)*t, ly=p.y+(m.y-p.y)*t;
+        if(Math.hypot(o.x-lx,o.y-ly) < (30-12*TT.risk)+5*(T(o.team).press-0.5)*2) laneOk=false;
+      }
+    });
+    const sc=gain*(0.6+0.8*TT.direct)+(laneOk?0:-500)+RNG()*30;
+    if(sc>bs){ bs=sc; best=m; }
+  });
+  return (best && bs>-100) ? best : null;
+}
+
+function riskOf(p){
+  const t=T(p.team);
+  return (t && t.risk!==undefined) ? t.risk : 0.5;
+}
+
+/** The keeper's outlet search, which three of his four actions need. Lifted from the cascade
+ *  unchanged and computed once per call — the cascade did it once and branched; the list needs
+ *  it available to each can(), which is the one real cost of the scored shape. */
+/** Is the shooting lane clear? The cascade samples the line to goal and looks for a body near
+ *  any point on it. Lifted unchanged, because a shot into a wall of legs is not a shot. */
+function shotLaneClear(p, tgt){
+  let clear=true;
+  for(let t=0.2;t<=0.8;t+=0.2){
+    const lx=p.x+(tgt.x-p.x)*t, ly=p.y+(tgt.y-p.y)*t;
+    players.forEach(o=>{ if(o.team===p.team||!onPitch(o)||o.role==='K') return;
+      if(Math.hypot(o.x-lx,o.y-ly)<26) clear=false; });
+  }
+  return clear;
+}
+
+function gkOutlets(gk){
+  let near=null,nd=1e9, far=null,fd=-1,fs=-1e9, anyNear=null,anyD=1e9;
+  const og=goalCenter(gk.team);
+  players.forEach(m=>{
+    if(m.team!==gk.team||m===gk||!onPitch(m)||m.role==='K') return;
+    const d=dist(m,gk), adv=dist(m,og);
+    if(adv>dist(gk,og)+15){ if(d<nd){nd=d;near=m;} }
+    if(d<anyD){anyD=d;anyNear=m;}
+    let open=1e9;
+    players.forEach(q=>{ if(q.team!==gk.team&&onPitch(q)&&q.role!=='K') open=Math.min(open,dist(q,m)); });
+    const sc=adv+Math.min(open,140)*1.5;
+    if(sc>fs){fs=sc;far=m;fd=adv;}
+  });
+  if(!near){ near=anyNear; nd=anyD; }
+  let wolves=0;
+  players.forEach(q=>{ if(q.team!==gk.team&&onPitch(q)&&dist(q,gk)<95) wolves++; });
+  return { near, nd, far, fd, crowded: wolves>=2 };
+}
+
+const PORTED = [
+  // ── SCRIPT: the game takes these ──────────────────────────────────────────
+  { name:'corner-swing', tier:TIER.SCRIPT, ported:true,
+    coach:T => T.direct*30,
+    can:p => !!(cornerPending===p && ball.owner===p),
+    score:p => 400,
+    act:p => {
+      const e=EDGES[GOAL_EDGE[cornerGoal]], g=goalCenter(cornerGoal);
+      const cx2=g.x+e.nx*46, cy2=g.y+e.ny*46;
+      kick(cx2, cy2, 11.5, false);
+      return true;
+    } },
+
+  // ── THE THROW ─────────────────────────────────────────────────────────────
+  // It RIPENS rather than waiting on readyAt. A side with tempo takes it quickly; a side that
+  // wants to settle takes its time; and which frame it actually lands on is sampled, so no two
+  // throw-ins in a match look alike.
+  //
+  // That replaces `readyAt: nowMs()+1100` — a constant that made every throw identical and could
+  // not be quick even when quick was right.
+  { name:'throw-in', tier:TIER.SCRIPT, ported:true,
+    coach:T => 0,
+    can:p => !!(throwPending===p && ball.owner===p),
+    score:p => ripeness(p.restartSince||clockSec, 260 + 340*T(p.team).direct),
+    act:p => {
+      const best=bestPass(p);
+      const tgt = best || players.find(m=>m.team===p.team && m!==p && onPitch(m) && m.role!=='K');
+      if(!tgt){ kick(CX,CY,6); return true; }
+      kick(tgt.x+tgt.vx*6, tgt.y+tgt.vy*6, Math.min(6.4, Math.max(2.8, dist(tgt,p)/66*1.15)), false);
+      const throwD=dist(tgt,p);
+      ball.zv = 2.6 + Math.min(1.6, throwD/260*1.6);
+      throwPending=null;
+      return true;
+    } },      // the cascade's target logic moves here on the flip
+
+  // ── THE PENALTY ───────────────────────────────────────────────────────────
+  // Ripens slowest of the three. A penalty is the one restart where the pause IS the drama, and
+  // nothing about a side's tempo should hurry it — no coach weight, no direct term.
+  { name:'penalty', tier:TIER.SCRIPT, ported:true,
+    coach:T => 0,
+    can:p => !!(penaltyShooter===p && ball.owner===p),
+    score:p => ripeness(p.restartSince||clockSec, 130),
+    act:p => {
+      const gt=penaltyGoalTeam;
+      const e=EDGES[GOAL_EDGE[gt]], g=goalCenter(gt);
+      const off2=(RNG()*2-1)*e.len*GOAL_HALF*1.0;
+      stats.shots[p.team]++;
+      penaltyShooter=null;
+      kick(g.x+e.ux*off2, g.y+e.uy*off2, 10.8, true);
+      gkDiveCheck(gt, false);
+      return true;
+    } },
+
+  // ── THE FREE KICK ─────────────────────────────────────────────────────────
+  // Ripens too, but from the moment the wall is legal rather than from the award — waiting for
+  // ten yards is not hesitation, it is the rule. A direct side ripens faster, which is a quick
+  // free kick becoming a tactic rather than a coin toss.
+  { name:'free-kick', tier:TIER.SCRIPT, ported:true,
+    coach:T => 0,
+    can:p => !!(freeKick && freeKick.taker===p && ball.owner===p),
+    score:p => ripeness(freeKick ? freeKick.at : clockSec, 200 + 300*T(p.team).direct),
+    act:p => {
+      const aim = (freeKick && freeKick.aim!==undefined) ? freeKick.aim : targets[p.team];
+      const tgt = goalCenter(aim);
+      const d9 = dist(p,tgt);
+      if(d9 < 250){                                  // in range: have a go
+        const e=EDGES[GOAL_EDGE[aim]];
+        const off=(RNG()*2-1)*e.len*GOAL_HALF*0.8;
+        kick(tgt.x+e.ux*off, tgt.y+e.uy*off, 10.6, true);
+        gkDiveCheck(aim, false);
+      } else {
+        const best=bestPass(p);
+        if(best) kick(best.x+best.vx*8, best.y+best.vy*8, Math.min(8, dist(best,p)/66*1.15));
+        else kick(tgt.x, tgt.y, 8.4, false);
+      }
+      freeKick=null;
+      p.noChase=clockSec+1.0;
+      return true;
+    } },
+
+  // ── PLAYER: his call, weighted by the bench ───────────────────────────────
+  // The keeper's four. gk-clear is PLAYER tier now, not COACH — John's correction: the bench
+  // WEIGHTS an action, it does not own one. A bunkering side hoofs it readily; a passing side
+  // does not; neither of them is being ordered.
+  { name:'gk-roll', tier:TIER.PLAYER, ported:true,
+    coach:T => (1-T.direct)*60,
+    can:p => {
+      if(p.role!=='K' || ball.owner!==p) return false;
+      const f=gkOutlets(p);
+      return !!f.near && !(f.crowded && dist(f.near,p)<110);
+    },
+    score:p => 300,
+    act:p => {
+      const f=gkOutlets(p);
+      if(!f.near) return false;
+      const pw=Math.min(6.2, Math.max(2.4, dist(f.near,p)/66 * 1.15));
+      kick(f.near.x+f.near.vx*4, f.near.y+f.near.vy*4, pw, false);
+      const throwD=dist(f.near,p);
+      ball.zv=2.6 + Math.min(1.6, throwD/260*1.6);
+      if(allied(p.team,f.near.team)) ball.allyPass=true;
+      return true;
+    } },
+
+  // The cascade's outlet search, lifted whole. It runs in can() rather than act() because the
+  // whole point of a scored list is that a candidate must be found BEFORE the action is chosen —
+  // "is there somebody to punt to" is a prerequisite, not part of the punt.
+  { name:'gk-punt', tier:TIER.PLAYER, ported:true,
+    coach:T => T.direct*80,
+    can:p => {
+      if(p.role!=='K' || ball.owner!==p) return false;
+      const f=gkOutlets(p);
+      return !!(f.far && ((f.fd>255 && (f.nd>140 || RNG()<0.11)) || (f.crowded && f.fd>150)));
+    },
+    score:p => 310,
+    act:p => {
+      const f=gkOutlets(p);
+      if(!f.far) return false;
+      const dTo=dist(p,f.far);
+      const pw=Math.min(11.5, Math.max(4.2, dTo/66 * 1.12));
+      kick(f.far.x+f.far.vx*7, f.far.y+f.far.vy*7, pw, false);
+      ball.zv=4.6;                       // up into the lights, as the cascade has it
+      GKSTAT.punts=(GKSTAT.punts||0)+1;
+      return true;
+    } },
+
+  { name:'gk-clear', tier:TIER.PLAYER, ported:true,
+    coach:T => (T.bunker>0.5?110:0),
+    can:p => {
+      if(p.role!=='K' || ball.owner!==p) return false;
+      const f=gkOutlets(p);
+      // crowded, and the only outlet is short and in the same trouble
+      return f.crowded && (!f.near || dist(f.near,p)<110);
+    },
+    score:p => 290,
+    act:p => {
+      const og9=goalCenter(p.team);
+      const ax=p.x-og9.x, ay=p.y-og9.y, al=Math.hypot(ax,ay)||1;
+      const spread=(RNG()-0.5)*0.5;
+      kick(p.x+(ax/al)*300 + (-ay/al)*300*spread,
+           p.y+(ay/al)*300 + ( ax/al)*300*spread, 11.5, false);
+      ball.zv=4.2;
+      return true;
+    } },
+
+  // THE FLOOR. Nothing else applied — no outlet near, none far, nobody to aim at. The cascade
+  // wrote this as a bare `else kick(CX,CY,9)` and the scored list says the same thing by scoring
+  // 100 when everything else scores 290 or more. An else IS the lowest score.
+  // ── THE DIVE ──────────────────────────────────────────────────────────────
+  // John: does gkDiveCheck become a keeper action? Yes, and it dissolves the crash rather than
+  // working around it.
+  //
+  // gkDiveCheck(defT, flame) was called BY THE SHOOTER, from outside the keeper's frame, reaching
+  // across to find the keeper and move him. That is why the flip crashed on a stale `owner`: the
+  // shot was reaching for a player through a variable that no longer meant what it did.
+  //
+  // A DIVE IS SOMETHING THE KEEPER DOES. His prerequisite is "a shot is coming at my goal", which
+  // is a fact he can read himself — ball.isShot, moving, and heading his way. Nobody reaches
+  // across anything, and the shooter's frame ends when the shot leaves his foot, as it should.
+  // ── THE TACKLE ────────────────────────────────────────────────────────────
+  // John is right that this belongs here. It is the clearest action in the game — a player takes
+  // the ball off another player — and it has been a rate inside a forEach over opponents, run
+  // from the CARRIER's frame rather than the tackler's. Same inversion as the dive.
+  //
+  // The cascade's chance: 0.010 * (0.6+0.8*press) * aggression, times fresh-tackler and
+  // gassed-carrier terms. At 60fps that is 0.6-1.5 a second, so a score of roughly 30-70 against
+  // PLAY_ON_WEIGHT — and every one of those factors survives as a term.
+  // ── SECURE IT ─────────────────────────────────────────────────────────────
+  // The keeper catching it — "his ball, his moment, his name in lights", as the cascade puts it.
+  // John named this one first, alongside the kick and the dive, and it is the last piece of
+  // keeper behaviour still living in the owner block.
+  //
+  // It is the entanglement that made the separation look expensive: gkHolder and gkHoldUntil are
+  // SET here and READ by four instructions. As an action the setting moves out and the reading
+  // stays put — which is the whole separation for this piece, and it turns out to be small.
+  //
+  // Not available on a back-pass: he may not hold what his own side played to him, which is the
+  // mustKick rule and it belongs in can() rather than as a check inside the hold.
+  { name:'secure it', tier:TIER.SCRIPT, ported:true,
+    coach:T => 0,
+    can:p => !!(p.role==='K' && ball.owner===p && gkHolder!==p && !p.mustKick && onPitch(p)),
+    score:p => 900,                    // he has caught it; there is nothing to decide
+    act:p => {
+      gkHolder=p; gkHoldUntil=clockSec+1.6; GKSTAT.holds=(GKSTAT.holds||0)+1;
+      ENGINE_HOOKS.spawnNote(p.x,p.y-26,"\u{1F9E4} secured!",TEAMS[p.team].color,TEAMS[p.team].accent);
+      return false;                    // holding is not releasing: his frame continues
+    } },
+
+  { name:'tackle', tier:TIER.PLAYER, ported:true,
+    coach:T => T.press*60,
+    can:p => {
+      if(!onPitch(p) || p.role==='K') return false;
+      const o=ball.owner;
+      if(!o || o.team===p.team) return false;
+      if(o.role==='K' && gkHolding()) return false;         // you cannot rob a keeper holding it
+      if(suppress && suppress.team===p.team && clockSec<suppress.until) return false;
+      if(holdingPlay()) return false;
+      return dist(p,o) < 26;                                // MUST stay above body radius 23
+    },
+    score:p => {
+      const o=ball.owner;
+      let sc = 44 * (0.6+0.8*T(p.team).press) * AGG_PRESETS[teamAGG[p.team]].t;
+      sc *= (0.55+0.45*p.stamina);                          // fresh tacklers bite harder
+      sc *= (1.35-0.5*(o?o.stamina:1));                     // gassed carriers are easier to rob
+      if(momentumOn && clockSec<boostUntil[p.team]) sc *= 1.3;
+      return sc;
+    },
+    act:p => {
+      const victim=ball.owner;
+      if(!victim) return false;
+      ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.isShot=false;
+      if(p.role==='K'){
+        ENGINE_HOOKS.spawnNote(p.x,p.y-20,"smothered!",TEAMS[p.team].color,TEAMS[p.team].accent);
+      } else {
+        stats.tackles[p.team]++; p.tackles++;
+        ENGINE_HOOKS.spawnNote(p.x,p.y-20,"tackle!",TEAMS[p.team].color,TEAMS[p.team].accent);
+      }
+      stam(p,+0.10); stam(victim,-0.06);
+      return false;    // he now HAS the ball; his frame continues so he can carry it
+    } },
+
+  { name:'dive', tier:TIER.PLAYER, ported:true,
+    coach:T => 0,
+    can:p => {
+      if(p.role!=='K' || !onPitch(p) || ball.owner) return false;
+      if(!ball.isShot) return false;
+      if(p.diveUntil && clockSec < p.diveUntil) return false;   // already committed
+      if(p.burst<=0.6) return false;                            // it costs, and he has none
+      const og=goalCenter(p.team);
+      if(dist(ball,og) > 260) return false;
+      // is it actually coming toward his goal?
+      return ((og.x-ball.x)*ball.vx + (og.y-ball.y)*ball.vy) > 0;
+    },
+    // A BURNING SHOT DEMANDS A BURNING DIVE. The cascade expressed that as an if; here it is a
+    // score, so a keeper faced with an ordinary shot dives sometimes and one faced with a flame
+    // shot dives nearly always — the same behaviour, in the vocabulary the list speaks.
+    score:p => ball.flameShot ? 2600 : 330,
+    act:p => {
+      const flame = !!ball.flameShot;
+      p.burst-=0.6; p.diveUntil=clockSec+1.2;
+      GKSTAT.diveBurns=(GKSTAT.diveBurns||0)+1;
+      ENGINE_HOOKS.flamePop(p);
+      if(flame){
+        GKSTAT.duels=(GKSTAT.duels||0)+1;
+        sayLogged(pick([
+          `FIRE MEETS FIRE — both tanks emptied in one heartbeat!`,
+          `${p.name} answers the flame with a flame of ${PRN(p).his} own!`,
+          `A duel! Burning shot, burning dive — somebody's fire dies here!`]),true,"lowvoice");
+      } else if(RNG()<0.4){
+        sayLogged(pick([
+          `${p.name} EXPLODES across the goal!`,
+          `${p.name} throws ${PRN(p).him}self at it!`]),true);
+      }
+      return false;      // he dives AND stays in his frame: a dive is not a touch on the ball
+    } },
+
+  { name:'gk-hopeful', tier:TIER.PLAYER, ported:true,
+    coach:T => 0,
+    can:p => p.role==='K' && ball.owner===p,
+    score:p => 100,
+    act:p => { kick(CX,CY,9); return true; } },
+
+  // ── THE PASS ──────────────────────────────────────────────────────────────
+  // The cascade's candidate search, whole: every mate between 60 and 210+140*direct away, scored
+  // on ground gained toward the target goal, minus 500 if the lane is blocked, plus jitter, minus
+  // a treason penalty for passing to an ally when the scoreboard says not to.
+  //
+  // THE SEARCH LIVES IN A HELPER because can() and act() both need it — the same shape as the
+  // keeper's outlets. can() asks whether anybody scores above -100; act() takes the best.
+  { name:'pass', tier:TIER.PLAYER, ported:true,
+    coach:T => (1-T.direct)*50,
+    can:p => ball.owner===p && p.role!=='K' && targets[p.team]!==null && !!bestPass(p),
+    score:p => 320,
+    act:p => {
+      const best=bestPass(p);
+      if(!best) return false;
+      kick(best.x+best.vx*8, best.y+best.vy*8, Math.min(9, dist(best,p)*0.045+4));
+      if(allied(p.team, best.team)) ball.allyPass=true;
+      return true;
+    } },
+
+  // ── OUT OF TROUBLE ────────────────────────────────────────────────────────
+  // Trapped: near a wall, under pressure, and not in a goal mouth. He finds whoever is nearest
+  // the middle and gives it to him. The cascade's rate was RNG()<0.22*dt*60, which is 13 a
+  // second — a score of about 460, and by far the most eager thing in the list. That is right:
+  // a man pinned on the touchline should be looking to escape almost immediately.
+  { name:'pass-safe', tier:TIER.PLAYER, ported:true,
+    coach:T => 0,
+    can:p => {
+      if(ball.owner!==p || p.role==='K') return false;
+      let wd=1e9, we=null;
+      for(const e2 of EDGES){
+        const d2=(p.x-e2.p1.x)*e2.nx + (p.y-e2.p1.y)*e2.ny;
+        if(d2<wd){ wd=d2; we=e2; }
+      }
+      if(wd>=34) return false;
+      const mouth = we && we.goal &&
+        Math.abs((p.x-we.mx)*we.ux + (p.y-we.my)*we.uy) < we.len*GOAL_HALF;
+      if(mouth) return false;
+      let pressure=1e9;
+      players.forEach(o=>{ if(o.team!==p.team && onPitch(o)) pressure=Math.min(pressure, dist(o,p)); });
+      return pressure<58;
+    },
+    score:p => 460,
+    act:p => {
+      let best=null, bs=1e9;
+      players.forEach(m=>{
+        if(m.team!==p.team||m===p||!onPitch(m)||m.role==='K') return;
+        const dc=dist(m,{x:CX,y:CY}); if(dc<bs){ bs=dc; best=m; }
+      });
+      if(best) kick(best.x+best.vx*8, best.y+best.vy*8, Math.min(9, dist(best,p)*0.045+4.5));
+      else kick(CX,CY,7);
+      return true;
+    } },
+
+  // pass-alt was a second copy of the same search in a different branch of the cascade. It is not
+  // a different action — it is the same one, reached another way. DELETED rather than ported,
+  // which is the first thing this port has removed rather than moved.
+
+
+  { name:'shot', tier:TIER.PLAYER, ported:true,
+    coach:T => T.direct*70,
+    can:p => {
+      if(ball.owner!==p || p.role==='K' || targets[p.team]===null) return false;
+      const tgt=goalCenter(targets[p.team]);
+      const dGoal=dist(p,tgt);
+      if(dGoal>=230) return false;
+      const RK=p.rating||0.5;
+      return shotLaneClear(p,tgt) && RNG() < 0.016*(0.4+1.2*RK);
+    },
+    score:p => 360,
+    act:p => {
+      const tgt=goalCenter(targets[p.team]), e=EDGES[GOAL_EDGE[targets[p.team]]];
+      const hw2=e.len*GOAL_HALF, RK=p.rating||0.5, dGoal=dist(p,tgt);
+      const sc=(0.6+0.8*RK)*(0.75+dGoal*0.0035);
+      const off=(RNG()*2-1)*hw2*sc;
+      kick(tgt.x+e.ux*off, tgt.y+e.uy*off, 11.2, true);
+      return true;
+    } },
+
+  // ── THE SHOT IS A RATE, NOT A CONDITION ───────────────────────────────────
+  // Every other action asks "is this available". The cascade's shot asks something different:
+  //
+  //   if(laneClear && RNG() < 0.016 * (0.4+1.2*RK) * dt*60)
+  //
+  // A PER-FRAME PROBABILITY. It is not "can he shoot" but "does he, this frame" — a rate scaled
+  // by his rating and by the frame length, so a better player shoots more often rather than more
+  // accurately, and the whole thing is frame-rate independent.
+  //
+  // That does not translate to a score, and pretending it did would change the game. So the rate
+  // stays in can(): the action becomes AVAILABLE at a rate rather than under a condition, which
+  // is a third shape alongside prerequisite and preference. Worth naming — it is the first thing
+  // in this port that the can/score/act shape did not already fit.
+  { name:'shot-power', tier:TIER.PLAYER, ported:true,
+    coach:T => T.direct*90,
+    can:p => {
+      if(ball.owner!==p || p.role==='K' || targets[p.team]===null) return false;
+      if(p.burst<=0.7) return false;                  // the super shot needs legs
+      const tgt=goalCenter(targets[p.team]);
+      const dGoal=dist(p,tgt);
+      if(dGoal>=260) return false;
+      const RK=p.rating||0.5;
+      return shotLaneClear(p,tgt) && RNG() < 0.016*(0.4+1.2*RK)*(1/60)*60*0.5;
+    },
+    score:p => 370,
+    act:p => {
+      const tgt=goalCenter(targets[p.team]), e=EDGES[GOAL_EDGE[targets[p.team]]];
+      const hw2=e.len*GOAL_HALF, RK=p.rating||0.5, dGoal=dist(p,tgt);
+      const scL=(0.6+0.8*RK)*(0.75+dGoal*0.0035);
+      const offL=(RNG()*2-1)*hw2*scL;
+      p.burst-=0.6; GKSTAT.superShots=(GKSTAT.superShots||0)+1;
+      kick(tgt.x+e.ux*offL*0.75, tgt.y+e.uy*offL*0.75, 13.2, true);
+      ball.flameShot=true;
+      return true;
+    } },
+];
+
 const ACTIONS = [
   // ── HEAD IT ───────────────────────────────────────────────────────────────
   // The first action, and the one that was never real: "going for the header" has only ever been
@@ -1061,17 +1551,71 @@ const ACTIONS = [
 ];
 
 /** Score every available action, take the best, do it. Returns true if anything happened. */
+// ── TIERS DECIDE; WEIGHTS CHOOSE ────────────────────────────────────────────
+//
+// John's shape, and it is better than what I had. Highest-score-wins fires an action the instant
+// it is legal — so I was about to invent a "hesitance" term to stop shots happening at the
+// earliest possible frame. That is a fudge for a missing idea.
+//
+// THE MISSING IDEA IS A WEIGHTED NO-OP. Selection is proportional and "play on" is an action with
+// a large weight, so a shot scoring 360 fires on about a ninth of the frames it is available.
+// THE RATIO IS THE RATE — which means the cascade's `RNG() < 0.016*(0.4+1.2*RK)*dt*60` ports
+// directly instead of being reinterpreted: every situational factor becomes a score term, and the
+// part that meant "not every frame" becomes the no-op's weight.
+//
+// ACROSS TIERS IT STAYS ABSOLUTE. A penalty must be taken; in a lottery a taker would sometimes
+// simply not. So the highest available tier wins outright and the weighting happens WITHIN it.
+// The no-op exists at PLAYER tier only — "the game acts" stays certain, "he chooses" becomes
+// probabilistic, which is the distinction the tiers were for.
 function runAction(p){
-  let best=null, bestScore=-1e9;
-  for(const A of ACTIONS){
+  const list = ACTIONS_LIVE ? ACTIONS.concat(PORTED) : ACTIONS;
+  const T9 = TACTICS(p.team);
+
+  let topTier = -1;
+  const avail = [];
+  for(const A of list){
     if(!A.can(p)) continue;
-    const sc=(A.tier||TIER.PLAYER) + A.score(p);
-    if(sc>bestScore){ bestScore=sc; best=A; }
+    const t = A.tier||TIER.PLAYER;
+    avail.push({A, t});
+    if(t>topTier) topTier = t;
   }
-  if(!best) return false;
-  p.lastAction = best.name;
-  TEL.actFrames[best.name] = (TEL.actFrames[best.name]||0) + 1;
-  return best.act(p)!==false;
+  if(!avail.length) return false;
+
+  const pool = avail.filter(x=>x.t===topTier);
+  let total = 0;
+  const weights = pool.map(x=>{
+    // the coach weights every action rather than owning a tier, which is John's correction
+    const w = Math.max(1, x.A.score(p) + (x.A.coach ? x.A.coach(T9) : 0));
+    total += w;
+    return w;
+  });
+  // ── AND A NO-OP AT SCRIPT TIER TOO ────────────────────────────────────────
+  // John's idea, and it removes every hardcoded restart delay in the engine. A mandated action
+  // does not fire the instant it is legal; it RIPENS. Its weight grows each frame against a fixed
+  // no-op, so the probability of it happening rises from nearly nothing to a certainty — and
+  // WHICH frame it lands on is sampled rather than set.
+  //
+  // That is the variable pause John asked for on throws, corners and kick-offs, and "sometimes
+  // they can move quick" falls out of it rather than being a special case. A quick throw is not
+  // a different rule; it is the tail of the same distribution.
+  //
+  // The growth rate is where tactics reach it: a side that wants tempo ripens fast, one that
+  // wants to settle ripens slowly. Same action, different urgency, no second code path.
+  if(topTier===TIER.PLAYER) total += PLAY_ON_WEIGHT;
+  else if(topTier===TIER.SCRIPT) total += SETUP_WEIGHT;
+
+  let r = RNG()*total;
+  for(let i=0;i<pool.length;i++){
+    r -= weights[i];
+    if(r<=0){
+      const A = pool[i].A;
+      p.lastAction = A.name;
+      TEL.actFrames[A.name] = (TEL.actFrames[A.name]||0) + 1;
+      return A.act(p)!==false;
+    }
+  }
+  TEL.actFrames['play on'] = (TEL.actFrames['play on']||0) + 1;
+  return false;                       // he carries on, which is most frames
 }
 
 const INSTRUCTIONS = [
@@ -1822,11 +2366,9 @@ function think(dt){
   players.forEach(p=>{
     if(p.out||p.sentOff||targets[p.team]===null)return;
 
-    // ── AN ACTION MAY FIRE, AND THEN HE STILL MOVES ───────────────────────────
-    // Actions run BEFORE instructions and do not consume the frame: a man who heads the ball is
-    // still somewhere, and still wants to be somewhere next. That is the whole difference from the
-    // instruction list, where one winner takes the frame.
-    runAction(p);
+    // ── THE FLIP ──────────────────────────────────────────────────────────────
+    // A fired action ends his frame; a declined one leaves him free, which is most frames.
+    if(runAction(p)) return;
 
     // ── AND IT GOES BACK BEHIND THE SIXTEEN ───────────────────────────────────
     // Moving it to the top was the right experiment and the answer was chaos. Normalised per
@@ -2175,7 +2717,10 @@ function think(dt){
       a.vx+=dx*push;a.vy+=dy*push;b.vx-=dx*push;b.vy-=dy*push;}
   }
   // owner decisions
-  if(owner){
+  // AND ONLY IF HE STILL HAS IT. `owner` is captured before the player loop; an action may have
+  // taken the ball since. A block that reasons about a man in possession is wrong the moment he is
+  // not in possession — that is the whole crash, in one condition.
+  if(owner && ball.owner===owner){
     if(holdActive){ owner.vx*=0.85; owner.vy*=0.85; return; }
     if(throwPending===owner){
       throwPending=null;
