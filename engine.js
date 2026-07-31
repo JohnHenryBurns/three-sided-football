@@ -2064,7 +2064,24 @@ const INSTRUCTIONS = [
     act:p => {
       const mx=pendingRestart.x, my=pendingRestart.y;
       ball.x=p.x; ball.y=p.y; ball.z=5; ball.vx=0; ball.vy=0; ball.zv=0;   // it rides with him
-      if(dist(p,{x:mx,y:my}) > 9){ steer(p, mx, my, 2.6); return true; }
+      // A CARRY THAT CANNOT ARRIVE MUST STILL END. This instruction held the ball for 48% of a
+      // whole match — a man picking it up for a restart and carrying it forever, which glued the
+      // ball to him, collapsed loose% to 8%, and registered as every stall in the log.
+      //
+      // Whatever stops him arriving — clamping, separation, stamina, a mark he cannot stand on —
+      // the restart cannot depend on it. Four seconds and he puts it down where he is, which is
+      // legal enough: he is on the pitch and the ball is at his feet.
+      if(pendingRestart.carryFrom===undefined) pendingRestart.carryFrom=clockSec;
+      const carried = clockSec - pendingRestart.carryFrom;
+      if(dist(p,{x:mx,y:my}) > 9 && carried < 4){ steer(p, mx, my, 2.6); return true; }
+      if(carried >= 4){
+        ball.x=p.x; ball.y=p.y; ball.z=0; ball.vx=0; ball.vy=0; ball.zv=0;
+        ball.owner=null; ball.fetch=null;
+        if(pendingRestart.since===undefined) pendingRestart.since=clockSec;
+        pendingRestart.x=p.x; pendingRestart.y=p.y;      // the mark is where it ended up
+        TEL.carryTimeout++;
+        return true;
+      }
       // DOWN ON THE MARK, and he lets go. Putting it down is the point.
       ball.x=mx; ball.y=my; ball.z=0; ball.vx=0; ball.vy=0; ball.zv=0;
       ball.owner=null;
@@ -3664,7 +3681,7 @@ const TEL = {
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1,
   stall:0, stalls:0, worstStall:0, shots:0, blocked:0
 };
@@ -3675,20 +3692,20 @@ function telReset(){
     zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
     jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
     jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-    actFrames:{}, headers:0, shields:0, keeperHeld:0, hitWall:0, hitWall:0, throwsTaken:0, throwsTaken:0, ballRecovered:0, oobState:0, oobState:0, ballRecovered:0, intentional:0, incidental:0, incidental:0, foulMissed:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
+    actFrames:{}, headers:0, shields:0, keeperHeld:0, carryTimeout:0, carryTimeout:0, hitWall:0, hitWall:0, throwsTaken:0, throwsTaken:0, ballRecovered:0, oobState:0, oobState:0, ballRecovered:0, intentional:0, incidental:0, incidental:0, foulMissed:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
     unattributed:0, unattMax:0, portFrame:-1,
   unattributed:0, unattMax:0, portFrame:-1, deflected:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, woodwork:0, bars:0, posts:0, port:{},
   zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
   jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
   jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, headers:0, shields:0, keeperHeld:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
+  actFrames:{}, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
   unattributed:0, unattMax:0, portFrame:-1, behindGoal:0, behindOwn:0, behindOther:0,
     bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
     shots:0, blocked:0 });
@@ -4429,8 +4446,14 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
   GKSTAT.lastThrowAt=clockSec; GKSTAT.lastThrowX=ex; GKSTAT.lastThrowY=ey;
   restartHold=Math.max(restartHold,nowMs()+2400);   // staging owns its hold
   const sx=ex+e.nx*6, sy=ey+e.ny*6;   // he throws FROM the line, not from midfield
+  // NEAREST TO WHERE HE MUST STAND, not to the mark. A thrower stands 22 units OUTSIDE the
+  // line and the ball sits on it — sorting by distance to the ball picked a man who then had a
+  // hundred-unit walk to his own position, which is a two-second stall after the ball is already
+  // in place. The trace showed exactly that: ballToMark 6, meToBall 105.
+  const odx0=sx-CX, ody0=sy-CY, ol0=Math.hypot(odx0,ody0)||1;
+  const spot0={ x:sx+odx0/ol0*22, y:sy+ody0/ol0*22 };
   const cands=players.filter(q=>q.team!==toucher&&q.role!=="K"&&!q.out&&!q.sentOff)
-    .sort((a,b)=>dist(a,{x:sx,y:sy})-dist(b,{x:sx,y:sy}));
+    .sort((a,b)=>dist(a,spot0)-dist(b,spot0));
   const thr=cands[0];
   if(!thr){ telPort('throw-in: nobody to take it'); ball.x=CX; ball.y=CY; return; }
   // ── THE BALL STAYS WHERE IT WENT OUT ──────────────────────────────────────
@@ -4468,7 +4491,7 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
   ball.owner=null;
   ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
   ball.fetch={ by:thr, sx, sy, team:thr.team, at:clockSec };
-  pendingRestart={ at:clockSec,p:thr, x:sx, y:sy, team:thr.team, fetch:true,
+  pendingRestart={ kind:'throw', at:clockSec, p:thr, x:sx, y:sy, team:thr.team, fetch:true,
                   cap:nowMs()+20000, readyAt:nowMs()};
   suppress={team:toucher,until:clockSec+0.8};
   ENGINE_HOOKS.spawnNote(sx,sy-24,"throw-in!",TEAMS[thr.team].color,TEAMS[thr.team].accent);
