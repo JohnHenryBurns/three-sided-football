@@ -1,3 +1,14 @@
+# Status — see ACTIONS.md for the current picture
+
+**This document is a working history and much of it is superseded.** The cascade is gone,
+restarts work, goals are goals. The one open number is **loose 85% against a target of
+35%**, and `ACTIONS.md` carries the ordered list of what is still owed.
+
+Sections below marked *Superseded* or *Retracted* are kept because the reasoning is worth
+having, not because the conclusions hold.
+
+---
+
 # Instructions — working log
 
 Nineteen extracted. The list is in `engine.js`; this is what's known about it and what
