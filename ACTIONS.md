@@ -117,6 +117,53 @@ than reason about it.
 **Reverted.** The teleport stays until the replacement works, because a phantom save is
 better than a keeper holding the ball for the whole match.
 
+## Calibrating the coach — the baseline finding
+
+**Before tuning anything: the coach terms are too small to matter.**
+
+```
+pass:  base 210,  coach (1-T.direct)*50
+
+TikiTaka  direct 0.15   210 + 42 = 252    8.3% of frames
+RouteOne  direct 0.95   210 +  3 = 213    7.1% of frames
+```
+
+**A 300% difference in identity produces a 1.2-point difference in behaviour.** Every coach
+term is an additive constant of ±20 to ±90 against action scores of 210–460, competing
+against `PLAY_ON_WEIGHT` 2800. They are swamped.
+
+**Measured, four matches per identity, all three sides the same:**
+
+```
+TikiTaka    goals 3.3   passes 47   shots 2   back  7
+RouteOne    goals 5.5   passes 62   shots 1   back 15
+Balanced    goals 2.0   passes 30   shots 0   back  8
+```
+
+Route One passes *more* than TikiTaka and recycles twice as often — **the opposite of both
+identities.** With the terms this small, that is seed noise wearing an identity's name.
+
+### The two channels, and only one is broken
+
+```
+instructions   coach moves the TARGET   act() reads T()      WORKS
+actions        coach moves the WEIGHT   coach: T => const    SWAMPED
+```
+
+Three instructions read coaching directly in `act()` — `the back line` (39% of frames),
+`finding space` (27%), `closing it down` (6%) — and those genuinely shift where men stand.
+**Positioning is coached. Choice is not.**
+
+### What calibration needs first
+
+**Multiplicative, not additive.** `score * (0.4 + 1.2*T.direct)` spans 3:1 and survives the
+no-op; `score + 50` does not. The intentional foul already proved this — an explicit
+300:1 table was the only thing that made Clean and Filthy distinguishable.
+
+**And an objective.** "Good football" cannot be optimised, but *distinguishability* can:
+run each identity against itself and require the pass/shot/punt mix to differ by more than
+the seed spread. That is measurable, and it is the honest first target.
+
 ## Still owed, in order
 
 **1. The loose ball.** Above. Everything else waits.
