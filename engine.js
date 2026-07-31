@@ -994,6 +994,14 @@ function kick(tx,ty,power,isShot){
  *  Measured as: of the players who are not the taker, how many are nearer their own goal than
  *  the halfway point of their own third. Two thirds of them is enough — waiting for all of them
  *  would hang on one man walking back from a corner. */
+// DEFINED AND UNUSED, deliberately. John: sidesSet should matter for a kick-off, not for
+// throws or corners — and it is kept because the kick-off will want it, not because anything
+// calls it today.
+//
+// It was gating the throw and returning true ZERO times in 15,043 evaluations, because it waits
+// for men to be back in their own third while `positioning for a restart` sends the taking side
+// FORWARD. A quick throw does not wait for a shape; a kick-off does, because that is the one
+// restart where the laws demand one.
 function sidesSet(taker){
   let want=0, there=0;
   players.forEach(p=>{
@@ -1530,7 +1538,17 @@ const PORTED = [
       const m={x:pendingRestart.x, y:pendingRestart.y};
       if(dist(ball,m) > 12) return false;
       if(dist(p, restartSpot(p)) > 10) return false;
-      return sidesSet(p);           // nobody throws into an unset pitch
+      // ── NO SHAPE GATE ON A THROW ──────────────────────────────────────────
+      // John: sidesSet should matter for a kick-off, not for throws or corners.
+      //
+      // He is right, and it was doing real damage: sidesSet waits for men to be back in their
+      // own third, and `positioning for a restart` sends THE TAKING SIDE FORWARD — so it
+      // evaluated 15,043 times in a match and returned true ZERO times. The taker stood over the
+      // ball for 15,041 frames.
+      //
+      // And it is wrong in principle too. A throw-in is quick. Waiting for a shape is what a
+      // kick-off does, because a kick-off is the only restart where the laws demand one.
+      return true;
     },
     // THE CLOCK IS THE STAGING TIME, ALWAYS SET. `since` was only assigned in the carry stage —
     // and when the ball is staged already on the mark, which is most restarts, that stage never
