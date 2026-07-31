@@ -32,7 +32,34 @@ have never functioned; the cascade has been doing their job.
 block disabled*, proven on the same six seeds, **before** cutting it. I cut first and
 assumed, which is what produced all of the above.
 
-### The corner: still not taken, and what has been ruled out
+### The corner: traced, and the mark is the problem
+
+```
+job:fetching the ball  own:none  ballToMark:87  meToSpot:108  fetch:y  cG:0
+job:fetching the ball  own:none  ballToMark:87  meToSpot:107
+...
+job:fetching the ball  own:none  ballToMark:87  meToSpot: 88
+```
+
+**`ballToMark` is 87 and never changes.** `stageCorner` puts the mark on the corner
+**vertex** and leaves the ball where it went out — which is right, that is what a corner
+is — so the fetcher has 87 units to carry it.
+
+**But he never picks it up.** `own:none` throughout, and `meToSpot` counts steadily down
+while `ballToMark` stays fixed: he is walking toward the SPOT, not toward the BALL.
+
+`fetching the ball` claims to steer him to `ball.x, ball.y`, and the job label says it is
+the instruction running. Those two facts disagree, and that disagreement is the bug.
+
+**Candidates, in order:** another SCRIPT instruction outscoring it and steering elsewhere
+while the label lags; `dist(p,ball) > 12` being false so it silently takes the pick-up
+branch without setting `ball.owner`; or `positioning for a restart` catching the taker
+through a `restartFree` that does not hold for corners.
+
+**Ruled out already:** the rob (John's lock stops it), the taker standing on the ball,
+tolerance, and fetcher/taker being different people (they are the same).
+
+### Superseded: what had been ruled out
 
 ```
 corners staged   2 across six matches
