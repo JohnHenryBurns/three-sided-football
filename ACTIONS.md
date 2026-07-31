@@ -32,6 +32,29 @@ have never functioned; the cascade has been doing their job.
 block disabled*, proven on the same six seeds, **before** cutting it. I cut first and
 assumed, which is what produced all of the above.
 
+### Which restarts are on the state machine
+
+```
+throw-in     YES — staged kind:'throw', all four stages, action fires
+corner       YES — staged kind:'corner', but ZERO occurred in six seeds, so UNVERIFIED
+goal kick    NO  — still uses telPort, never touches pendingRestart
+free kick    partial — its own action, does not use the four stages
+kick-off     NO  — its own path
+```
+
+**Two faults found and fixed while checking:**
+
+The `throw-in` action asked only `pendingRestart.p===p` and **would have taken a corner as a
+throw-in.** The state machine gets a corner taker to stage 4 exactly like a thrower, and
+whichever action matched first took it.
+
+And `corner-swing` required `ball.owner===p` — **which the state machine makes permanently
+false**, because placing the ball releases it. The same fault the throw had, in a second
+place. Both now test `pendingRestart.kind`.
+
+**Still owed here:** the goal kick does not use the machine at all, and corners have never
+been observed running through it.
+
 ---
 
 # Action instructions — design
