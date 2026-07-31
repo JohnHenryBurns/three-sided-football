@@ -509,7 +509,35 @@ with proper sampling. **Two of the four open items were already dead.**
 behaviour. Three moves in one direction is not noise. Suspects: the clearance path, the
 area clamp, the crowded-keeper rule.
 
-**WOODWORK: still zero across eight seeds, so this one is real.** Instrumented:
+**WOODWORK: the fix was behind the bug it fixed, and there is a second cause.**
+
+**First fault, now corrected.** The crossing test lived *inside* `if(d<7)` — the very
+proximity band a fast ball skips. So the test written this morning to cure tunnelling was
+itself sitting behind the tunnelling, evaluated 15 times a match, always at the frame the
+goal was awarded and never at the frame the ball crossed. **It is now outside the guard.**
+
+**Still zero, and the reason is measurable:**
+
+```
+crossing tested on every goal edge, every frame the loop runs
+  evaluations                    3934
+  ball.px missing                   0
+  SIGN CHANGED (dPrev>0, d<=0)      1     in a match with 15 goals
+```
+
+**The ball essentially never passes through a goal plane.** Fifteen goals, one crossing.
+So goals are being awarded by something other than the ball transiting the plane — and
+until that is understood, no woodwork test of any design can fire, because it is asking
+about an event that does not occur.
+
+**And the edge loop runs on ~12% of frames**, not every frame, which is a separate thing
+worth knowing before anything else is hung off it.
+
+**Next:** watch `d` for a single goal, frame by frame, from 20 frames before the award.
+That will show what the ball actually does at the goal line, which three sessions of
+inference have failed to establish.
+
+**Superseded: still zero across eight seeds** Instrumented:
 
 ```
 one match, 15 goals scored
