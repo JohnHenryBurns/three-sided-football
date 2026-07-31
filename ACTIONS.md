@@ -442,6 +442,33 @@ answer probably restores most of the ten at once.
 no `else`, so nothing there handles a loose ball — but if claiming happens somewhere that
 depends on that block having run, guarding it would starve possession exactly this way.
 
+## The stall is one constant
+
+```
+dormant   1298 owner-frames, 13 possessions won   ~100 frames each
+flipped    153 owner-frames, 12 possessions won   ~13 frames each
+```
+
+**Possession is won equally often and lost eight times faster.** A carrier releases the
+ball within a fifth of a second instead of carrying it.
+
+**`PLAY_ON_WEIGHT = 2800` predicts exactly that.** Actions scoring 300–460 against it fire
+on 10–14% of frames, so a hold lasts 7–10 frames. The measurement matches the arithmetic,
+which means nothing is broken — the dial is simply wrong.
+
+```
+2800    a 360 action fires 11.4% of frames   hold ~9 frames
+30000   fires 1.2%                           hold ~84 frames
+```
+
+**The cascade holds ~100 frames, so the figure the game already had is around 30,000.** I
+chose 2800 by eye when the only actions were a header and a shield, and never revisited it
+when eleven more arrived.
+
+**None of the ten "broken" `can()` conditions is broken.** They never fired because nobody
+holds the ball long enough for a second action to be considered — the first one available
+takes it and ends the possession.
+
 ## Order
 
 1. find the common shape, or establish that there isn't one
