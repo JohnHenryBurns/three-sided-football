@@ -4797,12 +4797,24 @@ function stepPossession(){
 
   // ── the spell: one side, through the air as well as at the feet ──
   // lastTouch is the side that last played it, so a pass between team-mates does not end it.
-  // A SPELL ENDS WHEN THE BALL GOES DEAD, TOO — not only when another side touches it.
-  // lastTouch alone never resets, so a side that scored and kicked off again read as one
-  // unbroken spell for the whole match: spells counted ZERO because the first one never closed.
+  // ── A SPELL IS HAVING IT, NOT HAVING TOUCHED IT ───────────────────────────
+  // `lastTouch` means WHO TOUCHED IT LAST, not who has it. For a ball that is loose 80% of the
+  // time that is one side for the entire game — every seed showed a ~170 SECOND SPELL WITH THE
+  // BALL OWNED 0% OF IT. The whole match, one side, never touching it once.
+  //
+  // The value was not wrong, it was stale: a fact about history read as a fact about now. And it
+  // is why 7 holds fell inside 8 spells, when a spell should contain several holds — it
+  // contained all of them, because it never ended.
+  //
+  // Same distinction as the four-way loose split. A side has the ball while it is AT THEIR FEET
+  // or IN FLIGHT FROM THEM. The moment it is slow and unowned it is nobody's, whoever touched it
+  // last — and a completed pass still keeps the spell, which was the point of having it.
   const dead = !!(pendingRestart || freeKick || throwPending || cornerPending);
-  const t = dead ? null
-          : ((ball.lastTouch===null||ball.lastTouch===undefined) ? null : ball.lastTouch);
+  const flying = Math.hypot(ball.vx, ball.vy) > 1.2;
+  const held = !!ball.owner;
+  const t = (dead || !(held || flying)) ? null
+          : (held ? ball.owner.team
+                  : ((ball.lastTouch===null||ball.lastTouch===undefined) ? null : ball.lastTouch));
   if(t !== __spellTeam){
     if(__spellTeam !== null && __spellFrames > 0){ TEL.spells++; TEL.spellFrames += __spellFrames;
       if(__spellFrames > TEL.spellLongest) TEL.spellLongest = __spellFrames; }
