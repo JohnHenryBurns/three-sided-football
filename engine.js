@@ -628,7 +628,19 @@ function kickoff(toTeam, firstWhistle){
     p.x = CX + dx * k;
     p.y = CY + dy * k;
   });
-  telPort('kickoff'); ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
+  // ── THE KICK-OFF IS A RESTART LIKE ANY OTHER ──────────────────────────────
+  // John: no holds on kick-off. Just the time it takes the ball and the kicker to arrive at the
+  // centre, plus ripening — and the kick-off should ripen SLOWER than a throw or a corner,
+  // because it is the one restart with real ceremony.
+  //
+  // This used to teleport the ball to the centre and freeze play while a celebration ran. The
+  // freeze was the dead window: pendingKickoff set, kickoff() not yet fired, no pendingRestart —
+  // so nothing positioned anybody and fifteen men stood where the goal left them.
+  //
+  // Now the ball is placed and a taker is named. `walking back for the kick-off` brings everyone
+  // to their formation spot on foot, the taker walks to the ball, and the `kick-off` action
+  // strikes it when it ripens. No hold anywhere.
+  ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.z=0; ball.zv=0;
   ball.touchT=0; ball.strayer=null; ball.strayF=0; ball.z=0; ball.zv=0;
   cornerTaker=null; cornerGoal=null; restartHold=0; pendingRestart=null; throwPending=null;
   // ── EVERY PIECE OF PER-MATCH STATE, CLEARED ────────────────────────────────
@@ -646,6 +658,14 @@ function kickoff(toTeam, firstWhistle){
   // clears it.
   freeKick=null; goalRestart=null; walking=null; cornerPending=null; cornerSpot=null;
   justDelivered=null;
+  // ── AND THE KICK-OFF STAGES ITSELF ────────────────────────────────────────
+  // A taker is named, the ball is on the spot, and pendingRestart carries the clock the
+  // `kick-off` action ripens against. No hold: the time it takes is the time they take.
+  const koTeam = (toTeam===null||toTeam===undefined) ? 0 : toTeam;
+  const koCands = players.filter(q=>q.team===koTeam && !q.out && !q.sentOff && q.role!=='K')
+                         .sort((a,b)=>dist(a,{x:CX,y:CY})-dist(b,{x:CX,y:CY}));
+  if(koCands.length) pendingRestart = { kind:'kickoff', at:clockSec, p:koCands[0], x:CX, y:CY, team:koTeam };
+  players.forEach(q=>{ q.__atSpot=false; q.__showing=false; q.__pushed=false; });
   chaser=[null,null,null];
   retargetTimer=0; celebrateUntil=0; camFocusP=null; camFocusUntil=0;
   lastBlazeSay=-99; lastStyleAt=-99; recentChatter=[];
@@ -1527,6 +1547,32 @@ const PORTED = [
   // He picks it up for the instant of the throw because kick() reads ball.owner to know who
   // struck it, and lets go immediately after. And THE RESTART ENDS HERE, which is the thing the
   // old version never did: pendingRestart is cleared by the ball being struck, by nothing else.
+  // ── THE KICK-OFF ──────────────────────────────────────────────────────────
+  // Ripens at 40, against 60-75 for a throw and 45-65 for a corner — so it takes about 4.7
+  // seconds against their 3.5-3.9, which is John's "longer than throws and corners" without
+  // becoming the match.
+  //
+  // 22 was tried first and gave 6.4 seconds of ripening ON TOP OF the walk to the centre: 53,239
+  // player-frames of walking back, a THIRD of the match spent on kick-offs. Ceremony is not the
+  // same as a delay.
+  { name:'kick-off', tier:TIER.SCRIPT, ported:true,
+    coach:T => 0,
+    can:p => {
+      if(!pendingRestart || pendingRestart.kind!=='kickoff' || pendingRestart.p!==p) return false;
+      if(ball.owner) return false;
+      return dist(p, {x:CX,y:CY}) <= 22 && dist(ball,{x:CX,y:CY}) <= 12;
+    },
+    score:p => pendingRestart ? ripeness(pendingRestart.at!==undefined?pendingRestart.at:clockSec, 40) : 0,
+    act:p => {
+      const b=bestPass(p);
+      ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p;
+      if(b) kick(b.x+b.vx*5, b.y+b.vy*5, Math.min(6.5, Math.max(3, dist(b,p)/66*1.15)), false);
+      else  kick(CX+(RNG()*2-1)*120, CY+(RNG()*2-1)*120, 5.5, false);
+      ball.owner=null;
+      pendingRestart=null;
+      TEL.kickOffs=(TEL.kickOffs||0)+1;
+      return true;
+    } },
   { name:'throw-in', tier:TIER.SCRIPT, ported:true,
     coach:T => 0,
     // A THROW, NOT ANY RESTART. Without the kind test this action fired on corners too — the
@@ -3300,6 +3346,39 @@ const INSTRUCTIONS = [
   // Each side gathers in ITS OWN THIRD of the hex — the third containing its own goal — spread
   // laterally by the same stable hash the corner waves use, so a formation forms without anybody
   // being told a slot.
+  // ── WALKING BACK FOR THE KICK-OFF ─────────────────────────────────────────
+  // John, watching: "I see a time when the match is held and no one is positioning."
+  //
+  // He is right and it is not the ripening or restartHold — kickoff() actually CLEARS the hold.
+  // The dead window is between the goal and the kick-off: the celebration runs, pendingKickoff
+  // is set, kickoff() has not fired yet, and NO pendingRestart EXISTS — so `positioning for a
+  // restart` does not apply and nothing else has a reason to move. Fifteen men stand exactly
+  // where the goal left them, and then snap into shape when the whistle goes.
+  //
+  // This fills it. While a kick-off is pending, everybody walks to where the formation says they
+  // belong — which is the same destination kickoff() used to teleport them to, arrived at on
+  // foot. The celebration stops being dead air and becomes the walk back.
+  { name:'walking back for the kick-off', tier:TIER.SCRIPT, base:930,
+    // keyed on the RESTART, not on pendingKickoff — the kick-off is staged as a pendingRestart
+    // now, and pendingKickoff is consumed the frame it appears, so nothing ever saw it
+    applies:p => !!(pendingRestart && pendingRestart.kind==='kickoff'
+                    && pendingRestart.p!==p
+                    && !p.out && !p.sentOff),
+    score:p => 930,
+    act:p => {
+      const f = formation(p.team);
+      const idx = players.filter(q=>q.team===p.team).indexOf(p);
+      const spot = f[idx] || f[0];
+      if(!spot) return false;
+      // the side kicking off may stand in the circle; the other two may not
+      let tx=spot.x, ty=spot.y;
+      if(p.team !== pendingKickoff){
+        const dx=tx-CX, dy=ty-CY, d=Math.hypot(dx,dy);
+        if(d < CIRCLE_R+8){ const k=(CIRCLE_R+10)/(d||1); tx=CX+dx*k; ty=CY+dy*k; }
+      }
+      steer(p, tx, ty, 2.0);
+      return true;
+    } },
   { name:'taking up position', tier:TIER.SCRIPT, base:940,
     applies:p => !!(goalRestart && goalRestart.fetcher!==p && goalRestart.taker!==p
                     && !p.out && !p.sentOff && p.role!=='K'),
