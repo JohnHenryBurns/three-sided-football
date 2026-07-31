@@ -480,7 +480,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=210"></script>
+<script src="engine.js?v=211"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -1211,7 +1211,17 @@ ENGINE_HOOKS.spawnNote = (x, y, text, colour, stroke) => {
   // sides pass their own accent, and a few of those are as dark as the colour they outline.
   const fill = colour || '#ffffff';
   const ok = stroke && Math.abs(lum(stroke) - lum(fill)) > 0.35;
-  const sp = nameSprite(String(text), fill, 30, ok ? stroke : outlineFor(fill));
+  // ── THE SAME SIZE AS AN INSTRUCTION LABEL ────────────────────────────────
+  // Notes were 30px against the job labels' 22. John: the instruction annotations are the better
+  // use of the screen, so match them.
+  //
+  // He is right and it is not only about space. A pop-up note and a job label are the same KIND
+  // of thing — a word about what a man is doing — and drawing one half again as large implies a
+  // hierarchy that does not exist. "beats him!" is not more important than "closing it down"; it
+  // is the same information at a different moment.
+  //
+  // The player NAME stays at 30, because that genuinely is a different kind of thing.
+  const sp = nameSprite(String(text), fill, 22, ok ? stroke : outlineFor(fill));
   sp.position.set(x, 46, y);
   scene.add(sp);
   notes3.push({ sp, t0: performance.now(), y0: 46 });
