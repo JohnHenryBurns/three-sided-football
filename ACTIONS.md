@@ -506,6 +506,108 @@ named action with a weight rather than a rate buried in a branch.
 
 That was the point of the whole exercise.
 
+## The keeper/shooter experiment — sequenced
+
+**Why sequenced at all.** Scoring is down a third and there are five plausible causes. If
+they go in together the result is one number and no attribution. Each step below changes
+ONE thing and is measured on eight seeds against the step before it.
+
+**The current state, and this is the baseline every step is judged against:**
+
+```
+goals 11.3/match   gloves 25%   loose 74%   6/8 usable   woodwork ~1 in 8-16 matches
+```
+
+---
+
+### Step 1 — `staying up`, and nothing else
+
+A keeper declining to dive is **not nothing**. It is a named goalkeeping decision with a
+payoff: stay on your feet, stay reactive, make him commit first. The generic
+`PLAY_ON_WEIGHT` cannot express that — it carries no coach weight and appears in no
+report.
+
+**Mechanically this changes almost nothing** — he already declines most frames. That is
+the point: it makes the decision *visible* before anything is built on top of it.
+
+**Measures:** how often a keeper faces a shooter and holds, versus dives. If the split is
+already sensible, the later steps are tuning. If he never holds, the dive weight is wrong
+and that is a one-line fix rather than a new mechanic.
+
+**RESULT: the decision is never made.**
+
+```
+one match:  stayed up 1, dived 0
+goals 12.1 against a baseline of 11.3 — inside noise
+```
+
+**A keeper faces a shot and chooses once per match.** The `dive` action has been in the
+game since it was built and has essentially never fired — which means every theory about
+the keeper suppressing goals was a theory about code that does not run.
+
+**Why:** `can()` requires `ball.isShot && !ball.owner` with the ball inside 260 of his
+goal. Either a shot is claimed before a keeper frame comes round, or `isShot` is cleared
+early. **Step 2 was going to change what the keeper reads; it now has to establish that he
+ever gets asked.**
+
+**This is what step 1 was for.** One measure, one change, and it invalidated the next three
+steps before they were built.
+
+### Step 2 — REVISED: why is the keeper never asked?
+
+Not "read the shooter instead of the ball" until we know whether the situation arises at
+all. Find where a shot goes between leaving a boot and being gathered, and whether a
+keeper ever gets a frame in between.
+
+### Step 2b — the keeper reads the shooter, not the ball
+
+`dive` currently fires on `ball.isShot`, which is an outcome. **You cannot deceive
+something that only reads outcomes** — a fake never sets `isShot`, so there is nothing to
+fool.
+
+Change the read to *an opponent has the ball, is squared up to my goal, and is in range*.
+All observable, all prior to the shot. **Deception becomes possible without building
+deception.**
+
+**Noise goes in the timing, not the direction.** A keeper who commits early or late is
+beatable; one who commits *wrongly* is just broken.
+
+### Step 3 — the jump becomes a choice
+
+Today the claim test hands him a reach of 23 for high balls **passively**. He gets the top
+of the goal for free and never chooses it, which is why a high shot does not beat him.
+
+```
+dive        sideways   covers width, commits, 1.2s
+jump        upward     covers height, commits
+staying up  neither    covers the middle, stays free
+```
+
+Three bets against an uncertain input. **The keeper must pay for the top of the goal.**
+
+### Step 4 — the shooter gets goal awareness
+
+The shot offset is uniform across the mouth with **no reference to where the keeper is
+standing** — so a third of shots go straight at him by construction. This is the most
+likely single cause of the scoring drop and it is deliberately fourth: it should be
+measured against a keeper who already commits, or it will be tuned against the wrong
+opponent.
+
+### Step 5 — `shot-high`, `shot-far`, `fake-and-pass`
+
+Only once 1–4 are measured. Each is a weight and a coach term; four new weights tuned
+against an untested keeper would mean nothing.
+
+**`shot-high` is nearly free:** the keeper cannot claim above z=28 and the bar is at 54.
+**A shot aimed between them beats him and risks the woodwork** — real risk and reward
+straight out of the geometry, no tuned probability required.
+
+---
+
+**Rule for the sequence:** eight seeds, compared against the previous step, and the result
+recorded here before the next step begins. Any step that does not move its own measure
+gets reverted rather than kept "because it is more correct".
+
 ## Order
 
 1. find the common shape, or establish that there isn't one
