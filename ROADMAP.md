@@ -156,6 +156,38 @@ like this.**
 
 **Trace `pendingRestart.at` across a goal kick before changing anything else.**
 
+## The opening kick-off — half fixed
+
+**John's audit:** the kicker starts on top of the ball, the annotation fires, a countdown
+runs, the annotation fires again, then he steps back and *on the mark* appears before he
+finally kicks.
+
+**Traced, and the first frame explains all of it:**
+
+```
+t=0.0  job:carrying it              own:me     <- he has the ball already
+t=0.1  job:carrying it to the mark  own:none   <- "on the mark" fires here
+t=0.1  job:standing over it
+t=0.1  job:pending the kick
+```
+
+**He owns the ball at kick-off**, so the restart machine walks him through *putting down a
+ball he should never have picked up* — carrying it, carrying it to the mark, standing over
+it. That is the whole sequence, and every step of it is the machine working correctly on a
+state it should never have been given.
+
+**Fixed: he is now placed 17 units behind the ball at staging**, in the same operation that
+places the ball, so the opening state is the one the instructions expect.
+
+**Not fixed: he still owns it at t=0.0.** The claim cannot be the source — a ball within 16
+of a restart mark is unclaimable and this one is exactly on it. **Something else assigns
+`ball.owner` between `kickoff()` and the first `think()`.**
+
+**Where to look:** `kickoff()` sets `ball.owner=null` and so does the new staging block, so
+the assignment happens after both. Candidates are the page's own opening sequence, or a
+`kickoff()` call whose staging runs before `resetMatch()` clears it. **Print `ball.owner`
+either side of the first `think()` and it will name itself.**
+
 ## New priorities — from watching matches
 
 **1. Instruction state flickers during transitions — MEASURED, NOT FIXED.**

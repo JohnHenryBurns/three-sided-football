@@ -664,7 +664,27 @@ function kickoff(toTeam, firstWhistle){
   const koTeam = (toTeam===null||toTeam===undefined) ? 0 : toTeam;
   const koCands = players.filter(q=>q.team===koTeam && !q.out && !q.sentOff && q.role!=='K')
                          .sort((a,b)=>dist(a,{x:CX,y:CY})-dist(b,{x:CX,y:CY}));
-  if(koCands.length) pendingRestart = { kind:'kickoff', at:clockSec, p:koCands[0], x:CX, y:CY, team:koTeam };
+  // ── AND HE STANDS OFF IT, NOT ON IT ───────────────────────────────────────
+  // John, watching the opening kick-off: the kicker starts on top of the ball, the annotation
+  // fires, a countdown runs, the annotation fires again, then he steps back and "on the mark"
+  // appears before he finally kicks.
+  //
+  // Traced: at t=0.0 he ALREADY OWNS THE BALL. formation() puts a forward on the centre spot and
+  // the ball is on the centre spot, so he claims it before the restart machine sees anything.
+  // The machine then walks him through PUTTING DOWN A BALL HE SHOULD NEVER HAVE PICKED UP —
+  // carrying it, carrying it to the mark, standing over it — which is the sequence he watched.
+  //
+  // The ball is placed and the taker is placed BEHIND it, in one operation, so the opening state
+  // is the state the instructions expect rather than one they have to unpick.
+  if(koCands.length){
+    const kp = koCands[0];
+    const t9 = targets[koTeam];
+    const g9 = (t9===null||t9===undefined) ? {x:CX, y:CY-1} : goalCenter(t9);
+    const bx = CX-g9.x, by = CY-g9.y, bl = Math.hypot(bx,by)||1;
+    kp.x = CX + bx/bl*17; kp.y = CY + by/bl*17; kp.vx=0; kp.vy=0;
+    ball.owner = null;                     // and nobody starts holding it
+    pendingRestart = { kind:'kickoff', at:clockSec, p:kp, x:CX, y:CY, team:koTeam };
+  }
   players.forEach(q=>{ q.__atSpot=false; q.__showing=false; q.__pushed=false; });
   chaser=[null,null,null];
   retargetTimer=0; celebrateUntil=0; camFocusP=null; camFocusUntil=0;
