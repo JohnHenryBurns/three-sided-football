@@ -1062,6 +1062,19 @@ function restartSpot(p){
     const gx=CX-R.x, gy=CY-R.y, gl=Math.hypot(gx,gy)||1;
     return { x:R.x + gx/gl*14, y:R.y + gy/gl*14 };
   }
+  // ── A KICK-OFF HAS NO OUTWARD ─────────────────────────────────────────────
+  // This puts a taker 22 units OUTWARD FROM THE PITCH CENTRE. At a kick-off the mark IS the
+  // centre, so the offset vector has zero length, `ol` falls back to 1, and he is placed exactly
+  // on the ball — standing inside it, which is what John saw.
+  //
+  // A kicker at a kick-off stands behind the ball relative to the goal he is attacking. There is
+  // no outward at the centre spot, so the direction has to come from somewhere else.
+  if(R.kind==='kickoff'){
+    const t9=targets[p.team];
+    const g9 = (t9===null||t9===undefined) ? {x:CX,y:CY-1} : goalCenter(t9);
+    const bx=R.x-g9.x, by=R.y-g9.y, bl=Math.hypot(bx,by)||1;
+    return { x:R.x + bx/bl*17, y:R.y + by/bl*17 };
+  }
   const odx=R.x-CX, ody=R.y-CY, ol=Math.hypot(odx,ody)||1;
   return { x:R.x + odx/ol*22, y:R.y + ody/ol*22 };
 }
@@ -2658,7 +2671,14 @@ const INSTRUCTIONS = [
     score:p => 956,
     act:p => { const q=restartSpot(p); steer(p, q.x, q.y, 2.6); return true; } },
 
-  // ── POSITIONING FOR A RESTART ─────────────────────────────────────────────
+  // ── SPREADING FOR A GOAL KICK ─────────────────────────────────────────────
+  // Renamed. It began as the generic restart shape and every other restart has since grown its
+  // own — showing for a throw, the corner shape, clearing the penalty area, walking back for the
+  // kick-off. Measured, this now serves 97% GOAL KICKS and 2% throws.
+  //
+  // 97% of one thing is not a fallback, it is a specialist that has not been told. The name now
+  // says what it does, and the distances can be tuned for a keeper launching from the six-yard
+  // box rather than for a throw-in from the touchline.
   // John's rule, and it is the right one: do not protect the fetcher with a special case —
   // give everybody else a MANDATORY instruction that leaves them nothing else to do.
   //
@@ -2732,7 +2752,7 @@ const INSTRUCTIONS = [
       }
       return true;
     } },
-  { name:'positioning for a restart', tier:TIER.SCRIPT, base:940,
+  { name:'spreading for a goal kick', tier:TIER.SCRIPT, base:940,
     // ── NOT AT A KICK-OFF ─────────────────────────────────────────────────
     // A kick-off has its OWN positioning — `walking back for the kick-off`, which sends every man
     // to his resting spot. This generic one fans them out around the mark, which at a kick-off
