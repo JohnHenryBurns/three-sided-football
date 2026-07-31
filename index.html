@@ -389,9 +389,8 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
 
     /* Edit mode reads as armed rather than merely pressed: the accent fills it, because a mode
        you can leave the pitch in needs to be obvious that you are in it. */
-    #editBtn{min-width:38px;font-size:15px;line-height:1}
-    #editBtn.on{background:var(--accent,#ffd166);color:#10151a;border-color:var(--accent,#ffd166)}
-    #editBtn:disabled{opacity:.28;cursor:default}
+    /* The edit button is gone: paused IS editable, so the mode needed no control of its own
+       and the bar fits in portrait again. */
 </style>
 
 <header>
@@ -474,8 +473,6 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
        else, and could not tell what the next press would do. Two buttons say it: the arrows
        point the way each one moves, the number between them is where you are, and a button
        greys out when there is nowhere further to go. -->
-  <!-- Edit mode: only meaningful while paused, so it says so by being disabled. -->
-  <button id="editBtn" title="edit: drag the ball" aria-label="edit mode">&#9998;</button>
   <span id="spdwrap">
     <button id="spdDown" title="slower" aria-label="slower">&#171;</button>
     <span id="spdNow">1&times;</span>
@@ -488,7 +485,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=216"></script>
+<script src="engine.js?v=217"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2216,7 +2213,10 @@ scene.add(ballGL);
 // the page was fine.
 //
 // 13 to 17 across: the ball is 9, and a finger on a phone is a great deal wider than that.
-let editMode = false, grabbed = null;
+// PAUSED IS EDITABLE. `editMode` is not stored — it is a question, asked of `running`, so the two
+// can never disagree. A stored copy would need syncing at every place the match starts or stops,
+// and one of those would eventually be missed.
+let grabbed = null;
 const editPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const editRay = new THREE.Raycaster();
 const editHit = new THREE.Vector3();
@@ -2663,8 +2663,8 @@ let drawGL = function drawGL(){
   ballGL.position.set(netFly ? netFly.x : ball.x, by, netFly ? netFly.y : ball.y);
   // the grab ring sits under the ball while editing, and brightens once you have hold of it
   if (editHalo) {
-    editHalo.visible = editMode;
-    if (editMode) {
+    editHalo.visible = !running;
+    if (!running) {
       editHalo.position.set(ball.x, 1.6, ball.y);
       editHalo.material.opacity = grabbed === 'ball' ? 1 : 0.6;
     }
@@ -3252,9 +3252,8 @@ function setPlayIcon(){
 }
 document.getElementById('play').addEventListener('click', () => {
   running = !running; setPlayIcon(); keepAwake(running);
-  // starting the match leaves edit mode — you cannot drag a ball that is in play
-  if (running) setEdit(false);
-  syncEditBtn();
+  // resuming drops whatever was in hand — you cannot carry a ball into live play
+  if (running) grabbed = null;
 });
 // Reset opens the menu rather than restarting the same match: a reset is the moment you might
 // want different teams or a different length, and the flat page treats it the same way.
@@ -3287,8 +3286,6 @@ function setSpeed(i){
   document.getElementById('spdDown').disabled = (i === 0);
   document.getElementById('spdUp').disabled   = (i === SPEEDS.length-1);
 }
-document.getElementById('editBtn').addEventListener('click', () => { setEdit(!editMode); syncEditBtn(); });
-syncEditBtn();
 document.getElementById('spdDown').addEventListener('click', () =>
   setSpeed(SPEEDS.indexOf(speed) - 1));
 document.getElementById('spdUp').addEventListener('click', () =>
@@ -3531,21 +3528,15 @@ function panAllowed(){ return !follow; }   // following overwrites the target ev
 /** The button reflects the two things that matter: whether edit mode is ON, and whether it is
  *  even available. Disabled while the match runs, because phase one only moves a ball and a ball
  *  in flight is not a thing you place. */
-function syncEditBtn(){
-  const b = document.getElementById('editBtn');
-  if (!b) return;
-  b.disabled = running;
-  b.classList.toggle('on', editMode && !running);
-  b.title = running ? 'pause to edit' : (editMode ? 'editing: drag the ball' : 'edit: drag the ball');
-}
+// ── PAUSED IS EDITABLE ──────────────────────────────────────────────────────
+// John: pause could automatically be edit mode. He is right, and it removes a button from a bar
+// that does not fit in portrait — but the better argument is that THE MODE WAS ALWAYS REDUNDANT.
+// It could only be entered while paused and was left the moment play resumed, so it carried
+// exactly the information `running` already carries.
+//
+// A toggle whose state is a function of another toggle is not a mode, it is a second name for
+// the same thing.
 
-function setEdit(on){
-  editMode = !!on && !running;
-  const b = document.getElementById('editBtn');
-  if (b) b.classList.toggle('on', editMode);
-  if (!editMode) grabbed = null;
-  if (editHalo) editHalo.visible = editMode;
-}
 
 // The halo is built beside the ball, far above — see the note there. Declaring it HERE, below the
 // render loop that uses it, put it in the temporal dead zone: `const` does not hoist a value, so
@@ -3557,7 +3548,11 @@ function turfAt(clientX, clientY){
   const r = cv.getBoundingClientRect();
   const nx = ((clientX - r.left) / r.width) * 2 - 1;
   const ny = -((clientY - r.top) / r.height) * 2 + 1;
-  editRay.setFromCamera({ x: nx, y: ny }, camera);
+  // `cam`, not `camera`. The page's camera has been called `cam` since it was written and I
+  // used the name three.js documentation uses — so this threw on the first tap and the ball
+  // never moved. loadcheck.js cannot catch it: it only fails inside a pointer handler, which
+  // never fires in a headless run.
+  editRay.setFromCamera({ x: nx, y: ny }, cam);
   return editRay.ray.intersectPlane(editPlane, editHit) ? { x: editHit.x, y: editHit.z } : null;
 }
 
@@ -3575,7 +3570,7 @@ cv.addEventListener('pointerdown', e => {
   // ── EDIT MODE TAKES THE POINTER FIRST ─────────────────────────────────────
   // Only if the finger actually landed on the ball. Anywhere else on the pitch still orbits the
   // camera, because a mode that steals every gesture is a mode you cannot see out of.
-  if (editMode && overBall(e.clientX, e.clientY)) {
+  if (!running && overBall(e.clientX, e.clientY)) {
     grabbed = 'ball';
     cv.setPointerCapture(e.pointerId);
     return;
