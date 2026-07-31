@@ -2046,6 +2046,65 @@ function restartFree(p){
   return false;
 }
 
+// ── COMMENTARY HANGS OFF ACTION NAMES ───────────────────────────────────────
+// Fifteen of twenty actions are silent, and the five that speak have their lines hardcoded in
+// act(). So every new action arrives mute and somebody has to remember to give it a voice.
+//
+// A table instead. An action fires, this layer decides whether to say anything about it, and a
+// new action gets commentary by adding a row rather than by editing its body.
+//
+// `rate` is how often it is worth remarking on. A tackle every time would be exhausting; a
+// penalty every time is the point.
+const ACTION_SAY = {
+  'shot':          { rate:0.30, lines:p=>[
+      `${p.name} lets fly!`,
+      `${p.name} goes for it — no hesitation.`,
+      `A sight of goal and ${p.name} takes it.`] },
+  'shot-power':    { rate:0.70, lines:p=>[
+      `${p.name} from DISTANCE — that is ambitious!`,
+      `Absolute howitzer from ${p.name}!`,
+      `${p.name} saw the keeper off his line and went for the roof.`] },
+  'through ball':  { rate:0.35, lines:p=>[
+      `${p.name} slides it through the gap!`,
+      `Lovely ball from ${p.name} — into the space, not at the feet.`,
+      `${p.name} plays the pass nobody else saw.`] },
+  'pass backwards':{ rate:0.14, lines:p=>[
+      `${p.name} turns back — nothing on, so he keeps it.`,
+      `Sensible from ${p.name}: the front was bolted shut.`,
+      `${p.name} recycles. Patience is a tactic.`] },
+  'hoof it':       { rate:0.22, lines:p=>[
+      `${p.name} wants none of that — hoofed clear!`,
+      `${p.name} launches it into the ${pick(['night','stands','general direction of Cascadia'])}.`,
+      `Row Z beckons and ${p.name} obliges.`] },
+  'shield it':     { rate:0.10, lines:p=>[
+      `${p.name} puts ${PRN(p).his} body between man and ball.`,
+      `${p.name} shields it — nowhere to go, so nowhere he goes.`] },
+  'gk-punt':       { rate:0.20, lines:p=>[
+      `${p.name} clears his lines with interest.`,
+      `Up and away from ${p.name} — somebody go and find it.`] },
+  'gk-clear':      { rate:0.30, lines:p=>[
+      `${p.name} is not messing about — gone.`,
+      `Panic? Not quite. ${p.name} just did not fancy it.`] },
+  'sweeping':      { rate:0.45, lines:p=>[
+      `${p.name} races off his line and gets there first!`,
+      `Sweeper-keeper stuff from ${p.name}.`] },
+  'throw-in':      { rate:0.10, lines:p=>[`${p.name} takes it quickly.`] },
+  'corner-swing':  { rate:0.55, lines:p=>[
+      `${p.name} swings it in...`,
+      `Here comes the delivery from ${p.name}...`] },
+  'penalty':       { rate:1.00, lines:p=>[
+      `${p.name} steps up. The whole ground holds its breath.`] },
+  'free-kick':     { rate:0.40, lines:p=>[
+      `${p.name} over it... and strikes!`,
+      `${p.name} takes aim from the set piece.`] },
+};
+
+function sayAction(name, p){
+  const e=ACTION_SAY[name];
+  if(!e || RNG()>e.rate) return;
+  sayLogged(pick(e.lines(p)));
+}
+
 function runAction(p){
   // ── A RESTART LOCKS EVERYBODY BUT THE TAKER AND THE FETCHER ──────────────
   // John's correction, and the lock was wrong without it: I wrote it as "everybody but
@@ -2109,7 +2168,9 @@ function runAction(p){
       const A = pool[i].A;
       p.lastAction = A.name;
       TEL.actFrames[A.name] = (TEL.actFrames[A.name]||0) + 1;
-      return A.act(p)!==false;
+      const did = A.act(p)!==false;
+      if(did) sayAction(A.name, p);     // the consequence layer, once, after it happened
+      return did;
     }
   }
   TEL.actFrames['play on'] = (TEL.actFrames['play on']||0) + 1;
