@@ -42,7 +42,9 @@ function play(opts){
              get pendingKickoff(){return pendingKickoff}, set pendingKickoff(v){pendingKickoff=v},
              get resumeAt(){return resumeAt}, set resumeAt(v){resumeAt=v},
              get walkPending(){return walkPending}, set walkPending(v){walkPending=v},
-             seedRNG, dist };`)();
+             seedRNG, dist,
+             get NEUTRAL_COACHING(){return NEUTRAL_COACHING},
+             set NEUTRAL_COACHING(v){NEUTRAL_COACHING=v} };`)();
 
   // ── THE CLOCK ─────────────────────────────────────────────────────────────
   // Milliseconds of MATCH time, advanced by the loop. Everything the engine waits on now waits
@@ -82,6 +84,11 @@ function play(opts){
   // SEEDED, so this match can be run again. Derived from the configuration, so the same request
   // always produces the same match — which is what makes a before-and-after comparison mean
   // anything, and what makes a degenerate match investigable instead of a ghost.
+  // THE HARNESS RUNS NEUTRAL BY DEFAULT. Every measurement here is for tuning, and tuning
+  // against three tactical identities means tuning against noise — a change to a weight shows up
+  // mixed with how TikiTaka and Route One each respond to it. Pass neutral:false to measure the
+  // game as it is actually played.
+  if (o.neutral !== false && 'NEUTRAL_COACHING' in E) E.NEUTRAL_COACHING = true;
   if (typeof E.seedRNG === 'function') {
     const sd = (o.seed !== undefined) ? o.seed
              : (o.teams[0]*7919 + o.teams[1]*104729 + o.teams[2]*1299709 + (o.first||0)*31 + (o.minutes||5)*17);
