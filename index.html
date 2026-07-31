@@ -462,7 +462,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=150"></script>
+<script src="engine.js?v=151"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2212,7 +2212,10 @@ let drawGL = function drawGL(){
         // that is the thing worth seeing at a glance. Red compels, orange forbids, yellow
         // advises, green chooses — and grey is the old cascade, which is none of those because
         // nobody has named it yet. Watching for grey is watching for work left to do.
-        const TIER_COL = { 4000:'#ff5a5a', 3000:'#ff9f3d', 1300:'#ffe14d', 1000:'#7ee787' };
+        // 0 IS GREY AND LOUD. An untiered job means nobody assigned it — a cascade branch, or a
+        // call that forgot its tier — and it must not borrow PLAYER's green. That default is how
+        // a surviving cascade block hid in plain sight for hours.
+        const TIER_COL = { 4000:'#ff5a5a', 3000:'#ff9f3d', 1300:'#ffe14d', 1000:'#7ee787', 0:'#8b8b8b' };
         const col = TIER_COL[p.jobTier] || '#9aa8a0';
         const nl = nameSprite(b.jobText || '\u2014', col, 22, 'rgba(6,10,8,.92)');
         nl.position.set(0, H_P + 40, 0);
