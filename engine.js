@@ -804,6 +804,20 @@ function ballOutOfPlayCheck(){
   }
   if(worst >= 0 || !we) return;                // in play
 
+  // ── A BALL IN THE NET IS NOT OUT OF PLAY, IT IS A GOAL ────────────────────
+  // This staged a restart for ANY ball past a line — including one that crossed the goal line
+  // INSIDE THE MOUTH, which is a goal. With the stadium wall stopping it at 34 out, a ball in
+  // the net was caught here and staged as a corner.
+  //
+  // John: "goals seem to be triggering corners rather than a score." Corners outnumbered goals
+  // three to one in the seeds, which is exactly that.
+  //
+  // The mouth belongs to the goal test. This check must not touch it.
+  if(we.goal){
+    const along = (ball.x-we.mx)*we.ux + (ball.y-we.my)*we.uy;
+    if(Math.abs(along) < we.len*GOAL_HALF) return;
+  }
+
   TEL.oobState++;
   // THE STATE MUST BE CLEARED, NOT JUST REPORTED. Calling outOfBounds() alone staged a restart
   // and left the ball where it was — so the condition was still true next frame and it staged
