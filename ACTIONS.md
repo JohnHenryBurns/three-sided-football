@@ -745,6 +745,43 @@ prerequisite, a rate is a score, and anything that rolls dice in `can()` is char
 actions a match.** John's Mayhem target needs ~40 fouls, which needs ~200 actions. The
 lever is not the foul weights and never was; it is how often any action fires at all.
 
+## The throw-in cannot fire, and I have not fixed it
+
+John, from the browser: *the fetcher keeps "carry it" while wandering, the ball floats at
+the mark, the throw never happens.*
+
+**Two real faults found, neither of which fixed it:**
+
+**1. The throw demanded ownership he does not have.** `carrying it to the mark` puts the
+ball DOWN — correct, that is what a throw-in is — and then the action's `can()` required
+`ball.owner===p`. Never true. Ball on the mark, thrower standing over it, nothing
+resolving.
+
+**2. `restartSince` is read and never set.** The throw's score is
+`ripeness(p.restartSince||clockSec, ...)`, and `ripeness` is `(clockSec - since)^2 * rate`.
+With `since` defaulting to `clockSec`, elapsed is **zero**, score is **zero**. **The
+throw-in has been unable to fire since the day it was written**, and the same is true of
+the penalty.
+
+**Both are genuine and both are now known. Fixing them made things worse:**
+
+```
+                    held%   freeze   throws
+last good state      15%     8.9s      0
++ ownership fix       1%    51.1s      0
++ restartSince fix    3%    60.0s      0
+```
+
+**Freezes of nearly two minutes.** So there is a third thing, and my changes let the match
+reach a state the old bugs were accidentally preventing.
+
+**Reverted to the last good state.** The two faults are documented here rather than
+half-fixed on main — they are correct diagnoses that need a third piece before they help.
+
+**Next: trace one throw-in end to end.** Stage, fetch, carry, place, throw. Print every
+state change. I have now made three changes to this path on inference and every one made it
+worse.
+
 ## STILL OWED — the ledger
 
 **Nothing here is done. It is written down so it cannot quietly stop being owed.**
