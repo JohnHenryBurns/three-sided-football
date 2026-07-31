@@ -432,6 +432,27 @@ being played — deliberately, but it should be stated whenever a harness figure
 **~1.5x remains unexplained**, and it is the same gap on `closing it down`: 1% harness,
 7% browser.
 
+### And the rest is variance
+
+```
+harness, eight matches   720, 900, 960, 1050, 1200, 1290, 1320, 1470 per 90
+browser, one match       834
+```
+
+**834 sits inside the harness range**, second-lowest of nine. The harness median is 1200,
+so this browser match was quiet — **but it is not a different distribution.**
+
+**The spread is 2:1 between the quietest and busiest match.** Which means comparing one
+browser log against a handful of harness runs cannot detect anything smaller than a
+doubling, and every "the harness is wrong by X" claim today has been inside that noise.
+
+**The rule this gives:** a single browser match is a *sanity check*, not a measurement. It
+can tell us the game is not broken — which it did, and that was worth having. It cannot
+tell us a rate is 1.3x off, and I have twice claimed it could.
+
+**To compare properly:** either several browser logs, or a harness figure quoted with its
+range rather than its mean. The second is free and should have been the default.
+
 ### What is left to check
 
 The two loops are not identical and never were. **The celebration hold is 3.5s in the
