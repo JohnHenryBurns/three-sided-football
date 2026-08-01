@@ -311,8 +311,15 @@ beside somebody else's staff, which is at least legible.
 **A man carrying the ball drops it when he sits down**, with the usual no-claim window. The
 alternative is a ball that is owned by a man who is not on the pitch.
 
-**Still open:** a man dragged off the pitch and left there. `onPitch(p)` gates most
-instructions so he stands inert. Not decided.
+**SETTLED: nothing leaves the turf.** `clampToPitch()` lives in the engine — its own
+definition of where the pitch is, expressed once — and the drag runs through it. A man cannot
+reach the stands, so there is nothing to decide about what he would do there. The one
+exception is a man held over his own dugout, who is allowed off the grass because that is
+where he is going.
+
+Iterated four passes, because the pitch is a hexagon and pushing a point off one edge can put
+it outside the next: one pass failed from most bearings, four settles it, 288 of 288 test
+points land on the grass.
 
 ### Superseded: phase 3 as planned
 
