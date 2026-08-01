@@ -642,7 +642,7 @@ function kickoff(toTeam, firstWhistle){
   // strikes it when it ripens. No hold anywhere.
   ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.z=0; ball.zv=0;
   ball.touchT=0; ball.strayer=null; ball.strayF=0; ball.z=0; ball.zv=0;
-  cornerTaker=null; cornerGoal=null; restartHold=0; pendingRestart=null; throwPending=null;
+  cornerTaker=null; cornerGoal=null; restartHold=0; pendingRestart=null; ball.oob=false; throwPending=null;
   // ── EVERY PIECE OF PER-MATCH STATE, CLEARED ────────────────────────────────
   // A match could begin holding a stale free kick, a stale goal restart, or a chaser pointing at
   // a player from the previous game — because these are module-level and resetMatch() did not
@@ -964,6 +964,10 @@ function wallClear(fk){
 }
 
 function kick(tx,ty,power,isShot){
+  // A kicked ball is a ball in play. Every restart ends here, so this is the one place the
+  // out-of-play flag clears — rather than in each of throw, corner, goal kick, free kick and
+  // kick-off, where one would eventually be missed.
+  ball.oob=false;
   freeKick=null;                         // struck: the free kick is over
   // WHO JUST DELIVERED A CORNER, so an instruction can give him something to do. This used to
   // set a `noChase` flag, which is a rule about what he WILL NOT do — and a flag that says what a
@@ -1139,7 +1143,9 @@ function holdingPlay(){
   //
   // Clearing it here rather than at every site that ends a restart: there are five of those and
   // this is the one place that cares.
-  if(ball.fetch && !pendingRestart) ball.fetch=null;
+  // The oob flag clears when the fetch does. The `if` had NO BRACES, so this ran every frame
+  // regardless and the ball was never out of play for a single one.
+  if(ball.fetch && !pendingRestart){ ball.fetch=null; ball.oob=false; }
   if(nowMs() >= restartHold) return false;
   return !!(pendingRestart || freeKick || cornerPending || throwPending || goalRestart || ball.fetch);
 }
@@ -2831,7 +2837,14 @@ const INSTRUCTIONS = [
                     && dist(ball, {x:pendingRestart.x, y:pendingRestart.y}) > 12),
     score:p => 960,
     act:p => {
-      if(dist(p,ball) > 12){ steer(p, ball.x, ball.y, 2.6); return true; }
+      // ── HE HUSTLES FOR A DEAD BALL ────────────────────────────────────────
+      // The ball rolls out properly now, so fetching it is a real journey rather than a step
+      // to the touchline — and at a walk it ate the match: throws fell from 19 to 6 and goals
+      // from 7.5 to 3.5 in a three-minute game.
+      //
+      // A player retrieving a ball that is out of play JOGS AFTER IT. Nobody strolls to a
+      // throw-in while the clock runs, and the laws even punish it.
+      if(dist(p,ball) > 12){ steer(p, ball.x, ball.y, 3.0); return true; }
       ball.owner=p; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
       ENGINE_HOOKS.spawnNote(ball.x, ball.y-22, "\u{1F450} fetched", TEAMS[p.team].color);
       return true;
@@ -4342,6 +4355,12 @@ function physics(dt){
     //
     // A rule that undoes an action every frame is not a rule, it is an argument. He simply
     // cannot gather it out here, which is the actual law and needs no correction afterwards.
+    // ── A BALL OUT OF PLAY IS NOBODY'S ────────────────────────────────────
+    // It rolls now rather than stopping on the line, so it spends real time off the grass with
+    // players near it. Only the man sent to fetch it may pick it up — otherwise a defender
+    // standing by the corner flag collects a ball that is out, and play carries on illegally.
+    if(ball.oob && !(ball.fetch && ball.fetch.by===p)) return;
+
     if(p.role==="K" && !mayGather(p)) return;   // he cannot gather it out here
 
 
@@ -5730,7 +5749,27 @@ function outOfBounds(k,e){
   if(pendingRestart||ball.fetch||nowMs()<restartHold) return;
   const toucher=ball.lastTouch;
   const ex=ball.x, ey=ball.y;
-  ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0; ball.owner=null; ball.noClaim=null; ball.isShot=false; ball.allyPass=false; ball.flameShot=false;
+  // ── IT KEEPS ROLLING ──────────────────────────────────────────────────────
+  // This stopped the ball dead the frame it crossed, so a ball hammered over the line came to
+  // rest exactly ON the line every time. John: let it roll out, and make somebody fetch it from
+  // where it actually ends up.
+  //
+  // THE MACHINERY FOR THAT ALREADY EXISTS AND ALWAYS DID. `ball.fetch` names a man and a mark,
+  // `fetching the ball` walks him to wherever the ball IS, and `carrying it to the mark` brings
+  // it back. None of that assumed the ball was on the line — only this line did.
+  //
+  // The mark is still the crossing point, which is the actual law: a throw is taken from where it
+  // went out, not from where it stopped. The stadium wall keeps it out of the car park.
+  //
+  // It does come down out of the air, though — a ball bouncing behind the goal for four seconds
+  // is not drama, it is a wait — and it drags as it leaves the grass.
+  ball.z=0; ball.zv=0; ball.owner=null; ball.noClaim=null; ball.isShot=false;
+  ball.allyPass=false; ball.flameShot=false;
+  ball.oob=true;                       // out of play: only the fetcher may touch it
+  // NO EXTRA DRAG. I halved the velocity here at first, which is a number invented to solve a
+  // problem nobody had: the ball's own friction already slows it, and a ball that crosses at 10
+  // SHOULD travel. Measured at the crossing: median speed 2, fastest 10.3 — so most balls trickle
+  // out and barely move, which is right, and the hammered ones make a proper trip.
   addStoppage(0.8);
   if(e.goal){
     const ownerT=GOAL_EDGE.indexOf(k);
@@ -5808,7 +5847,14 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
   //
   // So he fetches it, carries it, and puts it DOWN ON THE MARK. He does not keep hold of it.
   ball.owner=null;
-  ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+  // ── AND THE STAGER DOES NOT STOP IT EITHER ────────────────────────────────
+  // outOfBounds lets the ball roll and this zeroed it two lines later, so it still came to
+  // rest on the line: 84 of 91 balls travelled under five units past it, and a frame-by-frame
+  // trace showed speed 0.00 from the very first frame out.
+  //
+  // Staging a restart is naming a taker and a mark. It is NOT a decision about where the ball
+  // is — the ball is wherever it rolled to, and the fetcher's whole job is going to get it.
+  ball.z=0; ball.zv=0;                       // it comes down, but it keeps going
   ball.fetch={ by:thr, sx, sy, team:thr.team, at:clockSec };
   pendingRestart={ kind:'throw', at:clockSec, p:thr, x:sx, y:sy, team:thr.team, fetch:true,
                   cap:nowMs()+20000, readyAt:nowMs()};
@@ -5866,8 +5912,14 @@ function stageCorner(ownerT,e,ex,ey){
   //
   // The ball stays where it went out. He walks to it, then nudges it across, and only when it is
   // on the arc does the ceremony start.
+  // ── AND THE STAGER DOES NOT STOP IT EITHER ────────────────────────────────
+  // outOfBounds lets the ball roll and this zeroed it again two lines later, so it still came
+  // to rest on the line — 84 of 91 balls travelled under five units past it.
+  //
+  // Staging a restart is naming a taker and a mark. It is not a decision about where the ball
+  // is: the ball is wherever it rolled to, and the fetcher's whole job is going to get it.
   ball.owner=null;
-  ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+  // (the ball keeps rolling — see the note above)
   ball.fetch={ by:taker, sx:cx2, sy:cy2, team:att, at:clockSec, ground:true };
   pendingRestart={ kind:'corner', at:clockSec,p:taker, x:cx2, y:cy2, team:att, fetch:true, ground:true,
                   cap:nowMs()+20000, readyAt:nowMs()};
