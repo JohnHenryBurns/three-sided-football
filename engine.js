@@ -955,18 +955,29 @@ function ballOutOfPlayCheck(){
 //
 // Everywhere else the clamp is unchanged: the touchlines still hold.
 function clampInside(p,margin){
+  // ── A PLAYER MAY LEAVE THE FIELD ──────────────────────────────────────────
+  // John, on a ball stuck against the touchline with three men unable to reach it: release them
+  // from the pitch clamp — if players go off, that is fine by the laws.
+  //
+  // He is right, and it is the same fault as the goal mouth in a second place. The clamp held men
+  // 14 units INSIDE every line while the ball is in play right up to it, so a ball on the paint
+  // sat in a ring nobody could enter. I fixed the goal mouth by carving an exception; the
+  // touchline needed the same, and the corner needed it twice over.
+  //
+  // AN EXCEPTION PER PLACE IS A PATTERN SAYING THE RULE IS WRONG. The laws do not fence players
+  // in — a winger stands off the pitch to take a throw, a defender follows the ball over the line
+  // — and nothing here needed them fenced. `onPitch(p)` is a STATUS test, not a geometric one, so
+  // a man off the grass keeps every instruction he had. I said otherwise earlier today and was
+  // wrong about my own engine.
+  //
+  // What remains is the stadium: they may not leave it, because there is nothing out there and a
+  // man who wanders has no way back. 30 units past the line is the touchline furniture and the
+  // space behind the goal, which is where footballers actually go.
   for(const e of EDGES){
     const d=(p.x-e.p1.x)*e.nx+(p.y-e.p1.y)*e.ny;
-    let m=margin;
-    if(e.goal){
-      const along=(p.x-e.mx)*e.ux+(p.y-e.my)*e.uy;
-      if(Math.abs(along) < e.len*GOAL_HALF) m=-10;   // in front of his own goal: he may go in
-    }
-    if(d<m){ p.x+=e.nx*(m-d); p.y+=e.ny*(m-d); }
+    if(d < -30){ p.x+=e.nx*(-30-d); p.y+=e.ny*(-30-d); }
   }
 }
-
-// (the old clamp is gone: it had no goal-mouth exception and was the deadlock)
 function steer(p,tx,ty,maxV){
   maxV*=speedMult(p);
   let dx=tx-p.x, dy=ty-p.y; const d=Math.hypot(dx,dy)||1;
@@ -1590,6 +1601,11 @@ function bestPass(p){
     let crowd=0;
     players.forEach(o2=>{ if(o2.team===p.team||!onPitch(o2)||allied(p.team,o2.team)) return;
       if(dist(o2,m) < 45) crowd++; });
+    // A touchline term was tried here — penalise passing to a man near the paint, on the theory
+    // that a throw-in is a turnover with extra steps. IT MADE THROWS GO UP: 13 to 14, with goals
+    // down 6.7 to 6.2. Wide men are where the space is, so pushing every pass infield crowded the
+    // middle and lost the ball there instead. The throws were never coming from passes TO the
+    // wing; they come from clearances and overhit balls, which this could not see.
     const sc=gain*(0.6+0.8*TT.direct)+(laneOk?0:-500)-crowd*34+RNG()*30;
     if(sc>bs){ bs=sc; best=m; }
   });
