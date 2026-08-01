@@ -52,6 +52,10 @@ function sayLogged(html, big, voice){
 //
 // The engine logs its own commentary now, at the moment it decides to say something, and neither
 // page has to remember.
+// Engine names, both: the strict-mode probe found exactly two globals this file assigns and
+// nothing declares — matchLog and NAME_COL existed only because sloppy mode invents them on
+// first write. The same seam the chatter died on: works until any file goes strict or modular.
+let matchLog=[];
 function logLine(html){
   const mm=String(Math.floor(Math.max(0,clockSec)/60)).padStart(2,"0");
   const ss=String(Math.floor(Math.max(0,clockSec)%60)).padStart(2,"0");
@@ -515,9 +519,9 @@ function incidentalFoul(p, victim, clumsiness){
   // absurd — and absurd is the setting. At Clean it is 10%, which is a clumsy challenge now and
   // then, and that is the setting too.
   if(RNG() > clumsiness*agg*tired*0.18) return false;
-  TEL.incidental++;
+
   const R=REF();
-  if(RNG() > R.sees){ TEL.foulMissed++; return true; }   // it happened; nobody called it
+  if(RNG() > R.sees) return true;   // it happened; nobody called it
   awardFreeKick(victim, p);
   if(RNG() < 0.16*R.zeal) bookPlayer(p, RNG() < 0.14*R.zeal);
   return true;
@@ -784,7 +788,9 @@ const FLAME3=["#ff3d00","#ff8c00","#ffd166"];
 const RAINBOW=["#ff5aa7","#ff9f1c","#ffe14d","#5ad66f","#5ab9ff","#b58ae0"];
 function firePal(t9){ return TEAMS[t9]&&TEAMS[t9].she?RAINBOW:FLAME3; }
 function superSay(p2){
-  if(RNG()>0.6)return;
+  // RNG_COS, not RNG: whether the announcer erupts is theatre, and the flame shot
+  // must fly the same on a fixed seed whether he does or not.
+  if(RNG_COS()>0.6)return;
   sayLogged(pick([
     `${p2.name} loads one with John Wick focus — absolute commitment!`,
     `FLAME SHOT! ${p2.name} puts the whole tank behind it!`,
@@ -880,7 +886,7 @@ function stadiumWall(){
       // it hits the boards and stops rather than bouncing back into play
       ball.vx *= -0.18; ball.vy *= -0.18;
       ball.z = 0; ball.zv = 0;
-      TEL.hitWall++;
+
     }
   }
 }
@@ -927,7 +933,7 @@ function ballOutOfPlayCheck(){
     if(Math.abs(along) < we.len*GOAL_HALF) return;
   }
 
-  TEL.oobState++;
+
   // THE STATE MUST BE CLEARED, NOT JUST REPORTED. Calling outOfBounds() alone staged a restart
   // and left the ball where it was — so the condition was still true next frame and it staged
   // again, ten thousand times a match. A rule that detects a state has to end it.
@@ -1757,11 +1763,6 @@ function bestPass(p){
   return (best && bs>-100) ? best : null;
 }
 
-function riskOf(p){
-  const t=T(p.team);
-  return (t && t.risk!==undefined) ? t.risk : 0.5;
-}
-
 /** The keeper's outlet search, which three of his four actions need. Lifted from the cascade
  *  unchanged and computed once per call — the cascade did it once and branched; the list needs
  *  it available to each can(), which is the one real cost of the scored shape. */
@@ -1958,7 +1959,7 @@ const PORTED = [
       ball.owner=null;
       pendingRestart=null; throwPending=null; ball.fetch=null;   // struck: the restart is over
       p.noChase=clockSec+1.0;
-      TEL.throwsTaken++;
+
       return true;
     } },
 
@@ -2285,13 +2286,13 @@ const PORTED = [
       const victim=ball.owner;
       if(!victim) return false;
       const R=REF();
-      TEL.intentional++;
+
       victim.vx*=0.2; victim.vy*=0.2;
       stam(victim,-0.05);
 
       if(RNG() > R.sees){
         // SEEN BY NOBODY. He takes the ball, which is the entire point of doing it.
-        TEL.foulMissed++;
+
         ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.isShot=false;
         suppress={team:victim.team, until:clockSec+1.0};
         ENGINE_HOOKS.spawnNote(p.x,p.y-20,"got away with it","#8fa0ae");
@@ -2638,6 +2639,11 @@ const PORTED = [
       p.burst-=0.6; GKSTAT.superShots=(GKSTAT.superShots||0)+1;
       kick(tgt.x+e.ux*offL*0.75, tgt.y+e.uy*offL*0.75, 13.2, true);
       ball.flameShot=true;
+      // The announcer for this exact moment existed the whole time — superSay, the eighth dead
+      // feature, defined beside the flame palette and called by nothing. The keeper scores the
+      // flameShot at 2600 and the extinguish line fires on the claim; only the strike itself
+      // was silent.
+      superSay(p);
       return true;
     } },
 ];
@@ -4975,7 +4981,7 @@ function physics(dt){
         // A COUNTER IN THE ENGINE, not in a patched copy. Three measurements today were built on
         // string anchors that silently failed to match and reported zero — and a zero where zero
         // is expected confirms whatever you already believe. This one cannot miss.
-        TEL.wwSeen++;
+
         TEL.wwNear = Math.min(TEL.wwNear, Math.round(Math.abs(Math.abs(aL)-half)));
         TEL.wwBar  = Math.min(TEL.wwBar,  Math.round(Math.abs(aZ-GOAL_H)));
         if(hitPost||hitBar){
@@ -5291,43 +5297,28 @@ function goalScored(concederTeam){
 //
 // These are the numbers I could not verify from outside: how often the ball actually goes out,
 // how long a keeper really holds it, and how much of a match is nobody-in-reach dead time.
-const TEL = {
-  frames:0, loose:0, deadFrames:0, aerial:0,
-  throwIns:0, corners:0, goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0,
-  poss:[0,0,0], jumps:0, bigJumps:0, maxJump:0, lastX:null, lastY:null,
-  claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
-  zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
-  jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
-  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, holds:0, holdFrames:0, holdLongest:0, spells:0, spellFrames:0, spellLongest:0, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
-  unattributed:0, unattMax:0, portFrame:-1,
-  stall:0, stalls:0, worstStall:0, shots:0, blocked:0
-};
-function telReset(){
-  Object.assign(TEL, { frames:0, loose:0, deadFrames:0, aerial:0, throwIns:0, corners:0,
-    goalKicks:0, keeperClaims:0, keeperFrames:0, ownedFrames:0, poss:[0,0,0], jumps:0,
-    claims:0, gkClaims:0, rapid:0, gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0,
-    zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
-    jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
-    jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-    actFrames:{}, holds:0, holdFrames:0, holdLongest:0, spells:0, spellFrames:0, spellLongest:0, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, carryTimeout:0, hitWall:0, hitWall:0, throwsTaken:0, throwsTaken:0, ballRecovered:0, oobState:0, oobState:0, ballRecovered:0, intentional:0, incidental:0, incidental:0, foulMissed:0, intentional:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, wwSeen:0, wwNear:9999, wwBar:9999, shields:0, headers:0,
-  actFrames:{}, holds:0, holdFrames:0, holdLongest:0, spells:0, spellFrames:0, spellLongest:0, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, backPass:0, restartVoid:0,
-  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999, freeKicks:0,
-    unattributed:0, unattMax:0, portFrame:-1,
-  unattributed:0, unattMax:0, portFrame:-1, deflected:0,
-  jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
-  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
-  unattributed:0, unattMax:0, portFrame:-1, woodwork:0, bars:0, posts:0, port:{},
-  zLow:0, zMid:0, zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0, posts:0,
-  jumps:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0,
-  jobFrames:{}, jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0, backPass:0,
-  actFrames:{}, pOwned:0, pFlight:0, pDead:0, pContested:0, headers:0, shields:0, keeperHeld:0, carryTimeout:0, hitWall:0, throwsTaken:0, ballRecovered:0, oobState:0, intentional:0, incidental:0, foulMissed:0, wwSeen:0, wwNear:9999, wwBar:9999,
-  unattributed:0, unattMax:0, portFrame:-1, behindGoal:0, behindOwn:0, behindOther:0,
-    bigJumps:0, maxJump:0, lastX:null, lastY:null, stall:0, stalls:0, worstStall:0,
-    shots:0, blocked:0 });
-}
+// One shape, stated once. The old telReset() repeated this literal by hand and had accreted
+// 236 entries for 77 unique keys — carryTimeout twice, port three times, whole blocks pasted
+// four and five deep. Duplicate keys are last-wins so it limped, but a reset that must be
+// maintained to match a literal by eye is the lastChatterAt fault with more keys. Now the
+// literal IS the reset: telZero() is the only place the shape exists, so the two cannot drift
+// and every {} is fresh per match by construction.
+function telZero(){ return {
+  frames:0, loose:0, deadFrames:0, aerial:0, throwIns:0, goalKicks:0,
+  keeperClaims:0, keeperFrames:0, ownedFrames:0, poss:[0,0,0], jumps:0, bigJumps:0,
+  maxJump:0, lastX:null, lastY:null, claims:0, gkClaims:0, rapid:0,
+  gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0, zLow:0, zMid:0,
+  zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0,
+  posts:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0, jobFrames:{},
+  jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0,
+  backPass:0, actFrames:{}, holds:0, holdFrames:0, holdLongest:0, spells:0,
+  spellFrames:0, spellLongest:0, pOwned:0, pFlight:0, pDead:0, pContested:0,
+  headers:0, shields:0, keeperHeld:0, carryTimeout:0, ballRecovered:0, wwNear:9999,
+  wwBar:9999, unattributed:0, unattMax:0, portFrame:-1, stall:0, stalls:0,
+  worstStall:0, shots:0, blocked:0
+}; }
+const TEL = telZero();
+function telReset(){ Object.assign(TEL, telZero()); }
 /** Called once a frame by whichever front end is driving. Cheap: one hypot and a few adds. */
 // ── WHO MOVED THE BALL ──────────────────────────────────────────────────────
 // TEL.bigJumps counts every frame-to-frame move over 25 units, which tells you THAT the ball
@@ -5514,6 +5505,17 @@ function buildMatchReport(){
   md+=`| keeper stayed up | ${TEL.keeperHeld} | | vs dives |\n`;
   md+=`| shielding (frames) | ${TEL.shields} | | |\n`;
   md+=`| **restarts voided by the watchdog** | ${TEL.restartVoid} | | should be 0 |\n`;
+  // ── BALL STATE ────────────────────────────────────────────────────────────
+  // The loose-ball number is the biggest open item on the sheet, and these four counters were
+  // being incremented every frame and read by nothing — the instrument for the problem existed
+  // and was silent, which after chatterErr should surprise nobody. Same split as lab.js prints,
+  // so a watched match and a headless one argue in the same units.
+  md+=`\n### Ball state (share of frames)\n\n| state | this match | lab target |\n|---|---|---|\n`;
+  const pTot=(TEL.pOwned+TEL.pFlight+TEL.pDead+TEL.pContested)||1;
+  md+=`| owned | ${Math.round(100*TEL.pOwned/pTot)}% | |\n`;
+  md+=`| in flight | ${Math.round(100*TEL.pFlight/pTot)}% | ~20% |\n`;
+  md+=`| dead (restart pending) | ${Math.round(100*TEL.pDead/pTot)}% | |\n`;
+  md+=`| **contested / loose** | ${Math.round(100*TEL.pContested/pTot)}% | **~35%** |\n`;
 
   // ── INSTRUCTIONS ──────────────────────────────────────────────────────────
   // Whether the list is being used, and whether players stick with what they are told.
@@ -5826,7 +5828,7 @@ function ambientChatter(){
   //     a throw, and the instrument watches for throws. "Running" is page state — both call
   //     sites already sit inside their own running/held checks, so no gate is needed here.
   //   the announcer is not busy     ENGINE_HOOKS tells us, or we simply pace ourselves
-  if(typeof voiceOn!=='undefined' && !voiceOn) return;
+  if(!voiceOn) return;   // an engine name since the move; the typeof guard outlived the doubt
   const rt=nowMs()/1000;
   if(rt-lastChatterAt<6) return;   // REAL seconds: slow-speed viewing gets a full broadcast
   const cand=[];
@@ -6205,11 +6207,12 @@ function outOfBounds(k,e){
     const ownerT=GOAL_EDGE.indexOf(k);
     TEL.behindGoal++;
     if(toucher===ownerT) TEL.behindOwn++; else TEL.behindOther++;
-    if(toucher===ownerT && !out[ownerT]) { TEL.corners++; stageCorner(ownerT,e,ex,ey); }
+    if(toucher===ownerT && !out[ownerT]) { stageCorner(ownerT,e,ex,ey); }
     else if(!out[ownerT]) stageGoalKick(ownerT);
     else stageThrowIn(toucher,e,ex,ey);
   } else stageThrowIn(toucher,e,ex,ey);
 }
+let NAME_COL=null;
 function refreshNameColors(){
   NAME_COL=players.map(p=>[p.name,TEAMS[p.team].color])
     .sort((a,b)=>b[0].length-a[0].length);
