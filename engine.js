@@ -939,12 +939,34 @@ function ballOutOfPlayCheck(){
   if(oobRule) outOfBounds(wk, we);
 }
 
+// ── THE GOAL MOUTH IS NOT OFF THE PITCH ─────────────────────────────────────
+// John found a deadlock: the ball resting inside the goal, mostly over the line but not by
+// enough to score, and no player able to reach it. Two rules using different geometry:
+//
+//   the ball is in play down to   d = -6        six units past the goal line
+//   players were clamped at       d >= 12 / 14  keeper / outfielder
+//
+// A TWENTY-UNIT BAND THE BALL CAN OCCUPY AND NO PLAYER CAN ENTER. Once the ball stopped in it,
+// nothing could ever happen again: not a goal, not out of play, and nobody able to touch it.
+//
+// The fix is the football one. A defender goes into his own net to hook the ball off the line —
+// the goal mouth is behind the line but it is not the stands. So inside the mouth, and only
+// there, a man may step to -10, which is past anywhere the ball can legally rest.
+//
+// Everywhere else the clamp is unchanged: the touchlines still hold.
 function clampInside(p,margin){
   for(const e of EDGES){
     const d=(p.x-e.p1.x)*e.nx+(p.y-e.p1.y)*e.ny;
-    if(d<margin){ p.x+=e.nx*(margin-d); p.y+=e.ny*(margin-d); }
+    let m=margin;
+    if(e.goal){
+      const along=(p.x-e.mx)*e.ux+(p.y-e.my)*e.uy;
+      if(Math.abs(along) < e.len*GOAL_HALF) m=-10;   // in front of his own goal: he may go in
+    }
+    if(d<m){ p.x+=e.nx*(m-d); p.y+=e.ny*(m-d); }
   }
 }
+
+// (the old clamp is gone: it had no goal-mouth exception and was the deadlock)
 function steer(p,tx,ty,maxV){
   maxV*=speedMult(p);
   let dx=tx-p.x, dy=ty-p.y; const d=Math.hypot(dx,dy)||1;
