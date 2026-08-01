@@ -489,7 +489,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=223"></script>
+<script src="engine.js?v=224"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -3304,7 +3304,32 @@ function loop(now){
   }
   document.getElementById('clock').textContent = fmtClock(clockSec);
   syncPlayBtn();
-  drawGL();
+
+  // ── A RENDER LOOP THAT DIES MUST SAY SO ───────────────────────────────────
+  // John: three.js stopped rendering at about two minutes and the match carried on with the
+  // announcer. That is exactly what an unguarded throw in here looks like — `requestAnimationFrame`
+  // is scheduled before this line, so the engine keeps stepping and only the picture stops.
+  //
+  // AND IT LEFT ME GUESSING. I have spent today finding four dead features hidden by silence, and
+  // then shipped a render loop that fails the same way.
+  //
+  // So it reports: the first failure goes to the commentary feed and the console, with the line it
+  // came from. It reports ONCE — a message every frame at sixty a second is its own outage — and
+  // then the loop keeps trying, because a game that renders intermittently is better than one that
+  // stops for good.
+  try {
+    drawGL();
+  } catch (err) {
+    if (!drawGL.__failed) {
+      drawGL.__failed = true;
+      const where = (err && err.stack ? String(err.stack).split('\n')[1] || '' : '').trim();
+      console.error('drawGL threw:', err);
+      try {
+        logLine('<b style="color:#ff6b6b">render error:</b> ' +
+                String(err && err.message || err) + (where ? ' &mdash; ' + where : ''));
+      } catch (e2) {}
+    }
+  }
 }
 
 const PAUSE_D = 'M8 5v14M16 5v14', PLAY_D = 'M7 4l13 8-13 8z';
