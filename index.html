@@ -489,7 +489,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=221"></script>
+<script src="engine.js?v=222"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -3653,7 +3653,7 @@ function benchedAt(clientX, clientY){
   if (!t) return null;
   let best = null, bd = 46;
   for (const p of players) {
-    if (!p.out || p.sentOff) continue;         // sent off is not a substitution, it is a punishment
+    if (!p.benched || p.sentOff) continue;     // sent off is not a substitution, it is a punishment
     const d = Math.hypot(t.x - p.x, t.y - p.y);
     if (d < bd) { bd = d; best = p; }
   }
@@ -3729,13 +3729,28 @@ cv.addEventListener('pointerup', () => {
     // standing on the touchline beside another side's staff, which is at least legible.
     const bi = benchAt3(lastPointer.x, lastPointer.y);
     if (bi === grabbed.team && !grabbed.sentOff) {
+      // ── BOTH FLAGS, NOT ONE ───────────────────────────────────────────────
+      // `out` takes him out of the game; `benched` is what makes him DRAWN ON THE BENCH. The
+      // renderer reads them separately —
+      //
+      //     if (p.out && !p.benched) { b.g.visible = false; return; }
+      //
+      // — so a man with only `out` set vanishes entirely. That is correct for a man who has
+      // walked down the tunnel and wrong for one sitting in the dugout, and edit mode was setting
+      // only the first. John saw them disappear.
       grabbed.out = true;
+      grabbed.benched = true;
       grabbed.heldUntil = 0;
-      const B = benchAt[bi];
-      // seated men stack along the dugout so three of them are not one silhouette
-      const seatedBefore = players.filter(q => q.team === bi && q.out && q !== grabbed).length;
-      grabbed.x = B.x + (seatedBefore - 1) * 16;
-      grabbed.y = B.y;
+      // ── THE RENDERER SEATS HIM, NOT THIS ──────────────────────────────────
+      // It reads `p.seat` and places him on one of five slots along the dugout, at the right
+      // height on the seat's top surface. I was moving p.x/p.y by hand, which the renderer then
+      // ignored — and never setting `seat`, so every man sat in the same place.
+      //
+      // Give him the first free seat and let the drawing code do the drawing.
+      const taken = players.filter(q => q.team === bi && q.benched && q !== grabbed)
+                           .map(q => q.seat || 0);
+      let st = 0; while (taken.includes(st) && st < 5) st++;
+      grabbed.seat = st;
       grabbed.vx = 0; grabbed.vy = 0;
       if (ball.owner === grabbed) { ball.owner = null; ball.noClaimF = 20; }
       grabbed = null;
@@ -3744,7 +3759,8 @@ cv.addEventListener('pointerup', () => {
     // ── OR OFF ONE ────────────────────────────────────────────────────────
     // A seated man dropped anywhere on the grass comes back on. `out` is the same flag the walk
     // of shame sets, so clearing it is all that returning him takes.
-    if (grabbed.out) grabbed.out = false;
+    // and coming back on clears both, or he returns invisible
+    if (grabbed.out) { grabbed.out = false; grabbed.benched = false; }
 
     // ── WHAT A DROP MEANS ─────────────────────────────────────────────────
     // The question the plan left open, answered: A HELD OVERRIDE WITH A DECAY.
