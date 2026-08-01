@@ -2617,6 +2617,7 @@ const ACTIONS = [
       // behind him, away from the goal he is attacking
       kick(p.x - ax/al*26, p.y - ay/al*26, 1.5, false);
       ball.noClaim=d; ball.noClaimF=26;
+      ball.dribbleBy=p; ball.dribbleF=34;   // still his possession — see stepPossession
       d.fooled = clockSec + 0.45;
       TEL.footBack=(TEL.footBack||0)+1;
       ENGINE_HOOKS.spawnNote(p.x, p.y-24, "drags it back", TEAMS[p.team].color);
@@ -2648,6 +2649,7 @@ const ACTIONS = [
       const beat = RNG() < 0.40 + 0.40*(rk-dk);
       kick(p.x + sx*(beat?42:26), p.y + sy*(beat?42:26), beat?2.6:1.8, false);
       ball.noClaim=d; ball.noClaimF=beat?30:16;
+      ball.dribbleBy=p; ball.dribbleF=34;   // still his possession — see stepPossession
       TEL.footSide=(TEL.footSide||0)+1;
       if(beat){
         d.fooled = clockSec + 0.95;
@@ -2687,6 +2689,7 @@ const ACTIONS = [
       p.burst -= 0.42; p.footAt = clockSec + 2.6;
       kick(p.x+ax/al*64, p.y+ay/al*64, 3.4, false);
       ball.noClaim=d; ball.noClaimF=22;
+      ball.dribbleBy=p; ball.dribbleF=34;   // still his possession — see stepPossession
       p.sprint={why:'footwork', blaze:RNG_COS()<0.4};
       d.fooled = clockSec + 0.6;
       TEL.footThrough=(TEL.footThrough||0)+1;
@@ -4604,7 +4607,8 @@ function physics(dt){
       //
       // A restart is not a contest. Nobody tackles a man carrying the ball to a throw-in.
       if(ball.fetch && ball.fetch.by && ball.fetch.by!==best) return;
-      ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
+      if(ball.dribbleBy && ball.dribbleBy!==best){ ball.dribbleBy=null; ball.dribbleF=0; }   // somebody else got it
+    ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
       // ── AND THE FLAME GOES OUT WHEN HE CATCHES IT ─────────────────────────
       // `flameShot` was never cleared on the claim, so the keeper "extinguished" the same shot
       // frame after frame: 1,128 attempts in one match, 282 of them getting past a 25% gate. It
@@ -5152,7 +5156,18 @@ function stepPossession(){
     TEL.holds=0; TEL.holdFrames=0; TEL.holdLongest=0;
     TEL.spells=0; TEL.spellFrames=0; TEL.spellLongest=0;
   }
-  const o = ball.owner;
+  // ── A FOOTWORK TOUCH IS NOT A TURNOVER ────────────────────────────────────
+  // John: the footwork moves should retain possession for stats. They should, and they did not —
+  // they go through kick(), which clears the owner, so a man who dragged it back and collected it
+  // read as TWO possessions with a turnover in between.
+  //
+  // He never lost it. The ball is off his feet the way it is off a dribbler's feet between
+  // touches, which is what dribbling IS. So while `dribbleBy` stands, the hold belongs to him.
+  //
+  // It is cleared the moment anybody else touches the ball, so a failed sweep that a defender
+  // reads correctly still counts as the turnover it is.
+  if(ball.dribbleF>0){ ball.dribbleF-=1; if(ball.dribbleF<=0) ball.dribbleBy=null; }
+  const o = ball.owner || (ball.dribbleF>0 ? ball.dribbleBy : null);
 
   // ── the hold: one man, feet on it ──
   if(o !== __holdWho){
