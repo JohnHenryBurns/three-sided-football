@@ -42,7 +42,7 @@ function play(opts){
              get pendingKickoff(){return pendingKickoff}, set pendingKickoff(v){pendingKickoff=v},
              get resumeAt(){return resumeAt}, set resumeAt(v){resumeAt=v},
              get walkPending(){return walkPending}, set walkPending(v){walkPending=v},
-             seedRNG, dist, TEL,
+             seedRNG, dist, TEL, setWalking,
              get NEUTRAL_COACHING(){return NEUTRAL_COACHING},
              set NEUTRAL_COACHING(v){NEUTRAL_COACHING=v} };`)();
 
@@ -147,13 +147,13 @@ function play(opts){
     if (E.walkPending) { walkOff = E.walkPending; E.walkPending = null; }
     if (walkOff) {
       const q = walkOff, B = null;   // no bench in a headless run; he simply goes out
-      if (!B) { q.out = true; walkOff = null; }
+      if (!B) { q.out = true; walkOff = null; E.setWalking(null); }   // the engine must hear the walk ended
       else {
         const dx = B.x - q.x, dy = B.y - q.y, bd = Math.hypot(dx, dy) || 1;
         q.x += dx/bd * 1.5; q.y += dy/bd * 1.5; q.vx = 0; q.vy = 0;
         if (E.ball.owner === q) E.ball.owner = null;
         E.resumeAt = ms + 120;
-        if (bd < 12) { q.out = true; q.sentOff = false; q.benched = true; walkOff = null; }
+        if (bd < 12) { q.out = true; q.sentOff = false; q.benched = true; walkOff = null; E.setWalking(null); }
       }
       ev.holdFrames++;
       continue;

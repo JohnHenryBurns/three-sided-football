@@ -660,7 +660,7 @@ function kickoff(toTeam, firstWhistle){
   // FIVE OF THESE I ADDED TODAY: chaser, goalRestart, walking, cornerPending, freeKick. Each one
   // was hoisted to module scope so instructions could see it, and each time I did not ask what
   // clears it.
-  freeKick=null; goalRestart=null; walking=null; cornerPending=null; cornerSpot=null;
+  freeKick=null; goalRestart=null; walking=null; walkingAt=-1; cornerPending=null; cornerSpot=null;
   justDelivered=null;
   // ── AND THE KICK-OFF STAGES ITSELF ────────────────────────────────────────
   // A taker is named, the ball is on the spot, and pendingRestart carries the clock the
@@ -1453,8 +1453,8 @@ let justDelivered = null; // { p, at } — the man who just took a corner, for t
 // Not unifying the walk itself here, because the bench position is genuinely front-end geometry.
 // But the engine needs to KNOW a walk is running, because everybody else has something to do
 // while it does — and that they had nothing to do is exactly what John spotted.
-let walking = null;
-function setWalking(p){ walking = p || null; }
+let walking = null, walkingAt = -1;
+function setWalking(p){ walking = p || null; walkingAt = p ? clockSec : -1; }
 
 // ── THE BENCH ───────────────────────────────────────────────────────────────
 // Derived entirely from engine geometry — the goal edge, its half-width, its normal — and yet it
@@ -4244,7 +4244,19 @@ const INSTRUCTIONS = [
   // They take up their kick-off shape while he goes — the same positions as after a goal, which
   // is right, because the same thing happens next. SCRIPT: nobody is deciding this.
   { name:'waiting out a sending-off', tier:TIER.SCRIPT, base:930,
-    applies:p => !!(walking && walking!==p && !p.out && !p.sentOff && p.role!=='K'),
+    // THE WAIT GETS ITS OWN MORTALITY. index.html clears `walking` on bench arrival; lab.js
+    // never did, so every headless match with a red card played its remaining minutes with
+    // statues — four of them for 83 seconds on one seed, from three different teams, all
+    // 'waiting out a sending-off' for a man long gone. The statues do not contest, so loose%%
+    // inflates and passes crater in exactly the seeds that drew a red: variance the noise-floor
+    // investigation has been reading as coaching noise.
+    //
+    // lab now clears it at the source, and this gate stops trusting anyone to: the walker
+    // arriving (out or benched) ends the wait, and so does fifteen seconds — a real walk takes
+    // about seven, and a wait that outlives its walk twice over is a leak, not a ceremony.
+    applies:p => !!(walking && walking!==p && !walking.out && !walking.benched
+                    && clockSec-walkingAt<15
+                    && !p.out && !p.sentOff && p.role!=='K'),
     score:p => 930,
     act:p => {
       const own=goalCenter(p.team);
