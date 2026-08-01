@@ -997,6 +997,44 @@ function attackGoal(p){
   return (t===null||t===undefined) ? {x:CX,y:CY} : goalCenter(t);
 }
 
+/** Nobody but the taker and the keeper may be in front of a penalty.
+ *
+ *  John: a defender sometimes ends up in front of the kicker. The penalty shape steers everyone
+ *  to sensible places, but STEERING IS A SUGGESTION — a man arriving late, or nudged by a
+ *  team-mate, or simply standing where the whistle caught him, ends up in the one place the laws
+ *  forbid and the one place that blocks the shot.
+ *
+ *  So this is a position rule, not a steer. The forbidden region is the wedge between the ball
+ *  and the goal, widened to the width of the mouth: anyone in it who is not the taker or the
+ *  defending keeper is pushed sideways out of it, by the shortest route.
+ *
+ *  Sideways rather than backwards on purpose — a man shoved back down the pitch looks pulled by
+ *  a string, and a man stepping out of the line of a penalty looks like a footballer.
+ */
+function clearPenaltyLine(){
+  if(!pendingRestart || pendingRestart.kind!=='penalty') return;
+  const taker = pendingRestart.p;
+  const g = (penaltyGoalTeam===null||penaltyGoalTeam===undefined) ? null : goalCenter(penaltyGoalTeam);
+  if(!g) return;
+  const bx = pendingRestart.x, by = pendingRestart.y;
+  const fx = g.x-bx, fy = g.y-by, fl = Math.hypot(fx,fy)||1;
+  const ux = fx/fl, uy = fy/fl;                 // ball -> goal
+  const px = -uy, py = ux;                      // across it
+  players.forEach(q=>{
+    if(q===taker || q.out || q.sentOff) return;
+    if(q.role==='K' && q.team===penaltyGoalTeam) return;   // his goal, his business
+    const dx = q.x-bx, dy = q.y-by;
+    const along = dx*ux + dy*uy;                // how far toward the goal
+    const across = dx*px + dy*py;               // how far off the line
+    if(along < -4 || along > fl+20) return;     // behind the ball or past the goal: fine
+    const room = 46;
+    if(Math.abs(across) >= room) return;        // already out of the way
+    const side = across >= 0 ? 1 : -1;          // shortest way out
+    const shove = (room - Math.abs(across)) * side;
+    q.x += px*shove; q.y += py*shove;
+  });
+}
+
 function clampInside(p,margin){
   // ── A PLAYER MAY LEAVE THE FIELD ──────────────────────────────────────────
   // John, on a ball stuck against the touchline with three men unable to reach it: release them
@@ -5392,6 +5430,7 @@ function stepPossession(){
 }
 
 function telFrame(){
+  clearPenaltyLine();   // nobody stands in front of a penalty — see the note on the function
   stepPossession();
   // the push-up flag lives only while a keeper holds; when he lets go, everybody is free to be
   // near their own goal again without the instruction fighting them
