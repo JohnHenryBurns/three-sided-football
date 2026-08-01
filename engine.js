@@ -956,6 +956,34 @@ function ballOutOfPlayCheck(){
 // Everywhere else the clamp is unchanged: the touchlines still hold.
 /** The nearest opponent within r, or null. Footwork needs "the man in front of me" over and
  *  over, and three copies of the same loop is three places to get `allied` wrong. */
+/** Which runner this defender should pick up, or null.
+ *
+ *  The dangerous men are the opponents nearer MY goal than the ball is, because those are the
+ *  ones a pass would find behind me. Of those, he takes the nearest — and only if he is the
+ *  nearest defender to that man, so ONE MARKER PER RUNNER. Three men shadowing one attacker is
+ *  the clustering John has spent the day pulling out of this engine.
+ */
+function markTarget(p){
+  const g=goalCenter(p.team);
+  const ballD=dist(ball, g);
+  let best=null, bd=190;
+  players.forEach(o=>{
+    if(o.team===p.team || !onPitch(o) || allied(p.team,o.team) || o.role==='K') return;
+    if(ball.owner===o) return;                       // the carrier is somebody else's problem
+    if(dist(o,g) > ballD) return;                    // not between me and my goal: not a runner
+    const d=dist(o,p);
+    if(d<bd){ bd=d; best=o; }
+  });
+  if(!best) return null;
+  // am I the nearest of my side to him? if not, he is marked
+  let mine=null, md=1e9;
+  players.forEach(q=>{
+    if(q.team!==p.team || !onPitch(q) || q.role==='K' || chaser[q.team]===q) return;
+    const d=dist(q,best); if(d<md){ md=d; mine=q; }
+  });
+  return mine===p ? best : null;
+}
+
 function nearestOpp(p, r){
   let best=null, bd=r;
   players.forEach(o=>{ if(o.team===p.team || !onPitch(o) || allied(p.team,o.team)) return;
@@ -1621,7 +1649,20 @@ function bestPass(p){
     // down 6.7 to 6.2. Wide men are where the space is, so pushing every pass infield crowded the
     // middle and lost the ball there instead. The throws were never coming from passes TO the
     // wing; they come from clearances and overhit balls, which this could not see.
-    const sc=gain*(0.6+0.8*TT.direct)+(laneOk?0:-500)-crowd*34+RNG()*30;
+    // ── AND THE RUN AND THE PASS HAVE TO AGREE ────────────────────────────────
+    // This is the coordination John asked about, and it is one term rather than a system.
+    //
+    // `making a run` sets `runUntil` on a man breaking his cover. Without this, that run is
+    // THEATRE: he sprints into space, nobody looks up, and he has spent his legs for nothing.
+    // With it, the pass finds him — and the two behaviours become one move made by two players,
+    // which is the only kind of coordination worth having.
+    //
+    // 150 is deliberately large. It has to beat the crowding term, or a man who has just run
+    // BEYOND the defence looks worse than one standing safely in front of it.
+    // 90, not 150. At 150 every run was found and goals went to 13.3 a match — the pass became
+    // a homing device. A run should be an INVITATION the passer may decline.
+    const onRun = (m.runUntil && clockSec < m.runUntil) ? 90 : 0;
+    const sc=gain*(0.6+0.8*TT.direct)+(laneOk?0:-500)-crowd*34+onRun+RNG()*30;
     if(sc>bs){ bs=sc; best=m; }
   });
   return (best && bs>-100) ? best : null;
@@ -3716,6 +3757,76 @@ const INSTRUCTIONS = [
       // face the ball while he waits, like anybody standing still on a football pitch
       const bx=ball.x-p.x, by=ball.y-p.y, bl=Math.hypot(bx,by)||1;
       p.hx=p.hx*0.9+(bx/bl)*0.1; p.hy=p.hy*0.9+(by/bl)*0.1;
+      return true;
+    } },
+  // ── MARKING A RUNNER ──────────────────────────────────────────────────────
+  // John: defensive actions to cover the non-kicking players. Everything defensive in here has
+  // been about THE BALL — closing it down, intercepting, covering the danger — and a defender
+  // whose man is making a run behind him had nothing to say about it.
+  //
+  // This is the other half of defending: pick up somebody and stay goal-side of him. Not the
+  // ball, not a zone, a MAN.
+  //
+  // One defender per runner, assigned by proximity, so three men do not shadow the same attacker
+  // — the same rule that stopped the whole side chasing one loose ball.
+  { name:'marking a runner', tier:TIER.PLAYER, base:415,
+    coach:T => (1-T.press)*40,        // a deep block marks; a pressing side hunts the ball
+    applies:p => {
+      if(!onPitch(p) || p.role==='K') return false;
+      if(chaser[p.team]===p) return false;          // his job is the ball
+      return !!markTarget(p);
+    },
+    score:p => 415,
+    act:p => {
+      const r=markTarget(p); if(!r) return false;
+      // goal-side and a stride off him: between the runner and the goal I am defending
+      const g=goalCenter(p.team);
+      const gx=g.x-r.x, gy=g.y-r.y, gl=Math.hypot(gx,gy)||1;
+      steer(p, r.x+gx/gl*16, r.y+gy/gl*16, 2.3);
+      return true;
+    } },
+
+  // ── MAKING A RUN ──────────────────────────────────────────────────────────
+  // And the answer to it. An attacker without the ball darts into space to break his cover —
+  // John's "dart to break the cover".
+  //
+  // He runs AWAY FROM HIS MARKER and toward the goal, spends burst to do it, and it lasts about
+  // a second and a half. It is not free and it is not constant: a side whose forwards sprint
+  // every frame has no legs left for the ones that matter.
+  //
+  // `runUntil` is what makes it COORDINATED rather than decorative — see bestPass, where a man
+  // on a run is worth more to pass to. The run and the pass have to agree or the run is theatre.
+  { name:'making a run', tier:TIER.PLAYER, base:405,
+    coach:T => T.risk*70,
+    applies:p => {
+      if(!onPitch(p) || p.role==='K') return false;
+      if(!ball.owner || ball.owner===p) return false;
+      if(ball.owner.team!==p.team && !allied(p.team, ball.owner.team)) return false;
+      if(p.burst < 0.28) return false;
+      if(p.runAt && clockSec < p.runAt) return false;
+      if(dist(p, ball) < 60) return false;          // he is already in it; this is for space
+      return true;
+    },
+    score:p => 405,
+    act:p => {
+      const g=attackGoal(p);
+      const mk=nearestOpp(p, 120);
+      let tx=g.x, ty=g.y;
+      if(mk){
+        // away from the man on him, still forward: the goal direction pushed off his marker
+        const ax=g.x-p.x, ay=g.y-p.y, al=Math.hypot(ax,ay)||1;
+        const mx=p.x-mk.x, my=p.y-mk.y, ml=Math.hypot(mx,my)||1;
+        tx=p.x + (ax/al*0.72 + mx/ml*0.52)*150;
+        ty=p.y + (ay/al*0.72 + my/ml*0.52)*150;
+      }
+      p.burst -= 0.28;
+      // 6.4, not 3.4. At the shorter cooldown the side made 171 runs a match — one a second,
+      // which is not a run, it is a stampede. A run is a moment somebody chooses.
+      p.runAt = clockSec + 6.4;
+      p.runUntil = clockSec + 1.5;                  // and bestPass can see it while it lasts
+      p.sprint = { why:'run', blaze:RNG_COS()<0.2 };
+      TEL.runs=(TEL.runs||0)+1;
+      steer(p, tx, ty, 2.7);
       return true;
     } },
   { name:'covering the danger', tier:TIER.COACH, base:520,
