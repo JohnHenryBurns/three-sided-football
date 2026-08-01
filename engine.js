@@ -5748,7 +5748,11 @@ function colorCommentary(){
   try{ ambientChatter(); }
   catch(e5){ TEL.chatterErr=(TEL.chatterErr||0)+1; if(TEL.chatterErr===1) console.warn('ambientChatter:', e5.message); }
   // style & matchup color (~every 45s)
-  if(clockSec-lastStyleAt>45&&RNG()<0.4){
+  // RNG_COS, the last main-stream draw that lived in the theatre. This gate consumed one match
+  // draw per frame once the 45s window opened, so touching style commentary changed fixed-seed
+  // matches — the exact fault the two streams exist to prevent. Every fixed-seed baseline moves
+  // once, at this commit, and never for commentary again.
+  if(clockSec-lastStyleAt>45&&RNG_COS()<0.4){
     const ls=styleLines();
     if(ls.length){ lastStyleAt=clockSec; sayLogged(pick(ls)); }
   }
