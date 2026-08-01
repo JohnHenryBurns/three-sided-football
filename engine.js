@@ -954,6 +954,21 @@ function ballOutOfPlayCheck(){
 // there, a man may step to -10, which is past anywhere the ball can legally rest.
 //
 // Everywhere else the clamp is unchanged: the touchlines still hold.
+/** The nearest opponent within r, or null. Footwork needs "the man in front of me" over and
+ *  over, and three copies of the same loop is three places to get `allied` wrong. */
+function nearestOpp(p, r){
+  let best=null, bd=r;
+  players.forEach(o=>{ if(o.team===p.team || !onPitch(o) || allied(p.team,o.team)) return;
+    const d=dist(o,p); if(d<bd){ bd=d; best=o; } });
+  return best;
+}
+
+/** The goal this side is attacking, or the centre if it has none. */
+function attackGoal(p){
+  const t=targets[p.team];
+  return (t===null||t===undefined) ? {x:CX,y:CY} : goalCenter(t);
+}
+
 function clampInside(p,margin){
   // ── A PLAYER MAY LEAVE THE FIELD ──────────────────────────────────────────
   // John, on a ball stuck against the touchline with three men unable to reach it: release them
@@ -2553,6 +2568,130 @@ const ACTIONS = [
       // A NOTE MARKS AN EVENT, NOT A STATE. The event is the moment he is beaten, which the
       // tackle and the beat already know about and already annotate. A running state does not
       // need to keep announcing itself.
+      return true;
+    } },
+  // ── FOOTWORK ──────────────────────────────────────────────────────────────
+  // John: give dribblers footwork — the ball swept around them from front to side or back, then
+  // a burst after it, leaving the defender muddled.
+  //
+  // All three work the same way, and all of it is machinery that already exists:
+  //
+  //   kick()      sweeps the ball a short distance to a computed spot
+  //   noClaim     names the ONE man who may not take it — the defender he is beating
+  //   fooled      sends that defender the wrong way for a moment
+  //   sprint      is the dart after it
+  //
+  // So the ball genuinely leaves his feet and travels. He is briefly not in possession, which is
+  // the risk: if the sweep is bad, or a second defender is near, it is gone. `beating his man`
+  // never let go of the ball — this family does, and that is what makes it footwork rather than
+  // a status effect.
+  //
+  // They are distinct in geometry and price, so they are a choice rather than three names for
+  // one move: BACK is cheap and safe and only turns him, SIDE is the true beat, THROUGH is the
+  // gamble that ends up behind the defender.
+
+  // ── THE DRAG-BACK ─────────────────────────────────────────────────────────
+  // A man closed down from the front drags it behind himself and pivots. It does not beat
+  // anybody — it buys a yard and a new angle — so it is cheap, near-certain, and the defender is
+  // only briefly wrong-footed.
+  { name:'dragging it back', tier:TIER.PLAYER, base:250,
+    coach:T => (1-T.direct)*40,          // a patient side turns; a direct one hoofs it
+    can:p => {
+      if(ball.owner!==p || p.role==='K' || !onPitch(p)) return false;
+      if(p.burst < 0.18) return false;
+      if(p.footAt && clockSec < p.footAt) return false;
+      const d=nearestOpp(p, 30);
+      if(!d) return false;
+      // he must be IN FRONT: between me and the goal I am attacking
+      const g=attackGoal(p);
+      const ax=g.x-p.x, ay=g.y-p.y, al=Math.hypot(ax,ay)||1;
+      const dx=d.x-p.x, dy=d.y-p.y, dl=Math.hypot(dx,dy)||1;
+      return (ax/al)*(dx/dl) + (ay/al)*(dy/dl) > 0.45;
+    },
+    score:p => 250,
+    act:p => {
+      const d=nearestOpp(p, 30); if(!d) return false;
+      const g=attackGoal(p);
+      const ax=g.x-p.x, ay=g.y-p.y, al=Math.hypot(ax,ay)||1;
+      p.burst -= 0.18; p.footAt = clockSec + 1.6;
+      // behind him, away from the goal he is attacking
+      kick(p.x - ax/al*26, p.y - ay/al*26, 1.5, false);
+      ball.noClaim=d; ball.noClaimF=26;
+      d.fooled = clockSec + 0.45;
+      TEL.footBack=(TEL.footBack||0)+1;
+      ENGINE_HOOKS.spawnNote(p.x, p.y-24, "drags it back", TEAMS[p.team].color);
+      return true;
+    } },
+
+  // ── THE SWEEP OUTSIDE ─────────────────────────────────────────────────────
+  // The one John described: the ball goes round him from front to side, and he darts after it on
+  // the far side from the defender. This is the true beat — a contest of ratings, and if he wins
+  // it the defender is properly sent.
+  { name:'sweeping it outside', tier:TIER.PLAYER, base:330,
+    coach:T => T.risk*60,
+    can:p => {
+      if(ball.owner!==p || p.role==='K' || !onPitch(p)) return false;
+      if(p.burst < 0.32) return false;
+      if(p.footAt && clockSec < p.footAt) return false;
+      return !!nearestOpp(p, 32);
+    },
+    score:p => 330,
+    act:p => {
+      const d=nearestOpp(p, 32); if(!d) return false;
+      // the lateral away from him: perpendicular to the line between us, pointing off his side
+      const dx=d.x-p.x, dy=d.y-p.y, dl=Math.hypot(dx,dy)||1;
+      let sx=-dy/dl, sy=dx/dl;
+      const g=attackGoal(p);
+      if((g.x-p.x)*sx + (g.y-p.y)*sy < 0){ sx=-sx; sy=-sy; }   // pick the side that goes forward
+      p.burst -= 0.32; p.footAt = clockSec + 2.0;
+      const rk=(p.rating||0.5), dk=(d.rating||0.5);
+      const beat = RNG() < 0.40 + 0.40*(rk-dk);
+      kick(p.x + sx*(beat?42:26), p.y + sy*(beat?42:26), beat?2.6:1.8, false);
+      ball.noClaim=d; ball.noClaimF=beat?30:16;
+      TEL.footSide=(TEL.footSide||0)+1;
+      if(beat){
+        d.fooled = clockSec + 0.95;
+        p.sprint={why:'footwork', blaze:RNG_COS()<0.3};
+        TEL.footSideWon=(TEL.footSideWon||0)+1;
+        sayLogged(`${p.name} sweeps it round ${d.name} and goes!`);
+        ENGINE_HOOKS.spawnNote(p.x, p.y-26, "round him!", TEAMS[p.team].color);
+      } else ENGINE_HOOKS.spawnNote(p.x, p.y-24, "shifts it wide", "#8fa0ae");
+      return true;
+    } },
+
+  // ── KNOCKING IT PAST HIM ──────────────────────────────────────────────────
+  // The gamble. He pushes the ball beyond the defender and runs — no touch, no shielding, just
+  // legs. It needs room ahead and a full tank, and when it fails the ball is simply gone, which
+  // is why it costs the most and fires least.
+  { name:'knocking it past him', tier:TIER.PLAYER, base:300,
+    coach:T => T.direct*90,
+    can:p => {
+      if(ball.owner!==p || p.role==='K' || !onPitch(p)) return false;
+      if(p.burst < 0.5) return false;
+      if(p.footAt && clockSec < p.footAt) return false;
+      const d=nearestOpp(p, 34); if(!d) return false;
+      // nobody else within 70 beyond him, or it is a knock into a crowd
+      const g=attackGoal(p);
+      const ax=(g.x-p.x), ay=(g.y-p.y), al=Math.hypot(ax,ay)||1;
+      const tx=p.x+ax/al*64, ty=p.y+ay/al*64;
+      let others=0;
+      players.forEach(o=>{ if(o.team===p.team||o===d||!onPitch(o)||allied(p.team,o.team)) return;
+        if(dist(o,{x:tx,y:ty})<46) others++; });   // 70 was empty-pitch space; 46 is a gap
+      return others===0;
+    },
+    score:p => 300,
+    act:p => {
+      const d=nearestOpp(p, 34); if(!d) return false;
+      const g=attackGoal(p);
+      const ax=(g.x-p.x), ay=(g.y-p.y), al=Math.hypot(ax,ay)||1;
+      p.burst -= 0.42; p.footAt = clockSec + 2.6;
+      kick(p.x+ax/al*64, p.y+ay/al*64, 3.4, false);
+      ball.noClaim=d; ball.noClaimF=22;
+      p.sprint={why:'footwork', blaze:RNG_COS()<0.4};
+      d.fooled = clockSec + 0.6;
+      TEL.footThrough=(TEL.footThrough||0)+1;
+      sayLogged(`${p.name} knocks it past ${d.name} and chases!`);
+      ENGINE_HOOKS.spawnNote(p.x, p.y-26, "knocks it past!", TEAMS[p.team].color);
       return true;
     } },
   { name:'beating his man', tier:TIER.PLAYER, base:300,
