@@ -489,7 +489,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=219"></script>
+<script src="engine.js?v=220"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2221,6 +2221,9 @@ scene.add(ballGL);
 // can never disagree. A stored copy would need syncing at every place the match starts or stops,
 // and one of those would eventually be missed.
 let grabbed = null;
+// pointerup carries no useful coordinates on every browser, so the last move is remembered — the
+// drop has to know WHERE it was dropped, not merely that it happened.
+let lastPointer = { x: 0, y: 0 };
 const editPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const editRay = new THREE.Raycaster();
 const editHit = new THREE.Vector3();
@@ -3581,6 +3584,38 @@ function overBall(clientX, clientY){
   return !!t && Math.hypot(t.x - ball.x, t.y - ball.y) < 34;
 }
 
+/** Which bench a screen point is over, or -1. Generous — 46 units — because the dugout is small
+ *  at the default camera and a drop that lands beside the bench rather than on it should still
+ *  seat him. A near miss on a bench is never a meaningful placement anyway: it is the touchline.
+ *
+ *  benchAt[] comes from the ENGINE's benchSpot(), so a man seated here sits where a sent-off man
+ *  sits, which is the point of the engine owning it. */
+/** A man already sitting down, picked off his bench. They are drawn stacked at the dugout, so the
+ *  test is which bench you touched and then which of the men on it is nearest — a stack of three
+ *  at one spot needs the second test or you always get the same one. */
+function benchedAt(clientX, clientY){
+  const t = turfAt(clientX, clientY);
+  if (!t) return null;
+  let best = null, bd = 46;
+  for (const p of players) {
+    if (!p.out || p.sentOff) continue;         // sent off is not a substitution, it is a punishment
+    const d = Math.hypot(t.x - p.x, t.y - p.y);
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best;
+}
+
+function benchAt3(clientX, clientY){
+  const t = turfAt(clientX, clientY);
+  if (!t) return -1;
+  for (let i = 0; i < 3; i++) {
+    const B = benchAt[i];
+    if (!B) continue;
+    if (Math.hypot(t.x - B.x, t.y - B.y) < 46) return i;
+  }
+  return -1;
+}
+
 /** The nearest man to a screen point, or null. 30 units, slightly tighter than the ball's 34 so
  *  that a finger between the two takes the ball — the ball is the smaller target and the one you
  *  are more likely to be aiming at. */
@@ -3611,7 +3646,9 @@ cv.addEventListener('pointerdown', e => {
       cv.setPointerCapture(e.pointerId);
       return;
     }
-    const p = playerAt(e.clientX, e.clientY);
+    // A seated man is picked from his bench, not from the pitch — playerAt only sees men on the
+    // grass, and a benched one is drawn at the dugout.
+    const p = playerAt(e.clientX, e.clientY) || benchedAt(e.clientX, e.clientY);
     if (p) {
       grabbed = p;
       cv.setPointerCapture(e.pointerId);
@@ -3631,6 +3668,29 @@ cv.addEventListener('pointerup', () => {
     ball.noClaim = null; ball.noClaimF = 20;
     grabbed = null;
   } else if (grabbed) {
+    // ── DROPPED ON A BENCH? ───────────────────────────────────────────────
+    // His own bench only. Dropping a man on somebody else's dugout is not a substitution, it is a
+    // question the game has no answer to — so it falls through and he is simply placed there,
+    // standing on the touchline beside another side's staff, which is at least legible.
+    const bi = benchAt3(lastPointer.x, lastPointer.y);
+    if (bi === grabbed.team && !grabbed.sentOff) {
+      grabbed.out = true;
+      grabbed.heldUntil = 0;
+      const B = benchAt[bi];
+      // seated men stack along the dugout so three of them are not one silhouette
+      const seatedBefore = players.filter(q => q.team === bi && q.out && q !== grabbed).length;
+      grabbed.x = B.x + (seatedBefore - 1) * 16;
+      grabbed.y = B.y;
+      grabbed.vx = 0; grabbed.vy = 0;
+      if (ball.owner === grabbed) { ball.owner = null; ball.noClaimF = 20; }
+      grabbed = null;
+      return;
+    }
+    // ── OR OFF ONE ────────────────────────────────────────────────────────
+    // A seated man dropped anywhere on the grass comes back on. `out` is the same flag the walk
+    // of shame sets, so clearing it is all that returning him takes.
+    if (grabbed.out) grabbed.out = false;
+
     // ── WHAT A DROP MEANS ─────────────────────────────────────────────────
     // The question the plan left open, answered: A HELD OVERRIDE WITH A DECAY.
     //
@@ -3680,6 +3740,7 @@ cv.addEventListener('pointermove', e => {
   // Before the camera gets a look, and it returns rather than falling through: a drag that both
   // moved the ball and orbited the camera would be unusable.
   if (grabbed) {
+    lastPointer.x = e.clientX; lastPointer.y = e.clientY;
     const t = turfAt(e.clientX, e.clientY);
     if (t) {
       if (grabbed === 'ball') { ball.x = t.x; ball.y = t.y; ball.z = 0; ball.vx = 0; ball.vy = 0; }
