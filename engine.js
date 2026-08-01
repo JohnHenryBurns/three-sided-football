@@ -1018,7 +1018,21 @@ function clampInside(p,margin){
   // space behind the goal, which is where footballers actually go.
   for(const e of EDGES){
     const d=(p.x-e.p1.x)*e.nx+(p.y-e.p1.y)*e.ny;
-    if(d < -30){ p.x+=e.nx*(-30-d); p.y+=e.ny*(-30-d); }
+    let lim = -30;                                   // the stadium: touchline furniture and behind
+    if(e.goal){
+      const along=(p.x-e.mx)*e.ux+(p.y-e.my)*e.uy;
+      if(Math.abs(along) < e.len*GOAL_HALF){
+        // ── ONLY THE KEEPER GOES IN THE GOAL ──────────────────────────────
+        // John: keep outfielders out of the net. I opened the mouth to everybody to break the
+        // deadlock — a ball resting past the line that nobody could reach — and that was more
+        // than the problem needed. THE KEEPER ALONE IS ENOUGH TO SOLVE IT, because he is always
+        // there and the mouth is his.
+        //
+        // Outfielders stop 2 in front of the line, where they can still reach a ball on it.
+        lim = (p.role==='K') ? -12 : 2;
+      }
+    }
+    if(d < lim){ p.x+=e.nx*(lim-d); p.y+=e.ny*(lim-d); }
   }
 }
 function steer(p,tx,ty,maxV){
@@ -1081,7 +1095,7 @@ function kick(tx,ty,power,isShot){
   // A quarter-second before he moves. Median flight before a save is 0.45s, so this leaves most
   // saves untouched and removes the seven in thirty-two that arrived in under 0.25s — the
   // close-range shots a real keeper is simply beaten by.
-  if(isShot) players.forEach(q=>{ if(q.role==='K') q.reactAt = clockSec + 0.25; });
+  if(isShot) players.forEach(q=>{ if(q.role==='K') q.reactAt = clockSec + 0.18; });
   // WHO SHOT IT, kept apart from who last touched it. A keeper who gets a hand to a shot and
   // fails becomes `lastTouch`, and the goal was then credited against his own side as an OWN
   // GOAL — a striker's finish turned into the keeper's mistake because a deflection is a touch.
