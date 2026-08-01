@@ -288,7 +288,33 @@ on drop               position set; decide the snapshot-vs-override question HER
 dragged into the stands has almost nothing that applies and will stand inert rather than
 doing something funny. **Decide whether that is the joke or a bug before building it.**
 
-### Phase 3 — the bench
+### Phase 3 — the bench — DONE
+
+```
+drag a man onto HIS OWN dugout    p.out = true, seated, out of the game
+drag a seated man onto the grass  p.out = false, back on where dropped
+```
+
+**Almost no new state.** `p.out` is the flag the walk of shame already sets, `benchAt[]`
+comes from the engine's own `benchSpot()`, and seated men were already drawn. Phase three is
+hit-testing and one rule about whose bench is whose.
+
+**Three decisions worth keeping:**
+
+**Sent-off men cannot be picked up.** A red card is not a substitution and dragging him back
+on would make the referee decorative.
+
+**His own bench only.** Dropping a man on another side's dugout is a question the game has no
+answer to, so it falls through and he is simply placed there — standing on the touchline
+beside somebody else's staff, which is at least legible.
+
+**A man carrying the ball drops it when he sits down**, with the usual no-claim window. The
+alternative is a ball that is owned by a man who is not on the pitch.
+
+**Still open:** a man dragged off the pitch and left there. `onPitch(p)` gates most
+instructions so he stands inert. Not decided.
+
+### Superseded: phase 3 as planned
 
 ```
 drag to the bench     p.out = true, seated, locked
