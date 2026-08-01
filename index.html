@@ -489,7 +489,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=220"></script>
+<script src="engine.js?v=221"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2243,6 +2243,34 @@ editHalo.visible = false;
 editHalo.renderOrder = 999;
 scene.add(editHalo);
 
+// ── THE DROP ZONE ───────────────────────────────────────────────────────────
+// A disc over a dugout while a man is held above it, and over the pitch while a SEATED man is
+// held above the grass. Two colours, because the two are opposite actions:
+//
+//   amber   he is going off
+//   green   he is coming on
+//
+// Without this the bench works and gives no sign it is about to — you find out by letting go,
+// which is the wrong moment to find out.
+const dropZone = new THREE.Mesh(
+  new THREE.CircleGeometry(46, 30),
+  new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.3,
+                                side: THREE.DoubleSide, depthTest: false }));
+dropZone.rotation.x = -Math.PI / 2;
+dropZone.visible = false;
+dropZone.renderOrder = 998;
+scene.add(dropZone);
+
+// and a ring around it, because a flat disc at this camera angle reads as a shadow
+const dropRing = new THREE.Mesh(
+  new THREE.RingGeometry(44, 49, 30),
+  new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.95,
+                                side: THREE.DoubleSide, depthTest: false }));
+dropRing.rotation.x = -Math.PI / 2;
+dropRing.visible = false;
+dropRing.renderOrder = 999;
+scene.add(dropRing);
+
 
 const shadowGL = new THREE.Mesh(new THREE.CircleGeometry(9, 18),
   new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.34 }));
@@ -2674,6 +2702,33 @@ let drawGL = function drawGL(){
     if (editHalo.visible) {
       editHalo.position.set(ball.x, 1.6, ball.y);
       editHalo.material.opacity = grabbed === 'ball' ? 1 : 0.6;
+    }
+  }
+  // ── AND THE DROP ZONE ─────────────────────────────────────────────────────
+  // Amber over his own dugout while a man on the pitch is held there: LET GO AND HE SITS DOWN.
+  // Green under a seated man held over the grass: LET GO AND HE COMES ON.
+  if (dropZone) {
+    let show = null, col = 0xffd166;
+    if (grabbed && grabbed !== 'ball' && !grabbed.sentOff) {
+      const B = benchAt[grabbed.team];
+      if (grabbed.out) {
+        // he is off; the pitch is the target, so mark it under him
+        if (!B || Math.hypot(grabbed.x - B.x, grabbed.y - B.y) > 46) {
+          show = { x: grabbed.x, y: grabbed.y }; col = 0x7ee787;
+        }
+      } else if (B && Math.hypot(grabbed.x - B.x, grabbed.y - B.y) < 46) {
+        show = B; col = 0xffd166;
+      }
+    }
+    dropZone.visible = dropRing.visible = !!show;
+    if (show) {
+      dropZone.position.set(show.x, 1.2, show.y);
+      dropRing.position.set(show.x, 1.4, show.y);
+      dropZone.material.color.setHex(col);
+      dropRing.material.color.setHex(col);
+      // a slow pulse, so it reads as live rather than as a mark painted on the grass
+      const t9 = (nowMs % 900) / 900;
+      dropRing.material.opacity = 0.6 + 0.35 * Math.sin(t9 * Math.PI * 2);
     }
   }
 
@@ -3743,8 +3798,17 @@ cv.addEventListener('pointermove', e => {
     lastPointer.x = e.clientX; lastPointer.y = e.clientY;
     const t = turfAt(e.clientX, e.clientY);
     if (t) {
-      if (grabbed === 'ball') { ball.x = t.x; ball.y = t.y; ball.z = 0; ball.vx = 0; ball.vy = 0; }
-      else { grabbed.x = t.x; grabbed.y = t.y; grabbed.vx = 0; grabbed.vy = 0; }
+      // ── ANCHORED TO THE TURF ──────────────────────────────────────────────
+      // John: anchor players and the ball at the edge. That also settles the question the plan
+      // left open — a man dragged into the stands would have stood inert, because onPitch(p)
+      // gates most instructions. Now he cannot get there, so there is nothing to decide.
+      //
+      // The exception is a man over his own bench: he is allowed off the grass, because that is
+      // where he is going.
+      const overOwnBench = grabbed !== 'ball' && benchAt3(e.clientX, e.clientY) === grabbed.team;
+      const q = overOwnBench ? t : clampToPitch(t.x, t.y);
+      if (grabbed === 'ball') { ball.x = q.x; ball.y = q.y; ball.z = 0; ball.vx = 0; ball.vy = 0; }
+      else { grabbed.x = q.x; grabbed.y = q.y; grabbed.vx = 0; grabbed.vy = 0; }
     }
     return;
   }

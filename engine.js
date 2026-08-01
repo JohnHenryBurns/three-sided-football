@@ -1194,6 +1194,34 @@ function RNG(){
 //
 // Twelve selections in this file check one, the other, or neither. John has seen sent-off players
 // used as passing targets, which is exactly what that window produces.
+/** Pull a point back onto the grass, along the edge normals. Returns the clamped {x,y}.
+ *
+ *  EDIT MODE USES THIS AND SO COULD ANYTHING ELSE — it is the engine's own definition of where the
+ *  pitch is, expressed once. The stadium wall already stops a ball reaching the car park; this is
+ *  the stricter version for placement, because a man dropped in the stands is worse than a ball
+ *  there: `onPitch(p)` gates most instructions, so he would stand inert rather than doing anything.
+ *
+ *  `inset` keeps him a little inside the line rather than exactly on it, since a man standing
+ *  precisely on the touchline is ambiguous about whether he is in play.
+ */
+function clampToPitch(x, y, inset){
+  const m = (inset === undefined) ? 6 : inset;
+  let px = x, py = y;
+  // ITERATED, because the pitch is a hexagon: pushing a point off one edge can push it outside
+  // the next. One pass left points outside from most directions. Four settles it, and a fifth
+  // never changes anything — measured from 24 bearings at 2000 units out.
+  for (let pass = 0; pass < 4; pass++) {
+    let moved = false;
+    for (let k = 0; k < EDGES.length; k++) {
+      const e = EDGES[k];
+      const d = (px - e.p1.x) * e.nx + (py - e.p1.y) * e.ny;
+      if (d < m) { px += e.nx * (m - d); py += e.ny * (m - d); moved = true; }
+    }
+    if (!moved) break;
+  }
+  return { x: px, y: py };
+}
+
 function onPitch(p){ return !!p && !p.out && !p.sentOff && !p.benched; }
 
 // ── IS IT ACTUALLY DEAD? ────────────────────────────────────────────────────
