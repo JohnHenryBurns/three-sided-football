@@ -391,6 +391,10 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
        you can leave the pitch in needs to be obvious that you are in it. */
     /* The edit button is gone: paused IS editable, so the mode needed no control of its own
        and the bar fits in portrait again. */
+
+    /* The play button during the countdown: dimmed, not hidden. The bar keeps its shape and it is
+       obvious the match has not started rather than that a control has vanished. */
+    #play:disabled{opacity:.3;cursor:default}
 </style>
 
 <header>
@@ -485,7 +489,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=218"></script>
+<script src="engine.js?v=219"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -2663,8 +2667,8 @@ let drawGL = function drawGL(){
   ballGL.position.set(netFly ? netFly.x : ball.x, by, netFly ? netFly.y : ball.y);
   // the grab ring sits under the ball while editing, and brightens once you have hold of it
   if (editHalo) {
-    editHalo.visible = !running;
-    if (!running) {
+    editHalo.visible = !running && performance.now() >= resumeAt;
+    if (editHalo.visible) {
       editHalo.position.set(ball.x, 1.6, ball.y);
       editHalo.material.opacity = grabbed === 'ball' ? 1 : 0.6;
     }
@@ -3241,10 +3245,24 @@ function loop(now){
     }
   }
   document.getElementById('clock').textContent = fmtClock(clockSec);
+  syncPlayBtn();
   drawGL();
 }
 
 const PAUSE_D = 'M8 5v14M16 5v14', PLAY_D = 'M7 4l13 8-13 8z';
+/** The play button cannot do anything before `resumeAt`, so it says so rather than accepting a
+ *  press that does nothing. It is also the honest gate for edit mode: the countdown is not a
+ *  pause, it is a match that has not started, and dragging a ball during it would place it and
+ *  then have the kick-off place it again.
+ *
+ *  Called from the loop, because `resumeAt` passes on its own with nothing to announce it. */
+function syncPlayBtn(){
+  const b = document.getElementById('play');
+  if (!b) return;
+  const waiting = performance.now() < resumeAt;
+  if (b.disabled !== waiting) b.disabled = waiting;
+}
+
 function setPlayIcon(){
   const b = document.getElementById('play');
   b.querySelector('path').setAttribute('d', running ? PAUSE_D : PLAY_D);
@@ -3585,7 +3603,9 @@ cv.addEventListener('pointerdown', e => {
   // ── EDIT MODE TAKES THE POINTER FIRST ─────────────────────────────────────
   // Only if the finger actually landed on the ball. Anywhere else on the pitch still orbits the
   // camera, because a mode that steals every gesture is a mode you cannot see out of.
-  if (!running) {
+  // Not during the countdown. It is not a pause — it is a match that has not started — and a ball
+  // placed now would simply be placed again by the kick-off.
+  if (!running && performance.now() >= resumeAt) {
     if (overBall(e.clientX, e.clientY)) {
       grabbed = 'ball';
       cv.setPointerCapture(e.pointerId);
