@@ -58,6 +58,13 @@ function play(opts){
   // A celebration holds play, exactly as both front ends do it. Without this the same team
   // scores into a pitch that never resets and the scoreline runs away.
   let hold = 0;
+  // THE ENGINE HAS NO phase==='over'. Its phases are 'regulation' and 'overtime', full stop —
+  // the terminal signal is champInfo plus the crownChampion hook, same as both pages. This loop
+  // gated on a phase value that has never existed (the ambientChatter fault, second sighting),
+  // so every match ran to the guard or the 3x ceiling and every per-90 number was scaled off a
+  // match of arbitrary length. '0 reached full time' was the sheet saying so, verbatim.
+  let done = false;
+  E.ENGINE_HOOKS.crownChampion = () => { done = true; };
   E.ENGINE_HOOKS.showCelebration = (c, big) => {
     ev.goals++;
     if (/OWN GOAL/i.test(String(big))) ev.ownGoals++;
@@ -73,12 +80,12 @@ function play(opts){
     if (/corner/i.test(s))   ev.corners++;
     if (/PENALTY/i.test(s))  ev.pens++;
     if (/secured|smothered/i.test(s)) ev.saves++;
+    // bookPlayer speaks through spawnNote — 'booked' and 'RED' — and never through showNotice,
+    // which is where these were being counted. Zero cards across every sheet was the tell.
+    if (/booked/i.test(s)) ev.cards++;
+    if (/RED/.test(s))     { ev.cards++; ev.reds++; }
   };
-  E.ENGINE_HOOKS.showNotice = (c, big) => {
-    const s = String(big);
-    if (/CARD/i.test(s)) ev.cards++;
-    if (/RED/i.test(s))  ev.reds++;
-  };
+  E.ENGINE_HOOKS.showNotice = () => {};
 
   for (let i = 0; i < 3; i++) E.selTeams[i] = o.teams[i];
   // SEEDED, so this match can be run again. Derived from the configuration, so the same request
@@ -129,7 +136,7 @@ function play(opts){
   //
   // The gates below are three.html's, in its order, with nothing left out.
   let walkOff = null;
-  while (E.phase !== 'over' && guard++ < 400000) {
+  while (!done && guard++ < 400000) {
     // THE FAKE CLOCK RUNS IN REAL-FRAME MILLISECONDS, because that is what resumeAt and
     // restartHold are measured in — both pages compare them against performance.now(). Advancing
     // it in MATCH time made every hold 33% too long, since a match second is 0.75 of a real one.
@@ -226,10 +233,14 @@ function play(opts){
     else { if (kRun > 30) keeperRuns.push(kRun); kRun = 0; }
   }
 
+  // The note that said FOUL no longer exists; every called foul awards a free kick and the
+  // engine counts those. Penalties are fouls too.
+  ev.fouls = (E.TEL.freeKicks || 0) + ev.pens;
+
   const owned = own.reduce((a, c) => a + c, 0) || 1;
   const per90 = x => x * (90 / o.minutes);
   return {
-    minutes: o.minutes, frames, stoppage: E.stoppageLen, finished: E.phase === 'over', phase: E.phase, clock: E.clockSec,
+    minutes: o.minutes, frames, stoppage: E.stoppageLen, finished: done, phase: E.phase, clock: E.clockSec,
     ev, per90: {
       goals: per90(ev.goals), shots: per90(ev.shots), fouls: per90(ev.fouls),
       cards: per90(ev.cards), throws: per90(ev.throws), corners: per90(ev.corners),
