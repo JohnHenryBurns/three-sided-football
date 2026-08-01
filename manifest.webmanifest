@@ -14,13 +14,5 @@
       "type": "image/svg+xml",
       "purpose": "any"
     }
-  ],
-  "shortcuts": [
-    {
-      "name": "Flat (retired)",
-      "short_name": "Flat",
-      "url": "flat.html",
-      "description": "The 2D page, kept for reference and no longer maintained."
-    }
   ]
 }
