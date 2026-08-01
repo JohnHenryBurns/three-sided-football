@@ -1037,8 +1037,28 @@ function clampInside(p,margin){
 }
 function steer(p,tx,ty,maxV){
   maxV*=speedMult(p);
-  let dx=tx-p.x, dy=ty-p.y; const d=Math.hypot(dx,dy)||1;
-  if(d<8){ p.vx*=0.78; p.vy*=0.78; return; }   // arrival deadband: settle, don't orbit
+  // ── A MAN WHO HAS ARRIVED STAYS ARRIVED ───────────────────────────────────
+  // John: players shuffle, oscillating either between instructions or WITHIN one. The instruction
+  // flicker was fixed this morning with hysteresis on the predicates. This is the same fault one
+  // layer down — a man arriving at a target that moves a few units every frame, so he never
+  // settles and vibrates on the spot.
+  //
+  // A bare deadband cannot fix it: at d<8 he damps, at d=8.1 he drives, and a target jittering
+  // across that line makes him buzz. THE BOUNDARY IS THE PROBLEM, exactly as it was for
+  // `pushing up`, `showing for a throw` and the carry-to-mark threshold.
+  //
+  // So the deadband has hysteresis too: he settles at 9 and does not set off again until the
+  // target is 20 away. And the target itself is SMOOTHED — a fast lerp, so a jittering
+  // instruction produces smooth movement while a genuine change is still followed within a few
+  // frames.
+  if(p.__tx===undefined){ p.__tx=tx; p.__ty=ty; }
+  p.__tx += (tx-p.__tx)*0.34;
+  p.__ty += (ty-p.__ty)*0.34;
+
+  let dx=p.__tx-p.x, dy=p.__ty-p.y; const d=Math.hypot(dx,dy)||1;
+  const wake = p.__settled ? 20 : 9;            // settled men need a real reason to move
+  if(d < wake){ p.__settled=true; p.vx*=0.72; p.vy*=0.72; return; }
+  p.__settled=false;
   const sp=Math.min(maxV, d*0.15);
   p.vx=p.vx*p.k1+(dx/d)*sp*p.k2;               // per-player constants — no two spring alike
   p.vy=p.vy*p.k1+(dy/d)*sp*p.k2;
