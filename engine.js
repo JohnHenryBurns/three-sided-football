@@ -1213,7 +1213,24 @@ function sidesSet(taker){
   //
   // 0.40 is "most of the pitch has reset", which is what the eye reads as a set piece. It also
   // fails open: with nobody left to position, want===0 and the taker is not held hostage.
-  return want===0 || there/want >= 0.40;
+  // ── EVERYBODY, NOT TWO IN FIVE ────────────────────────────────────────────
+  // John: require all players back on their own side for a kick-off. 40% was a compromise from
+  // when this gated THROWS as well, where waiting for a whole side would have been absurd. It
+  // only gates the kick-off now, and a kick-off is the one restart where the laws genuinely
+  // demand a full shape.
+  //
+  // The radius stays at 130 — "in the right area", not on exact coordinates. Fifteen men
+  // converging on precise spots never all arrive at once, which is what made this wait forever
+  // at 70.
+  // ── AND THE REFEREE HAS A LIMIT ───────────────────────────────────────────
+  // Requiring everybody stalled the kick-off: 29,718 frames of it in a 10,800-frame match, because
+  // one man out of position holds up fifteen. A gate that CAN be blocked forever eventually is.
+  //
+  // So: everybody, or eight seconds, whichever comes first. That is a referee waving play on
+  // rather than a rule being abandoned — and the eight seconds are not dead, since  has every man moving to his spot throughout.
+  if(pendingRestart && pendingRestart.kind==='kickoff' &&
+     clockSec - (pendingRestart.at||clockSec) > 8) return true;
+  return want===0 || there >= want;
 }
 
 function restartSpot(p){
@@ -3860,7 +3877,16 @@ const INSTRUCTIONS = [
       p.runUntil = clockSec + 1.5;                  // and bestPass can see it while it lasts
       p.sprint = { why:'run', blaze:RNG_COS()<0.2 };
       TEL.runs=(TEL.runs||0)+1;
-      steer(p, tx, ty, 2.7);
+      // ── AND A LEGITIMATE BOOST FOR A MAN A LONG WAY OUT ───────────────────
+      // John watched it and said the hustle looks right, so speed it where it is needed rather
+      // than everywhere. A man near his spot jogs; a man 240 units out at the far end of the
+      // pitch sprints, because that is the one holding up the kick-off.
+      //
+      // Requiring EVERY man back means the wait is set by the furthest player — not a stall, just
+      // arithmetic: the slowest of fifteen instead of the sixth-fastest, which roughly triples the
+      // kick-off. Boosting only the stragglers attacks the term that actually sets the wait.
+      const far = dist(p, {x:tx, y:ty});
+      steer(p, tx, ty, far > 150 ? 3.4 : far > 70 ? 2.7 : 2.2);
       return true;
     } },
   { name:'covering the danger', tier:TIER.COACH, base:520,
@@ -4107,7 +4133,24 @@ const INSTRUCTIONS = [
         const dx=tx-CX, dy=ty-CY, d=Math.hypot(dx,dy);
         if(d < CIRCLE_R+8){ const k=(CIRCLE_R+10)/(d||1); tx=CX+dx*k; ty=CY+dy*k; }
       }
-      steer(p, tx, ty, 2.0);
+      // ── THEY JOG BACK, THEY DO NOT STROLL ─────────────────────────────────
+      // 2.0 against an outfielder's 2.6. With the kick-off requiring EVERY man back, the wait is
+      // set by the furthest player — and traced stragglers were 240 to 336 units out, all of them
+      // correctly walking back and simply not there yet. The kick-off ran 29,718 frames in a
+      // 10,800-frame match.
+      //
+      // That is not a stall to be waited out with referee patience, it is men moving too slowly
+      // for what is being asked of them. Footballers jog back after a goal; they do not amble.
+      // ── AND A LEGITIMATE BOOST FOR A MAN A LONG WAY OUT ───────────────────
+      // John watched it and said the hustle looks right, so speed it where it is needed rather
+      // than everywhere. A man near his spot jogs; a man 240 units out at the far end of the
+      // pitch sprints, because that is the one holding up the kick-off.
+      //
+      // Requiring EVERY man back means the wait is set by the furthest player — not a stall, just
+      // arithmetic: the slowest of fifteen instead of the sixth-fastest, which roughly triples the
+      // kick-off. Boosting only the stragglers attacks the term that actually sets the wait.
+      const far = dist(p, {x:tx, y:ty});
+      steer(p, tx, ty, far > 150 ? 3.4 : far > 70 ? 2.7 : 2.2);
       return true;
     } },
   { name:'taking up position', tier:TIER.SCRIPT, base:940,
