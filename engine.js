@@ -694,7 +694,7 @@ function kickoff(toTeam, firstWhistle){
   players.forEach(q=>{ q.__atSpot=false; q.__showing=false; q.__pushed=false; });
   chaser=[null,null,null];
   retargetTimer=0; celebrateUntil=0; camFocusP=null; camFocusUntil=0;
-  lastBlazeSay=-99; lastStyleAt=-99; recentChatter=[];
+  lastBlazeSay=-99; lastStyleAt=-99; recentChatter=[]; lastChatterAt=-99;
   const fwd=players.find(p=>p.team===toTeam&&p.role==="F"&&!p.out&&!p.sentOff)
     ||players.find(p=>p.team===toTeam&&p.role!=="K"&&!p.out&&!p.sentOff)
     ||players.find(p=>p.team===toTeam&&p.role==="K"&&!p.out);
@@ -5712,6 +5712,11 @@ function styleLines(){
   return L;
 }
 let recentChatter=[];
+// ── THE STATE MOVED WITH THE FUNCTION, EXCEPT THIS ──────────────────────────
+// When ambientChatter came into the engine, `lastChatterAt` stayed declared on flat.html — so on
+// the 3D page and in lab.js the first read threw ReferenceError, caught by colorCommentary's
+// try/catch. An engine name now, like voiceOn: neither page may redeclare it.
+let lastChatterAt=-99;
 // ── THE KEEPER GETS HIS OWN LINES ───────────────────────────────────────────
 // He was getting the generic carrier commentary — "Unai Simón on it, head up, options
 // everywhere", "Unai Simón carries" — which reads as a keeper playing outfield. He is not; he is
@@ -5815,9 +5820,12 @@ function ambientChatter(){
   // try/catch.
   //
   // What the gates actually MEAN, expressed in what the engine owns:
-  //   the match is running          phase==='play'
+  //   the match is running          — NOT a phase check. `phase` only ever holds
+  //     "regulation" or "overtime"; the gate `phase!=='play'` written here blocked every call
+  //     ever made, silently, which is why TEL.chatterErr stayed at zero: an early return is not
+  //     a throw, and the instrument watches for throws. "Running" is page state — both call
+  //     sites already sit inside their own running/held checks, so no gate is needed here.
   //   the announcer is not busy     ENGINE_HOOKS tells us, or we simply pace ourselves
-  if(phase!=='play') return;
   if(typeof voiceOn!=='undefined' && !voiceOn) return;
   const rt=nowMs()/1000;
   if(rt-lastChatterAt<6) return;   // REAL seconds: slow-speed viewing gets a full broadcast
@@ -5900,8 +5908,11 @@ function ambientChatter(){
       `Fine margins from here to the whistle.`);
   if(phase==="overtime") cand.push(`Sudden death on a hexagon. Cruelty as entertainment.`,
     `Nobody breathes in overtime. Not even the announcer.`);
-  if(matchBoards.length&&RNG()<0.25)
-    cand.push(`Tonight's match brought to you in part by ${matchBoards[Math.floor(RNG()*matchBoards.length)].toLowerCase()}.`);
+  // The boards are flat-page furniture — the 3D page has none and declares nothing. And the
+  // draw is RNG_COS, not RNG: a sponsor gag must not move a football. This line had both faults
+  // and had never once run, so neither had ever cost anything — until it was revived.
+  if(typeof matchBoards!=='undefined'&&matchBoards.length&&RNG_COS()<0.25)
+    cand.push(`Tonight's match brought to you in part by ${matchBoards[Math.floor(RNG_COS()*matchBoards.length)].toLowerCase()}.`);
   // ---- state-aware storytelling (batch 2) ----
   {
     // hat-trick watch & man of the moment
