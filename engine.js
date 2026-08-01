@@ -1302,6 +1302,21 @@ function restartSpot(p){
     const bx=R.x-g9.x, by=R.y-g9.y, bl=Math.hypot(bx,by)||1;
     return { x:R.x - bx/bl*17, y:R.y - by/bl*17 };
   }
+  // ── THE PENALTY RUN-UP ────────────────────────────────────────────────────
+  // The default below stands a taker 22 outward from the PITCH CENTRE, and `pending the kick`
+  // brakes him within 6 of that — so he settles 16 to 28 from the mark. The take action demands
+  // 26. The stand ring extends TWO UNITS past the take radius: settle at 27 and the penalty can
+  // never be taken, by anyone, for the rest of the match. Seeds 8 and 13 spent 167 and 164
+  // seconds as exactly that tableau, and it is intermittent — settle at 25 and it works — which
+  // is why it looked fixed. Two rules measuring against different limits, one unit apart.
+  //
+  // A penalty taker stands BEHIND the ball on the line to goal, which is also the honest
+  // geometry: 16 back puts his whole settle ring (10-22) inside the 26.
+  if(R.kind==='penalty' && penaltyGoalTeam!==null && penaltyGoalTeam!==undefined){
+    const g2=goalCenter(penaltyGoalTeam);
+    const bx2=R.x-g2.x, by2=R.y-g2.y, bl2=Math.hypot(bx2,by2)||1;
+    return { x:R.x + bx2/bl2*16, y:R.y + by2/bl2*16 };
+  }
   const odx=R.x-CX, ody=R.y-CY, ol=Math.hypot(odx,ody)||1;
   return { x:R.x + odx/ol*22, y:R.y + ody/ol*22 };
 }
@@ -1484,6 +1499,16 @@ function stepRestartWatchdog(){
     }
   }
   if(pendingRestart && pendingRestart.p && (pendingRestart.p.out||pendingRestart.p.sentOff)){
+    TEL.restartVoid++;
+    pendingRestart=null; ball.fetch=null;
+  }
+  // ── AND STAGED RESTARTS GET THE SAME MORTALITY ────────────────────────────
+  // The free kick had an 8-second void; a staged pendingRestart had none, so the hung penalty
+  // above ran 167 seconds with the watchdog watching. Twenty seconds, whatever the state.
+  // NOT the kick-off: its worst honest tail is ~24s (the 29,718-to-1,466-frames fix), and a
+  // voided kick-off is a match with no way to restart at all.
+  if(pendingRestart && pendingRestart.kind!=='kickoff' && pendingRestart.at!==undefined
+     && clockSec-pendingRestart.at>20){
     TEL.restartVoid++;
     pendingRestart=null; ball.fetch=null;
   }
