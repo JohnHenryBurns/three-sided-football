@@ -489,7 +489,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=234"></script>
+<script src="engine.js?v=235"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -545,9 +545,11 @@ Object.assign(ENGINE_HOOKS, {
   say,
   renderScore,
 
-  // spawnNote, spawnPing, flash, flamePop, openCoachMenu, closeCoachMenu, showSetup,
-  // renderTeamSlots, resetGoals, drawBoards and clearMarks stay no-ops: this page has no
-  // sponsor boards, no coach menu and no SVG marks to clear.
+  // resetGoals and drawBoards stay no-ops: this page has no breakable goal frames and no
+  // sponsor boards. Everything else is wired further down — including clearMarks and
+  // closeCoachMenu, which this comment used to claim were pointless while the page grew
+  // notes, pings, and a coach overlay underneath it. A comment about what a page lacks
+  // goes stale the moment the page stops lacking it.
 });
 
 
@@ -1244,6 +1246,13 @@ ENGINE_HOOKS.spawnPing = (x, y, colour) => {
   m.position.set(x, 1.4, y);
   scene.add(m);
   pings3.push({ m, t0: performance.now() });
+};
+// resetMatch() calls this so a new match does not inherit the old one's fading annotations —
+// "the page throws away its own pings and notes", says the engine, and now it actually does.
+ENGINE_HOOKS.clearMarks = () => {
+  for (const n of notes3) scene.remove(n.sp);
+  for (const p of pings3) scene.remove(p.m);
+  notes3.length = 0; pings3.length = 0;
 };
 
 // ── SCORCH ──────────────────────────────────────────────────────────────────
@@ -3583,6 +3592,9 @@ function openCoach(t){
 }
 coEl.addEventListener('click', e => { if (e.target === coEl) coEl.classList.remove('on'); });
 ENGINE_HOOKS.openCoachMenu = openCoach;
+// resetMatch() closes the menu from the engine side — without this, resetting mid-menu left
+// the coach overlay floating over the setup screen, closable only by a click it never asked for.
+ENGINE_HOOKS.closeCoachMenu = () => { coEl.classList.remove('on'); cmEl.classList.remove('on'); };
 cmEl.addEventListener('click', e => { if (e.target === cmEl) cmEl.classList.remove('on'); });
 
 // ── WHAT A CAMERA IS, AND WHAT A GESTURE IS ─────────────────────────────────
