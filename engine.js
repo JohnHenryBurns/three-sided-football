@@ -1112,6 +1112,25 @@ function steer(p,tx,ty,maxV){
   const v=Math.hypot(p.vx,p.vy); if(v>maxV){p.vx*=maxV/v;p.vy*=maxV/v;}
 }
 /** Has the offending side backed off the required ten yards? */
+
+// ── A KICK THAT KNOWS WHERE THE LINES ARE ───────────────────────────────────
+// Keeper launches went out of play 59% of the time: power picked for the receiver's distance,
+// nothing watching the boundary past him. A lofted ball runs about 48 units per power point
+// (measured); this caps power so the predicted stop sits inside the paint. Distributions only,
+// never shots — a shot at goal is supposed to cross the line.
+function boundedPower(fx, fy, tx, ty, pw){
+  let dx = tx - fx, dy = ty - fy;
+  const dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;
+  let exit = 1e9;
+  for(const e of EDGES){
+    const denom = dx*e.nx + dy*e.ny;
+    if(denom >= -1e-6) continue;
+    const t = ((e.p1.x - fx)*e.nx + (e.p1.y - fy)*e.ny) / denom;
+    if(t > 0 && t < exit) exit = t;
+  }
+  return Math.min(pw, Math.max(4, (exit - 36) / 48));
+}
+
 function wallClear(fk){
   for(const q of players){
     if(q.team!==fk.wall||q.out||q.sentOff) continue;
@@ -2139,7 +2158,7 @@ const PORTED = [
       ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p;
       if(f.far && f.fd>200){
         kick(f.far.x+f.far.vx*7, f.far.y+f.far.vy*7,
-             Math.min(9, Math.max(4.2, f.fd/108*1.1)), false);
+             boundedPower(ball.x, ball.y, f.far.x, f.far.y, Math.min(9, Math.max(4.2, f.fd/108*1.1))), false);
         ball.zv=4.6;
       } else if(f.near){
         kick(f.near.x+f.near.vx*4, f.near.y+f.near.vy*4,
@@ -2180,12 +2199,12 @@ const PORTED = [
       const f=gkOutlets(p);
       if(f.far && f.fd>180){
         kick(f.far.x+f.far.vx*7, f.far.y+f.far.vy*7,
-             Math.min(9, Math.max(4.2, f.fd/108*1.1)), false);
+             boundedPower(ball.x, ball.y, f.far.x, f.far.y, Math.min(9, Math.max(4.2, f.fd/108*1.1))), false);
         ball.zv=4.4;
       } else {
         // nobody on: get it away from his own goal, high and long
         const away={ x:p.x+(p.x-goalCenter(p.team).x), y:p.y+(p.y-goalCenter(p.team).y) };
-        kick(away.x, away.y, 8.4, false);
+        kick(away.x, away.y, boundedPower(ball.x, ball.y, away.x, away.y, 8.4), false);
         ball.zv=4.8;
       }
       gkHolder=null; gkHoldUntil=-1;
@@ -2204,7 +2223,7 @@ const PORTED = [
       const f=gkOutlets(p);
       if(!f.far) return false;
       const dTo=dist(p,f.far);
-      const pw=Math.min(11.5, Math.max(4.2, dTo/66 * 1.12));
+      const pw=boundedPower(ball.x, ball.y, f.far.x, f.far.y, Math.min(11.5, Math.max(4.2, dTo/66 * 1.12)));
       kick(f.far.x+f.far.vx*7, f.far.y+f.far.vy*7, pw, false);
       ball.zv=4.6;                       // up into the lights, as the cascade has it
       gkHolder=null;   // he has let go of it
@@ -2225,8 +2244,8 @@ const PORTED = [
       const og9=goalCenter(p.team);
       const ax=p.x-og9.x, ay=p.y-og9.y, al=Math.hypot(ax,ay)||1;
       const spread=(RNG()-0.5)*0.5;
-      kick(p.x+(ax/al)*300 + (-ay/al)*300*spread,
-           p.y+(ay/al)*300 + ( ax/al)*300*spread, 11.5, false);
+      { const cx2=p.x+(ax/al)*300 + (-ay/al)*300*spread, cy2=p.y+(ay/al)*300 + ( ax/al)*300*spread;
+      kick(cx2, cy2, boundedPower(ball.x, ball.y, cx2, cy2, 11.5), false); }
       gkHolder=null;   // he has let go of it
       ball.zv=4.2;
       return true;
@@ -3367,7 +3386,16 @@ const INSTRUCTIONS = [
     // It outranked the specific instruction 942 to 930 and won 73% of kick-off frames. The fix
     // is not to re-rank them — it is that this does not apply at all when a better-informed
     // instruction owns the situation.
+    // MEASURED TWICE BEFORE THIS SHAPE (QA-HOOF-2026-08). Over-broad, this exiled EVERYONE
+    // from every staged restart, which suppressed 'offering a lane' and 'an ally offers deep'
+    // from the day they were written — and freeing them at their old 70-165 geometry made
+    // throws WORSE: reception moved to the touchline, where the exile had been pushing it
+    // infield by accident. The offers now stand 130-230 deep of the mark, so the exile stays
+    // only for the OPPOSITION — who must not crowd a throw — and the taker's side and allies
+    // are freed to receive where a heavy touch stays in play.
     applies:p => !!(pendingRestart && pendingRestart.kind!=='kickoff'
+                    && !(pendingRestart.kind==='throw' && pendingRestart.team!==undefined
+                         && (p.team===pendingRestart.team || allied(p.team, pendingRestart.team)))
                     && !restartFree(p) && !p.out && !p.sentOff
                     && p.role!=='K'),
     score:p => 940,
@@ -3692,8 +3720,12 @@ const INSTRUCTIONS = [
       const inx=CX-rx, iny=CY-ry, il=Math.hypot(inx,iny)||1;
       const nix=inx/il, niy=iny/il, pux=-niy, puy=nix;
       GKSTAT.laneSteer=(GKSTAT.laneSteer||0)+1;
-      const lat2=((p.k1*997)%1-0.5)*260;
-      const dep2=70+((p.k2*613)%1)*95;
+      // DEEP OF THE MARK. At 70-165 the offers clustered reception within reach of the line
+      // and every first touch bled out — throws rose the day these first woke (QA-HOOF's
+      // central finding). At 130-230, angled infield, the receiver takes it where a heavy
+      // touch stays in play.
+      const lat2=((p.k1*997)%1-0.5)*200;
+      const dep2=130+((p.k2*613)%1)*100;
       steer(p, rx+nix*dep2+pux*lat2, ry+niy*dep2+puy*lat2, 1.35);
       return true;
     } },
@@ -3712,8 +3744,8 @@ const INSTRUCTIONS = [
       const rx=pendingRestart.x, ry=pendingRestart.y;
       const inx=CX-rx, iny=CY-ry, il=Math.hypot(inx,iny)||1;
       const nix=inx/il, niy=iny/il, pux=-niy, puy=nix;
-      const lat5=((p.k1*733)%1-0.5)*330;
-      const dep5=140+((p.k2*541)%1)*90;
+      const lat5=((p.k1*733)%1-0.5)*300;
+      const dep5=210+((p.k2*541)%1)*90;
       steer(p, rx+nix*dep5+pux*lat5, ry+niy*dep5+puy*lat5, 1.15);
       return true;
     } },
