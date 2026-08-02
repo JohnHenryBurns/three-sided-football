@@ -4624,7 +4624,15 @@ function physics(dt){
         if(dist(ball,g)<110)continue;            // ball is in — the zone is open
         if(ball.z>4&&dist(ball,g)<260&&((g.x-ball.x)*ball.vx+(g.y-ball.y)*ball.vy)>0)continue; // timed run: the cross is inbound
         const d=dist(p,g);
-        if(d<112){ p.x=g.x+(p.x-g.x)/(d||1)*112; p.y=g.y+(p.y-g.y)/(d||1)*112; }
+        // HE WALKS OUT. This projected a man to the rim in one frame — a 33-unit hop the instant
+        // the inbound-ball exception evaporated, ~9 visible pops a match, while this file's own
+        // rule for keepers says 'he walks now'. The zone still ejects; it just does it at the
+        // pace legs move: capped per frame just above sprint pace — smooth on screen, but no legs outrun it, so a legal chase that turns illegal
+        // reads as a man stepping out, not a man snapping.
+        if(d<112){
+          const push=Math.min(112-d, 3.6*S), k=(d+push)/(d||1);
+          p.x=g.x+(p.x-g.x)*k; p.y=g.y+(p.y-g.y)*k;
+        }
       }
     });
   }
