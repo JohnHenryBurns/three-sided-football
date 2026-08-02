@@ -3783,7 +3783,17 @@ const INSTRUCTIONS = [
       const e=EDGES[GOAL_EDGE[p.team]];
       let along=(ball.x-e.mx)*e.ux+(ball.y-e.my)*e.uy;
       const lim=e.len*GOAL_HALF*0.9; along=Math.max(-lim,Math.min(lim,along));
-      steer(p, e.mx+e.ux*along+e.nx*20, e.my+e.uy*along+e.ny*20, 1.9);
+      // HE READS THE MOVE, NOT THE WIGGLE. This retargeted from the ball every frame at full
+      // gain, so a dribbler working the face made the keeper run every swing of the projection
+      // at 1.9 and arrive exactly as it reversed — path 113 for net 10 in the jitter trace. A
+      // deadband only quantised it: the swings are legitimate motion, wider than any band. So
+      // the committed spot low-passes the projection (about a third of a second of composure)
+      // and he approaches it at a speed proportional to how wrong he is, arriving soft and
+      // standing set. On a real shot 'coming for it' takes over inside 55 with full reactions.
+      if(p.lineAlong===undefined) p.lineAlong=along;
+      p.lineAlong += (along - p.lineAlong) * 0.045;
+      const tx=e.mx+e.ux*p.lineAlong+e.nx*20, ty=e.my+e.uy*p.lineAlong+e.ny*20;
+      steer(p, tx, ty, Math.min(1.9, 0.4 + Math.hypot(tx-p.x, ty-p.y)*0.12));
       return true;
     } },
 
