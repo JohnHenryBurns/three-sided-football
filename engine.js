@@ -523,7 +523,7 @@ function incidentalFoul(p, victim, clumsiness){
   const R=REF();
   if(RNG() > R.sees) return true;   // it happened; nobody called it
   awardFreeKick(victim, p);
-  if(RNG() < 0.16*R.zeal) bookPlayer(p, RNG() < 0.14*R.zeal);
+  if(RNG() < 0.16*R.zeal) bookPlayer(p, RNG() < 0.07*R.zeal);   // reds halved: one every few matches reads as an event, one every other match reads as weather
   return true;
 }
 
@@ -1036,7 +1036,10 @@ function clearPenaltyLine(){
     const room = 46;
     if(Math.abs(across) >= room) return;        // already out of the way
     const side = across >= 0 ? 1 : -1;          // shortest way out
-    const shove = (room - Math.abs(across)) * side;
+    // capped per frame: reconnecting telFrame switched this rule back on, and uncapped it was
+    // a 46-unit shove — the zone teleporter's little brother, activated by the same PR that
+    // buried its sibling. He steps off the line; he does not blink off it.
+    const shove = Math.max(-3.6, Math.min(3.6, (room - Math.abs(across)) * side));
     q.x += px*shove; q.y += py*shove;
   });
 }
@@ -2325,7 +2328,7 @@ const PORTED = [
       }
 
       awardFreeKick(victim, p);
-      if(RNG() < 0.30*R.zeal) bookPlayer(p, RNG() < 0.22*R.zeal);
+      if(RNG() < 0.30*R.zeal) bookPlayer(p, RNG() < 0.10*R.zeal);
       return false;
     } },
 
@@ -5196,6 +5199,14 @@ function physics(dt){
       }
     }
   }
+  // ── THE HEARTBEAT, RECONNECTED ──────────────────────────────────────────
+  // telFrame() existed, incremented every per-frame counter, ran the penalty line, and was
+  // called by NOTHING — the only reference in the file was a comment describing when it runs.
+  // The possession quartet in the report, lab's four-states block, TEL.frames, TEL.loose, the
+  // jump counters, and the keep-the-penalty-line-clear rule were all downstream of one missing
+  // call. Third sighting this week of a subsystem that looked alive because its wiring read
+  // well.
+  telFrame();
 }
 
 // ---------- Goal celebration ----------
