@@ -835,6 +835,7 @@ function PRN(x){ const f=x&&TEAMS[x.team]&&TEAMS[x.team].she;
           :{he:"he",He:"He",his:"his",His:"His",him:"him",man:"man"}; }
 function speedMult(p){
   let m=0.55+0.45*p.stamina;                       // fatigue: the size of the tank
+  if(p.staggerUntil && clockSec<p.staggerUntil) m*=0.35;   // shoved: three slow strides to reset
   if(momentumOn && clockSec<boostUntil[p.team]) m*=1.15;  // underdog fire
   if(p.sprint) m*=BURST_SPD;                       // burst: the throttle
   return Math.min(m,1.6);                          // physics cap: nobody tunnels the tackle radius
@@ -2367,6 +2368,51 @@ const PORTED = [
       awardFreeKick(victim, p);
       if(RNG() < 0.30*R.zeal) bookPlayer(p, RNG() < 0.10*R.zeal);
       return false;
+    } },
+
+  // ── THE SHOVE ─────────────────────────────────────────────────────────────
+  // John's spec: rare, both sides of the ball, and during live play it runs the card risk.
+  // A defender shoves the carrier off his touch; a pressed carrier shoves the presser off his
+  // back. It is an impulse into the knock channel plus a stagger — displacement over strides,
+  // never a position write — and the referee's machinery for it is the one that already
+  // exists: sees, free kick, book.
+  { name:'shove', tier:TIER.PLAYER, ported:true,
+    coach:T => T.press*24,
+    can:p => {
+      if(!onPitch(p) || p.role==='K' || holdingPlay()) return false;
+      if(p.shoveAt && clockSec-p.shoveAt<7) return false;
+      const o=ball.owner;
+      const tgt = (o && o.team!==p.team && !allied(p.team,o.team) && dist(p,o)<24) ? o
+                : (o===p ? players.find(q=>q.team!==p.team && !allied(p.team,q.team)
+                                          && !q.out && q.role!=='K' && dist(p,q)<24) : null);
+      if(!tgt || tgt.role==='K') return false;
+      if(suppress && suppress.team===p.team && clockSec<suppress.until) return false;
+      return RNG() < 0.006;                        // rare: an event, not a habit
+    },
+    score:p => 640,
+    act:p => {
+      const o=ball.owner;
+      const tgt = (o && o.team!==p.team && dist(p,o)<24) ? o
+                : players.find(q=>q.team!==p.team && !allied(p.team,q.team)
+                                  && !q.out && q.role!=='K' && dist(p,q)<24);
+      if(!tgt) return false;
+      p.shoveAt=clockSec;
+      const dx=tgt.x-p.x, dy=tgt.y-p.y, dl=Math.hypot(dx,dy)||1;
+      tgt.kx+=dx/dl*2.6; tgt.ky+=dy/dl*2.6;
+      tgt.staggerUntil=clockSec+0.5;
+      TEL.shoves++;
+      ENGINE_HOOKS.spawnNote(tgt.x,tgt.y-24,"shoved!",TEAMS[p.team].color,TEAMS[p.team].accent);
+      if(RNG_COS()<0.3) sayLogged(pick([
+        `${p.name} puts two hands into ${tgt.name} — the referee is watching...`,
+        `A shove from ${p.name}! ${tgt.name} stumbles.`,
+        `${p.name} clears a path the old-fashioned way.`]));
+      const R=REF();
+      if(RNG() < R.sees*0.55){
+        TEL.shoveFouls++;
+        awardFreeKick(tgt, p);
+        if(RNG() < 0.30*R.zeal) bookPlayer(p, RNG() < 0.08*R.zeal);
+      }
+      return true;
     } },
 
   { name:'tackle', tier:TIER.PLAYER, ported:true,
@@ -4675,6 +4721,22 @@ function physics(dt){
   // WHERE IT WAS. Any test that asks "did it cross" needs the previous position, and nothing was
   // keeping one — which is why the woodwork could only ever ask "is it inside a band".
   ball.px=ball.x; ball.py=ball.y; ball.pz=ball.z;
+  // ── THE KNOCK CHANNEL ─────────────────────────────────────────────────────
+  // Instructions assign velocity every frame, so a shove written into vx dies one frame later.
+  // A knock is its own decaying quantity: applied to position here, faded at 0.72, worth about
+  // nine units total from a full shove — a man staggers three strides, he does not teleport.
+  players.forEach(p=>{
+    if(p.kx||p.ky){
+      // capped at 2.4 a frame — a knock moves a man at a hard stumble, never faster. The first
+      // cut let contact frames stack into the channel and a blocker stepped 24 units in one
+      // frame, which is a teleport with extra arithmetic. No teleporting players.
+      const km=Math.hypot(p.kx,p.ky);
+      if(km>2.4){ p.kx*=2.4/km; p.ky*=2.4/km; }
+      p.x+=p.kx; p.y+=p.ky;
+      p.kx*=0.72; p.ky*=0.72;
+      if(Math.abs(p.kx)<0.05&&Math.abs(p.ky)<0.05){ p.kx=0; p.ky=0; }
+    }
+  });
   stepJumps(S);          // heads move before anybody reaches with one
   stepBench();           // and the disgraced watch from the side
   stepRestartWatchdog(); // and no restart may hang the match
@@ -4776,8 +4838,33 @@ function physics(dt){
       if(a.out||b.out)continue;
       const dx=a.x-b.x, dy=a.y-b.y, d=Math.hypot(dx,dy);
       if(d<BODY&&d>0.01){
-        const push=(BODY-d)/2, ux=dx/d, uy=dy/d;
-        a.x+=ux*push; a.y+=uy*push; b.x-=ux*push; b.y-=uy*push;
+        const ux=dx/d, uy=dy/d;
+        // ── THE FETCHER HAS RIGHT OF WAY ──────────────────────────────────
+        // John: a man going for a dead ball gets blocked by bodies standing still or crossing
+        // him, and they shuffle against each other awkwardly. The ball is dead and his job is
+        // the ball — so in a collision the fetcher takes 15% of the correction and the man in
+        // his way takes 85%, plus a sideways knock off the fetch line so he slides aside
+        // rather than being ploughed through. At will, no card: you cannot foul anyone while
+        // the ball is out of play and you are the one sent to get it.
+        const fA = ball.fetch && ball.fetch.by===a, fB = ball.fetch && ball.fetch.by===b;
+        if(fA!==fB){
+          const F = fA ? a : b, O = fA ? b : a, sgn = fA ? 1 : -1;
+          const push=Math.min(BODY-d, 3.2);          // bounded: he shoulders through, no launch
+          F.x+=sgn*ux*push*0.15; F.y+=sgn*uy*push*0.15;
+          O.x-=sgn*ux*push*0.85; O.y-=sgn*uy*push*0.85;
+          // slide him off the line to the ball — side chosen ONCE per contact spell, because
+          // recomputing it each frame flipped at the centreline and the two men cancelled each
+          // other into exactly the shuffle this exists to remove
+          const bx=ball.x-F.x, by=ball.y-F.y, bl=Math.hypot(bx,by)||1;
+          if(!O.slideSide || clockSec-O.slideAt>0.6){
+            O.slideSide=((O.x-F.x)*(-by/bl)+(O.y-F.y)*(bx/bl))>=0?1:-1;
+          }
+          O.slideAt=clockSec;
+          if(pass===0){ O.kx+= -by/bl*O.slideSide*0.9; O.ky+= bx/bl*O.slideSide*0.9; }
+        } else {
+          const push=(BODY-d)/2;
+          a.x+=ux*push; a.y+=uy*push; b.x-=ux*push; b.y-=uy*push;
+        }
       }
     }
     players.forEach(p=>{ if(!p.sentOff&&!((pendingRestart&&pendingRestart.p===p)||cornerTaker===p||throwPending===p)) clampInside(p, p.role==="K"?12:14); });
@@ -5490,6 +5577,7 @@ function goalScored(concederTeam){
 // literal IS the reset: telZero() is the only place the shape exists, so the two cannot drift
 // and every {} is fresh per match by construction.
 function telZero(){ return {
+  shoves:0, shoveFouls:0,
   frames:0, loose:0, deadFrames:0, aerial:0, throwIns:0, goalKicks:0,
   keeperClaims:0, keeperFrames:0, ownedFrames:0, poss:[0,0,0], jumps:0, bigJumps:0,
   maxJump:0, lastX:null, lastY:null, claims:0, gkClaims:0, rapid:0,
@@ -5691,6 +5779,7 @@ function buildMatchReport(){
   md+=`| keeper stayed up | ${TEL.keeperHeld} | | vs dives |\n`;
   md+=`| shielding (frames) | ${TEL.shields} | | |\n`;
   md+=`| **restarts voided by the watchdog** | ${TEL.restartVoid} | | should be 0 |\n`;
+  md+=`| shoves (fouled) | ${TEL.shoves} (${TEL.shoveFouls}) | | rare by design |\n`;
   // ── BALL STATE ────────────────────────────────────────────────────────────
   // The loose-ball number is the biggest open item on the sheet, and these four counters were
   // being incremented every frame and read by nothing — the instrument for the problem existed
