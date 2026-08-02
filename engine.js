@@ -4640,6 +4640,14 @@ function physics(dt){
         // pace legs move: capped per frame just above sprint pace — smooth on screen, but no legs outrun it, so a legal chase that turns illegal
         // reads as a man stepping out, not a man snapping.
         if(d<112){
+          // AND THE WALL IS BACK. The walk-out alone was worth about six goals a match: a man
+          // could keep DRIVING inward while being walked out, and the zone became a curtain.
+          // So on contact the inward component of his velocity dies — he can run along the rim
+          // all day, but into it he moves only as fast as the ejection lets him, which is
+          // backwards. Smooth like the walk, solid like the old clamp, snapping like neither.
+          const ux=(p.x-g.x)/(d||1), uy=(p.y-g.y)/(d||1);
+          const vin=p.vx*ux+p.vy*uy;
+          if(vin<0){ p.vx-=vin*ux; p.vy-=vin*uy; }
           const push=Math.min(112-d, 3.6*S), k=(d+push)/(d||1);
           p.x=g.x+(p.x-g.x)*k; p.y=g.y+(p.y-g.y)*k;
         }
