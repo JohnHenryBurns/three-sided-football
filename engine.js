@@ -4915,12 +4915,20 @@ function physics(dt){
         // and plays on. He keeps possession and loses his hands, which is exactly the rule.
         //
         // He is not moved. Nothing is moved. The ball is simply no longer in his gloves.
+        // ── UNLESS HE IS FETCHING A DEAD BALL ─────────────────────────────
+        // The goal-kick keeper (PR #315) claims the ball at the line, far outside his area —
+        // and this rule stripped it from him every frame while the fetch reclaimed it: a
+        // claim/strip loop, 633 cycles per goal kick, two popups per cycle, the ceremony
+        // completing only because he accidentally dribbled the loop to the mark. The rule is
+        // about handling a ball IN PLAY; a named fetcher is retrieving a dead one.
+        if(ball.fetch && ball.fetch.by===o){ /* his errand, his hands */ } else {
         ball.owner=null;
         ball.x=o.x + (o.hx||0)*11; ball.y=o.y + (o.hy||0)*11;
         ball.vx=o.vx*0.6; ball.vy=o.vy*0.6; ball.z=0; ball.zv=0;
         if(gkHolder===o){ gkHolder=null; gkHoldUntil=-1; }
         ENGINE_HOOKS.spawnNote(o.x, o.y-24, "out of his area!", "#ffd166");
         TEL.gkOutOfArea=(TEL.gkOutOfArea||0)+1;
+        }
       }
     }
     // KEEP IT OUT OF HIM. The carry point is 15 ahead, but the ball SPRINGS toward it — so on a
