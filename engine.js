@@ -1755,6 +1755,24 @@ function backPass(p){
   return best;
 }
 
+/** Is this ball a teammate's pass, stopping near me, with me its closest man? The ground ball
+ *  stops about ten velocities from where it is (f=0.90 a frame); a man within 90 of that spot,
+ *  ahead of the ball rather than behind it, and nearer than any of his fellows, is the receiver
+ *  — whether or not bestPass had him in mind when it was struck. */
+function passForMe(p){
+  const lk = ball.lastKicker;
+  if(!lk || lk===p || lk.team!==p.team || ball.owner) return false;
+  const sx = ball.x + ball.vx*10, sy = ball.y + ball.vy*10;
+  const ds = Math.hypot(p.x-sx, p.y-sy);
+  if(ds > 90) return false;
+  if(((p.x-ball.x)*ball.vx + (p.y-ball.y)*ball.vy) <= 0) return false;   // behind the ball
+  for(const m of players){
+    if(m===p || m===lk || m.team!==p.team || !onPitch(m) || m.role==='K') continue;
+    if(Math.hypot(m.x-sx, m.y-sy) < ds) return false;
+  }
+  return true;
+}
+
 function bestPass(p){
   const t9=targets[p.team];
   if(t9===null||t9===undefined) return null;
@@ -3628,12 +3646,50 @@ const INSTRUCTIONS = [
   // ── INTERCEPTING ──────────────────────────────────────────────────────────
   // Target: ball.x + ball.vx*6 — six frames AHEAD of the ball rather than at it. Leading a pass
   // is a different instruction from chasing one, and the target is the only thing that says so.
+  // ── THE PASS IS FOR SOMEBODY, AND HE IS ALLOWED TO KNOW IT ────────────────
+  // The autopsy: interception is the largest pass-failure class (16% of 602), and during a
+  // third of all pass-flight frames the intended receiver was moving AWAY from the ball at
+  // real speed — because this gate admitted only chaser[team], and the natural receiver of
+  // a pass is almost never the designated chaser. He was not outbid; he was excluded. Two
+  // lane-geometry fixes were measured first and exonerated the lane (QA-HOOF appendix): the
+  // ball died because the man it was for kept running his positional errand while a defender
+  // attacked it. A teammate's ball in flight, stopping near you, with you the closest of his
+  // side to that spot, is YOURS — at 700, which beats the errand.
   { name:'intercepting', tier:TIER.PLAYER, base:480,
     applies:p => !p.out && !p.sentOff && p.role!=='K' && !ball.owner
-              && Math.hypot(ball.vx,ball.vy)>2.5 && dist(p,ball)<120
-    && p===chaser[p.team],
-    score:p => 480 - dist(p,ball)*0.4,           // the nearest man wants it most
+              && Math.hypot(ball.vx,ball.vy)>2.5
+              && (( p===chaser[p.team] && dist(p,ball)<120 ) || passForMe(p)),
+    score:p => (passForMe(p) ? 700 : 480) - dist(p,ball)*0.4,   // the nearest man wants it most
     act:p => { steer(p, ball.x+ball.vx*6, ball.y+ball.vy*6, 2.3); return true; } },
+
+  // ── A PASS IS FOR SOMEBODY ────────────────────────────────────────────────
+  // The autopsy on 602 passes: interception is the largest failure class, and the probe under
+  // it found the intended receiver moving AWAY from the incoming ball 34% of its flight —
+  // because nothing told him it was his. 'intercepting' is chaser-gated and loose-ball
+  // generic; positional instructions at 600 outbid it and the runner keeps running while a
+  // defender steps in. This is the missing half of the pass: when a teammate has played the
+  // ball and you are the man nearest its stopping point, receiving it IS your job, above
+  // whatever shape you were holding. Two lane rewrites were measured before this and both
+  // came back flat — the lane was never the problem; the unmet ball was.
+  { name:'receiving the ball', tier:TIER.PLAYER, base:700,
+    applies:p => {
+      if(p.out || p.sentOff || p.role==='K' || ball.owner) return false;
+      const sp=Math.hypot(ball.vx,ball.vy);
+      if(sp<=2 || !ball.lastKicker || ball.lastKicker===p
+         || ball.lastKicker.team!==p.team) return false;
+      const stopX=ball.x+ball.vx*10, stopY=ball.y+ball.vy*10;   // ground friction 0.90: v runs 10x out
+      if(Math.hypot(p.x-stopX, p.y-stopY)>170) return false;    // a cross-pitch man keeps his shape
+      // the natural receiver: nearest eligible teammate to where it is going
+      let best=null, bd=1e9;
+      players.forEach(m=>{
+        if(m.team!==p.team||m===ball.lastKicker||m.role==='K'||!onPitch(m)) return;
+        const d=Math.hypot(m.x-stopX, m.y-stopY);
+        if(d<bd){ bd=d; best=m; }
+      });
+      return best===p;
+    },
+    score:p => 700 - Math.hypot(p.x-(ball.x+ball.vx*10), p.y-(ball.y+ball.vy*10))*0.5,
+    act:p => { steer(p, ball.x+ball.vx*6, ball.y+ball.vy*6, 2.2); return true; } },
 
   // ── NO PRESSING A FRIEND'S KEEPER ─────────────────────────────────────────
   // Three-sided-specific and it has no analogue in football: an ally's keeper is holding, so you
