@@ -3225,7 +3225,16 @@ const INSTRUCTIONS = [
       //
       // A player retrieving a ball that is out of play JOGS AFTER IT. Nobody strolls to a
       // throw-in while the clock runs, and the laws even punish it.
-      if(dist(p,ball) > 12){ steer(p, ball.x, ball.y, 3.0); return true; }
+      // ── A FETCHER NEVER ARRIVES UNTIL HE HAS IT ───────────────────────────
+      // steer() settles at 9 and does not re-arm until the target is 20 away; the claim below
+      // wants 12. Any drift that parked a fetcher in the 12-20 dead zone parked him forever —
+      // the goal-kick keeper stood at 13 from the ball for the full watchdog, every time. So
+      // he steers at a point 16 PAST the ball: the settle band centres beyond it, and he
+      // crosses the claim radius on the way through. Same thresholds, no gap between them.
+      if(dist(p,ball) > 12){
+        const bx=ball.x-p.x, by=ball.y-p.y, bl=Math.hypot(bx,by)||1;
+        steer(p, ball.x+bx/bl*16, ball.y+by/bl*16, 3.0); return true;
+      }
       ball.owner=p; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
       ENGINE_HOOKS.spawnNote(ball.x, ball.y-22, "\u{1F450} fetched", TEAMS[p.team].color);
       return true;
@@ -3412,7 +3421,8 @@ const INSTRUCTIONS = [
     // only for the OPPOSITION — who must not crowd a throw — and the taker's side and allies
     // are freed to receive where a heavy touch stays in play.
     applies:p => !!(pendingRestart && pendingRestart.kind!=='kickoff'
-                    && !(pendingRestart.kind==='throw' && pendingRestart.team!==undefined
+                    && !((pendingRestart.kind==='throw'||pendingRestart.kind==='corner')
+                         && pendingRestart.team!==undefined
                          && (p.team===pendingRestart.team || allied(p.team, pendingRestart.team)))
                     && !restartFree(p) && !p.out && !p.sentOff
                     && p.role!=='K'),
@@ -3813,11 +3823,19 @@ const INSTRUCTIONS = [
   //
   // COACH tier, all three — a routine. And now that a play is a weight rather than a wall, a man
   // in the box who sees the ball break loose can leave his slot and go for it.
-  { name:'flooding the mouth', tier:TIER.COACH, base:120,
-    applies:p => !!(holdingPlay() && cornerTaker && pendingRestart
+  // Base 120 could never outbid ordinary shape (400-600) — the waves have been decorative
+  // since they were written, dead features fourteen and fifteen, and a corner delivered into
+  // an unattacked box reads as a blip straight to the keeper. During the ceremony the routine
+  // owns the attackers.
+  { name:'flooding the mouth', tier:TIER.COACH, base:735,
+    // holdingPlay() gave the waves 2.4 seconds to cross two hundred units — they set off and
+    // the ceremony ended before anyone reached the box (peak mouth-crowd zero in twelve
+    // matches). The wave runs for the whole staging: fetch, roll, stand, and the delivery
+    // arrives on a crowd.
+    applies:p => !!(cornerTaker && pendingRestart && pendingRestart.kind==='corner'
                     && pendingRestart.p===cornerTaker && cornerGoal!==null
                     && p!==cornerTaker && p.role!=='K' && p.team===pendingRestart.team),
-    score:p => 120,
+    score:p => 735,
     act:p => {
       const g4=goalCenter(cornerGoal), e4=EDGES[GOAL_EDGE[cornerGoal]];
       const u4x=-e4.ny, u4y=e4.nx;
@@ -3843,12 +3861,12 @@ const INSTRUCTIONS = [
 
   // An ally turns up to somebody else's corner: wider and deeper than either side contesting it,
   // there to profit from the mess rather than to make it.
-  { name:'the second wave', tier:TIER.COACH, base:116,
-    applies:p => !!(holdingPlay() && cornerTaker && pendingRestart
+  { name:'the second wave', tier:TIER.COACH, base:725,
+    applies:p => !!(cornerTaker && pendingRestart
                     && pendingRestart.p===cornerTaker && cornerGoal!==null
                     && p!==cornerTaker && p.role!=='K' && p.team!==pendingRestart.team
                     && p.team!==cornerGoal && allied(p.team, pendingRestart.team)),
-    score:p => 116,
+    score:p => 725,
     act:p => {
       const g4=goalCenter(cornerGoal), e4=EDGES[GOAL_EDGE[cornerGoal]];
       const u4x=-e4.ny, u4y=e4.nx;
@@ -4722,7 +4740,13 @@ function physics(dt){
     players.forEach(p=>{ if(p.out||p.sentOff)return;
       for(let t=0;t<3;t++){ if(t===p.team)continue;
         const g=goalCenter(t);
-        if(dist(ball,g)<110)continue;            // ball is in — the zone is open
+        if(dist(ball,g)<110)continue;
+        // A CORNER IS AN INVITATION INTO THE BOX. The waves were rebased, freed from the 940,
+        // and given the whole ceremony to arrive — and still peaked at zero men in the mouth,
+        // because the ball sits at the flag, 170 from the goal, the zone reads CLOSED, and this
+        // very rule walked every arriving attacker back out to the rim. During a staged corner
+        // the penalised goal's keep-out is off; the laws put bodies in the box for a corner.
+        if(pendingRestart && pendingRestart.kind==='corner' && typeof cornerGoal!=='undefined' && cornerGoal===t) continue;            // ball is in — the zone is open
         if(ball.z>4&&dist(ball,g)<260&&((g.x-ball.x)*ball.vx+(g.y-ball.y)*ball.vy)>0)continue; // timed run: the cross is inbound
         const d=dist(p,g);
         // HE WALKS OUT. This projected a man to the rim in one frame — a 33-unit hop the instant
@@ -6473,16 +6497,19 @@ function stageGoalKick(t){
   // THE GOAL KICK. Untagged until now, which is a large part of the fourteen teleports the
   // report could see but not name: the ball is lifted from wherever it went out and placed on
   // the keeper, which from the far corner is most of the width of the pitch.
-  // ── THE LAST TELEPORT ─────────────────────────────────────────────────────
-  // This put the ball in the keeper's gloves wherever he stood. John: "he'll be on the right
-  // side of the goal, there's a shot wide of the left, and suddenly the keeper is holding it."
-  // A save that never happened.
-  //
-  // The ball goes on the six-yard line and he walks to it, like every other restart.
+  // ── THE LAST TELEPORT, ACTUALLY REMOVED THIS TIME ─────────────────────────
+  // The comment above this used to claim the six-yard fix while the code still lifted the ball
+  // from wherever it crossed and set it on the spot — the keeper walked, the ball blinked. A
+  // comment that describes the fix is not the fix. Now it is the throw's contract exactly: the
+  // ball stays where it went out, the keeper is named fetcher, and his whole job is going to
+  // get it, carrying it to the six-yard mark, and striking from there. No teleporting balls.
+  restartHold=Math.max(restartHold, nowMs()+2400);
   const og9=goalCenter(t);
   const gkSpot={ x: og9.x + (CX-og9.x)*0.15, y: og9.y + (CY-og9.y)*0.15 };
-  ball.x=gkSpot.x; ball.y=gkSpot.y; ball.z=0; ball.vx=0; ball.vy=0; ball.zv=0; ball.touchT=0.4;
-  pendingRestart={ kind:'goalkick', at:clockSec, p:gk, x:gkSpot.x, y:gkSpot.y, team:t };
+  ball.z=0; ball.zv=0;
+  ball.fetch={ by:gk, sx:gkSpot.x, sy:gkSpot.y, team:t, at:clockSec };
+  pendingRestart={ kind:'goalkick', at:clockSec, p:gk, x:gkSpot.x, y:gkSpot.y, team:t,
+                   fetch:true, cap:nowMs()+20000, readyAt:nowMs() };
   ENGINE_HOOKS.spawnNote(gk.x,gk.y-24,"goal kick",TEAMS[t].color,TEAMS[t].accent);
   if(RNG_COS()<0.35) sayLogged(pick([
     `Behind for a goal kick — ${tm(t)} restart.`,
@@ -6549,12 +6576,18 @@ function stagePenalty(){
   const e=EDGES[GOAL_EDGE[conceder]], g=goalCenter(conceder);
   const sx=g.x+e.nx*110, sy=g.y+e.ny*110;
 
-  // the ball is placed. Nothing else moves.
+  // ── THE BALL WALKS TO THE SPOT LIKE EVERYTHING ELSE ───────────────────────
+  // 'the ball is placed' was the last teleporting ball but one: a cross-pitch lift of 140
+  // units, measured on seed 8. The shooter is named fetcher; he collects it from wherever it
+  // lies and carries it to the spot, and the walk IS the drama — the crowd holds its breath
+  // longer for a man carrying a ball to the mark than for a ball that appears there.
   ball.owner=null; ball.lastTouch=shooter.team; ball.lastKicker=shooter;
-  ball.x=sx; ball.y=sy; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+  ball.z=0; ball.zv=0;
   ball.touchT=99;                       // no dribble touches during the run-up
+  ball.fetch={ by:shooter, sx, sy, team:shooter.team, at:clockSec };
 
-  pendingRestart={ kind:'penalty', at:clockSec, p:shooter, x:sx, y:sy, team:shooter.team };
+  pendingRestart={ kind:'penalty', at:clockSec, p:shooter, x:sx, y:sy, team:shooter.team,
+                   fetch:true, cap:nowMs()+20000, readyAt:nowMs() };
   players.forEach(q=>{ q.penGuess=null; });   // a fresh guess for a fresh penalty
   penaltyShooter=shooter; penaltyGoalTeam=conceder;
   ENGINE_HOOKS.spawnNote(sx,sy-28,"PENALTY!","#ffd166");
