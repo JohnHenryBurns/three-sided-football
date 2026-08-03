@@ -3654,7 +3654,18 @@ const INSTRUCTIONS = [
     score:p => 960,
     act:p => {
       const fd=dist(p,{x:freeKick.x,y:freeKick.y});
-      if(fd>12){ steer(p, freeKick.x, freeKick.y, 2.4); return true; }
+      if(fd>12){
+        // ── STEER PAST THE SPOT, NOT TO IT ────────────────────────────────
+        // steer() settles at 9 and does not re-arm until 20; the take needs him within 12. A
+        // taker aiming AT the spot parks in that 12-20 dead band ~16 out and never closes the
+        // last stride — the free kick John caught frozen, the taker 16-17 from a ball he was
+        // meant to be standing over, and the hold long since expired so it read as open play.
+        // Same fix as the keeper and the kick-off taker: aim 16 PAST the spot so the settle band
+        // centres beyond it and he crosses the take radius on the way in.
+        const dx=freeKick.x-p.x, dy=freeKick.y-p.y, dl=Math.hypot(dx,dy)||1;
+        steer(p, freeKick.x+dx/dl*16, freeKick.y+dy/dl*16, 2.4);
+        return true;
+      }
       p.vx=0; p.vy=0;
       ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.touchT=0.4;
       if(clockSec-freeKick.at>2.5 || wallClear(freeKick)){
