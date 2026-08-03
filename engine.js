@@ -624,7 +624,10 @@ function kickoff(toTeam, firstWhistle){
   //
   // Pushed straight out along their own line from the spot, so a team keeps the shape it was
   // given and only the distance changes.
-  players.forEach(p => {
+  if(firstWhistle) players.forEach(p => {
+    // only at the opening whistle. After a goal, players WALKED to their spots (the walk-back
+    // instruction already keeps the non-kicking sides out of the circle), so pushing them here
+    // would be the very teleport the golden rule forbids.
     if (p.out || p.sentOff || p.team === toTeam) return;
     const dx = p.x - CX, dy = p.y - CY, d = Math.hypot(dx, dy);
     if (d >= CIRCLE_R + 4) return;
@@ -644,7 +647,11 @@ function kickoff(toTeam, firstWhistle){
   // Now the ball is placed and a taker is named. `walking back for the kick-off` brings everyone
   // to their formation spot on foot, the taker walks to the ball, and the `kick-off` action
   // strikes it when it ripens. No hold anywhere.
-  ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.z=0; ball.zv=0;
+  // THE BALL IS ALREADY ON THE SPOT — the fetcher kicked it here (golden rule: no ball teleport).
+  // Only settle it dead on the mark if it is close; at the true first whistle it starts here
+  // anyway. Never fling it across the pitch.
+  if(firstWhistle || dist(ball,{x:CX,y:CY})<14){ ball.x=CX; ball.y=CY; ball.px=CX; ball.py=CY; }
+  ball.vx=0; ball.vy=0; ball.owner=null; ball.z=0; ball.zv=0; ball.pz=0;
   ball.goalLatch=false; ball.scored=false;   // a fresh kick-off: the previous goal is fully closed
   ball.touchT=0; ball.strayer=null; ball.strayF=0; ball.z=0; ball.zv=0;
   cornerTaker=null; cornerGoal=null; restartHold=0; pendingRestart=null; ball.oob=false; throwPending=null;
@@ -692,7 +699,11 @@ function kickoff(toTeam, firstWhistle){
     // also where a kicker actually stands: behind the ball, facing the pitch.
     const g9 = goalCenter(koTeam);   // HIS OWN goal
     const bx = CX-g9.x, by = CY-g9.y, bl = Math.hypot(bx,by)||1;
-    kp.x = CX - bx/bl*17; kp.y = CY - by/bl*17; kp.vx=0; kp.vy=0;
+    const mkx = CX - bx/bl*17, mky = CY - by/bl*17;
+    // only place him at the mark at the FIRST whistle; after a goal he WALKED here during settle,
+    // and snapping him would be a teleport. If he is somehow far, the walk-back instruction brings
+    // him in — the kick-off simply will not ripen until he and the sides are set.
+    if(firstWhistle){ kp.x=mkx; kp.y=mky; kp.vx=0; kp.vy=0; }
     ball.owner = null;                     // and nobody starts holding it
     pendingRestart = { kind:'kickoff', at:clockSec, p:kp, x:CX, y:CY, team:koTeam };
   }
@@ -1588,33 +1599,81 @@ function stepGoalRestart(){
     return;
   }
 
+  // ── THE GOLDEN RULE: NOTHING TELEPORTS ────────────────────────────────────
+  // John: after a goal the keeper (or whoever fetches) moves the ball to where it needs to be
+  // with a KICK, and the non-fetchers WALK to their reset positions. That is the rule for every
+  // transition. So the ball travels to the centre under its own physics — the keeper strikes it
+  // there — and the kick-off is taken when it arrives. No ball teleport, no player snap.
+
   if(goalRestart.phase==='fetch'){
-    // PHASE ONE: the keeper collects the ball out of his own net. When he reaches it the goal is
-    // over — the scored flag drops and the ball becomes live in his hands — but the kick-off is
-    // NOT armed yet. He still has to get back to his position.
-    if(dist(gk,ball) < 16){
+    // PHASE ONE: the keeper walks to the ball in his net and collects it. The goal is over the
+    // moment he reaches it (scored clears), but the kick-off is not armed — the ball still has to
+    // get to the centre, and it gets there by being kicked.
+    if(dist(gk,ball) < 8){
+      // genuinely on the ball now — collect it. Prev-pos moves with it so the pickup is not read
+      // as a jump; the last few units were covered on foot by the fetch steer, not a snap.
       ball.scored=false;
-      ball.owner=gk; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
-      goalRestart.phase='setup';
+      ball.owner=gk; ball.px=gk.x; ball.py=gk.y; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+      goalRestart.phase='kick';
     }
     return;
   }
 
-  if(goalRestart.phase==='setup'){
-    // PHASE TWO: the keeper carries the ball to his kick-off position — OUT of the goal, at his
-    // formation spot — and everyone else finishes forming up. He drops the ball there so play
-    // does not treat him as a carrier, and the kick-off arms only when he is home and the sides
-    // are set. Until then the kicker's own can() (sidesSet, which counts keepers) refuses it, so
-    // there is nothing to ripen against and no early whistle.
-    const kIdx=players.filter(q=>q.team===gk.team).indexOf(gk);
-    const spot=(formation(gk.team)[kIdx]) || formation(gk.team)[0];
-    if(gk.team===goalRestart.conceder && dist(gk,spot) > 20){
-      // still walking out — he holds the ball to his chest; nothing else may take it
-      ball.owner=gk; ball.x=gk.x; ball.y=gk.y; ball.z=0; ball.zv=0; ball.vx=0; ball.vy=0;
+  if(goalRestart.phase==='kick'){
+    // PHASE TWO: he kicks it to the centre spot. One strike, real physics, and the ball is on
+    // its way — no carry, no teleport. He releases it the instant he strikes so nobody is a
+    // carrier while it travels.
+    ball.owner=gk; ball.px=gk.x; ball.py=gk.y;   // still his until he strikes
+    ball.x=gk.x; ball.y=gk.y; ball.z=0; ball.zv=0; ball.vx=0; ball.vy=0;
+    // power scaled to the distance so it reaches the centre in one roll — friction bleeds it, so
+    // a long kick needs real pace. Tuned to arrive near the spot rather than stall short (a short
+    // roll left the ball in open pitch for claims and the settle dragged to 14s).
+    const dGK=dist(gk,{x:CX,y:CY});
+    const power = Math.min(13, 6 + dGK*0.028);
+    kick(CX, CY, power, false);                  // struck: velocity set toward the centre
+    ball.owner=null;
+    ENGINE_HOOKS.spawnNote(gk.x, gk.y-24, "kicks off", TEAMS[gk.team].color, TEAMS[gk.team].accent);
+    goalRestart.phase='settle';
+    return;
+  }
+
+  if(goalRestart.phase==='settle'){
+    // backstop: if settling drags (repeated claims, an unlucky bounce off a body), the nearest man
+    // re-strikes the ball toward the centre. Still a kick, never a teleport — the restart cannot
+    // hang. goalRestart.at is stamped when the phase began.
+    if(goalRestart.settleAt===undefined) goalRestart.settleAt=clockSec;
+    if(clockSec-goalRestart.settleAt>2 && dist(ball,{x:CX,y:CY})>14){
+      let nd=1e9,nf=null; players.forEach(q=>{ if(q.out||q.sentOff)return; const d=dist(q,ball); if(d<nd){nd=d;nf=q;} });
+      if(nf && nd<20){
+        ball.owner=nf; kick(CX,CY,Math.min(13,6+dist(ball,{x:CX,y:CY})*0.028),false); ball.owner=null;
+        goalRestart.settleAt=clockSec;
+      }
+    }
+    // PHASE THREE: the ball rolls to the centre while everyone WALKS to their reset positions
+    // ('taking up position' / 'walking back for the kick-off' already move them on foot). The
+    // kicked ball is the kick-off in transit, so nobody may claim it — if a reflex that skips
+    // holdingPlay() grabs it, release it and let it keep rolling. No teleport: it keeps the pace
+    // the keeper's kick gave it, and when it reaches the spot slow, the kick-off arms.
+    if(ball.owner){
+      // a reflex that skips holdingPlay() grabbed the rolling kick-off ball and snapped it to his
+      // feet. Release it AND put it back where its own roll had it — the shadow saved before the
+      // claim — so the grab is a no-op, not a teleport. It keeps rolling to the spot.
+      ball.owner=null;
+      if(ball.koShadowX!==undefined){ ball.x=ball.koShadowX; ball.y=ball.koShadowY; ball.vx=ball.koShadowVX; ball.vy=ball.koShadowVY; }
+    }
+    // save this frame's honest position/velocity as the shadow for next frame's guard
+    ball.koShadowX=ball.x; ball.koShadowY=ball.y; ball.koShadowVX=ball.vx; ball.koShadowVY=ball.vy;
+    const dc = dist(ball,{x:CX,y:CY});
+    if(dc > 18){
+      // keep it honest without teleporting: if it has stalled short of the spot, give it a real
+      // roll toward the centre — scaled to how far it still has to go — so the restart never hangs.
+      const dx=CX-ball.x, dy=CY-ball.y, dl=Math.hypot(dx,dy)||1;
+      const sp=Math.hypot(ball.vx,ball.vy);
+      if(sp < 1.0){ const push=Math.min(6, 1.5+dc*0.02); ball.vx += dx/dl*push; ball.vy += dy/dl*push; }
       return;
     }
-    // he is home. release the ball and arm the kick-off — the single point that sets it.
-    ball.owner=null;
+    // it has arrived. arm the kick-off; kickoff() confirms the spot without moving anything.
+    ball.koShadowX=undefined;
     const kickTeam=goalRestart.kicking;
     goalRestart=null;
     pendingKickoff=kickTeam;
