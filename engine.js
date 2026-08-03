@@ -4451,14 +4451,17 @@ const INSTRUCTIONS = [
     applies:p => !!(goalRestart && goalRestart.fetcher===p && !p.out && !p.sentOff),
     score:p => 950,
     act:p => {
-      if(goalRestart.phase==='setup'){
-        // he has the ball and walks it OUT to his kick-off position, clearing the goal
-        const kIdx=players.filter(q=>q.team===p.team).indexOf(p);
-        const spot=(formation(p.team)[kIdx]) || formation(p.team)[0];
-        steer(p, spot.x, spot.y, 2.4);
-        return true;
-      }
-      steer(p, ball.x, ball.y, 2.4); return true;   // phase 'fetch': go and get it
+      // Only the fetch phase needs him steering to the ball. In kick/settle the state machine
+      // owns the ball; he should hold, not chase it to the centre.
+      if(goalRestart.phase!=='fetch'){ return true; }
+      // ── STEER PAST THE BALL, NOT TO IT ────────────────────────────────────
+      // steer() settles at 9 and does not re-arm until 20; the collect wants dist<8. A keeper
+      // aiming AT the ball parks in that 8-20 dead zone one unit short and never collects — the
+      // freeze on the goal line John saw. Same fix as the goal-kick fetcher: aim 16 PAST the
+      // ball so the settle band centres beyond it and he crosses the collect radius on the way.
+      const bx=ball.x-p.x, by=ball.y-p.y, bl=Math.hypot(bx,by)||1;
+      steer(p, ball.x+bx/bl*16, ball.y+by/bl*16, 2.6);
+      return true;
     } },
 
   // ── AFTER A GOAL: TAKE THE KICK-OFF ───────────────────────────────────────
@@ -5792,6 +5795,65 @@ function telZero(){ return {
 }; }
 const TEL = telZero();
 function telReset(){ Object.assign(TEL, telZero()); }
+
+// ── DEBUG SNAPSHOT ──────────────────────────────────────────────────────────
+// John: give me a button that saves the game state to a file so a stall can be seen and reloaded
+// deterministically. This captures everything the sim needs to reconstruct the exact moment — the
+// ball, every player with their live fields, and all the restart/phase state that a stall usually
+// hides in — plus the RNG so a load resumes down the same branch. It is written where the vars are
+// in scope; the page just calls it, stringifies, and downloads.
+function dumpGameState(){
+  const pf = p => ({
+    name:p.name, team:p.team, role:p.role, x:p.x, y:p.y, vx:p.vx, vy:p.vy,
+    out:p.out, sentOff:p.sentOff, job:p.job, stamina:p.stamina,
+    kx:p.kx, ky:p.ky, staggerUntil:p.staggerUntil, shoveAt:p.shoveAt,
+    slideSide:p.slideSide, slideAt:p.slideAt, k1:p.k1, k2:p.k2,
+    hx:p.hx, hy:p.hy, __atSpot:p.__atSpot, __showing:p.__showing, __pushed:p.__pushed
+  });
+  const bf = b => b ? {
+    x:b.x, y:b.y, z:b.z, vx:b.vx, vy:b.vy, zv:b.zv, px:b.px, py:b.py, pz:b.pz,
+    owner: b.owner ? b.owner.name : null,
+    scored:b.scored, goalLatch:b.goalLatch, oob:b.oob, isShot:b.isShot,
+    lastTouch:b.lastTouch, lastKicker: b.lastKicker ? b.lastKicker.name : null,
+    woodT:b.woodT, headedAt:b.headedAt, touchT:b.touchT,
+    fetch: b.fetch ? { by:b.fetch.by?b.fetch.by.name:null, team:b.fetch.team, at:b.fetch.at } : null,
+    koShadowX:b.koShadowX, koShadowY:b.koShadowY, koShadowVX:b.koShadowVX, koShadowVY:b.koShadowVY
+  } : null;
+  const restartRef = r => r ? Object.assign({}, r, {
+    p: r.p ? r.p.name : undefined, fetcher: r.fetcher ? r.fetcher.name : undefined,
+    taker: r.taker ? r.taker.name : undefined
+  }) : null;
+  return {
+    schema:'tsf-debug-1',
+    savedAt: new Date().toISOString(),
+    version: (typeof ENGINE_VERSION!=='undefined') ? ENGINE_VERSION : null,
+    // the match
+    phase, clockSec, matchLen, stoppageLen, score, conceded, scored, out, otGolden, scoreMode,
+    // the ball and players
+    ball: bf(ball),
+    players: players.map(pf),
+    // every scrap of restart / transition state — where stalls live
+    restart: {
+      goalRestart: restartRef(goalRestart),
+      pendingRestart: restartRef(pendingRestart),
+      pendingKickoff, resumeAt, restartHold,
+      freeKick: restartRef(freeKick),
+      cornerPending: cornerPending ? cornerPending.name : null, cornerSpot,
+      cornerTaker: (typeof cornerTaker!=='undefined'&&cornerTaker) ? cornerTaker.name : null,
+      throwPending: (typeof throwPending!=='undefined'&&throwPending) ? throwPending.name : null,
+      walking: walking ? walking.name : null, walkingAt,
+      targets: targets ? targets.slice() : null,
+      chaser: chaser ? chaser.map(c=>c?c.name:null) : null
+    },
+    // the RNG so a reload continues down the same branch
+    rng: { state: (typeof __rngState!=='undefined')?__rngState:null, cos:(typeof __cosState!=='undefined')?__cosState:null },
+    // a plain-language read of the likely-interesting bit
+    note: goalRestart ? ('post-goal restart in phase: '+goalRestart.phase) :
+          pendingRestart ? ('restart pending: '+pendingRestart.kind) :
+          (pendingKickoff!=null ? 'kickoff pending' : 'open play')
+  };
+}
+
 /** Called once a frame by whichever front end is driving. Cheap: one hypot and a few adds. */
 // ── WHO MOVED THE BALL ──────────────────────────────────────────────────────
 // TEL.bigJumps counts every frame-to-frame move over 25 units, which tells you THAT the ball
