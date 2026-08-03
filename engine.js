@@ -3477,8 +3477,27 @@ const INSTRUCTIONS = [
     },
     score:p => 962,
     act:p => {
-      const q=restartSpot(p), d=dist(p,q);
-      if(d > 6) steer(p, q.x, q.y, 1.1); else { p.vx*=0.55; p.vy*=0.55; }
+      let q=restartSpot(p);
+      // ── A STALLED KICK-OFF TAKER GETS EASED INSIDE HIS GATE ───────────────
+      // The take action needs him within 22 of the centre, but his kick-off spot is 17 out and
+      // this brake stops him within 6 of it — so he can settle ~23 out, a hair past the gate, and
+      // the kick-off hangs (John's snapshot: taker 22.7 from centre, pending fifteen seconds). A
+      // healthy kick-off is taken in under three seconds, so ONLY when it has been pending longer
+      // than that and he is stuck outside the gate do we walk him in to a spot well inside it,
+      // steering PAST the brake so he actually closes the gap rather than braking short again. The
+      // common fast kick-off never reaches the threshold and is untouched — corrects only the stall.
+      const koStalled = pendingRestart && pendingRestart.kind==='kickoff' && pendingRestart.at!==undefined
+                     && clockSec-pendingRestart.at > 3 && dist(p,{x:CX,y:CY}) > 20;
+      if(koStalled){
+        // steer him PAST the centre-side target, not to it: steer() settles at 9, and a stalled
+        // kicker at ~23 aiming at a spot ~14 out is exactly 9 away — the dead zone that parks him
+        // one step short. Aim at the centre itself so the settle band lands him well inside the
+        // gate, and give it pace.
+        steer(p, CX, CY, 1.6);
+      } else {
+        const d=dist(p,q);
+        if(d > 6) steer(p, q.x, q.y, 1.1); else { p.vx*=0.55; p.vy*=0.55; }
+      }
       const bx=ball.x-p.x, by=ball.y-p.y, bl=Math.hypot(bx,by)||1;
       p.hx=p.hx*0.8+(bx/bl)*0.2; p.hy=p.hy*0.8+(by/bl)*0.2;
       return true;
