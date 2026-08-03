@@ -5478,11 +5478,20 @@ function physics(dt){
             // stadium hoarding 34 behind the goal (stadiumWall) stops it. It lies in the net
             // until the losing keeper fetches it.
             //
-            // A GOAL IS AN UNOWNED BALL CROSSING IN FLIGHT. Once the keeper has picked it up to
-            // walk it out (goalRestart, ball.owner set), it is no longer a goal however deep in
-            // the net he is standing — otherwise carrying it back across his own line scores it
-            // a second time. That double-count was 11 celebrations for 6 goals.
-            if(!ball.scored && !ball.owner && !goalRestart){
+            // A GOAL IS AN UNOWNED BALL CROSSING IN FLIGHT, WITH NO RESTART PENDING.
+            //
+            // Once the keeper has picked it up to walk it out (goalRestart), or is fetching a
+            // dead ball for a goal kick, corner or throw (ball.fetch / a staged pendingRestart),
+            // it is not a goal however deep he carries it. John watched a keeper retrieve an
+            // out-of-play ball, carry it back for the goal kick, brush his own line and score an
+            // own goal — because during the carry ball.owner flickers to null between nudges and
+            // the old guard only checked ownership. The rule is his: after the ball goes out for
+            // a corner or a goal, nothing scores until the restart is actually taken. So a
+            // pending dead-ball restart of ANY kind suppresses the goal test outright.
+            const deadBall = goalRestart || ball.fetch
+              || (pendingRestart && (pendingRestart.kind==='goalkick'
+                   || pendingRestart.kind==='corner' || pendingRestart.kind==='throw'));
+            if(!ball.scored && !ball.owner && !deadBall){
               ball.scored=true; goalScored(GOAL_EDGE.indexOf(k));
             }
             return;
