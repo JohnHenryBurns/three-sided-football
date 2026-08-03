@@ -482,6 +482,11 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
     <span id="spdNow">1&times;</span>
     <button id="spdUp" title="faster" aria-label="faster">&#187;</button>
   </span>
+  <!-- ── DEBUG SNAPSHOT ──────────────────────────────────────────────────────
+       John: a button, shown while paused, that saves the full game state to a file so a stall
+       can be seen and reloaded deterministically. Only visible when paused, because that is
+       when you have caught the thing worth saving. -->
+  <button id="dbgDump" title="Download debug snapshot" aria-label="Download debug snapshot" hidden>&#8681; state</button>
   <span class="hint">drag to orbit · pinch or wheel to zoom</span>
 </div>
 
@@ -489,7 +494,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=252"></script>
+<script src="engine.js?v=254"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -3359,11 +3364,35 @@ function setPlayIcon(){
   const b = document.getElementById('play');
   b.querySelector('path').setAttribute('d', running ? PAUSE_D : PLAY_D);
   b.setAttribute('aria-label', running ? 'Pause' : 'Play');
+  updateDbgButton();   // the debug snapshot button lives with the pause state
 }
+// ── THE DEBUG SNAPSHOT BUTTON ────────────────────────────────────────────────
+// Shown only while paused. It calls the engine's dumpGameState() — which is written where all
+// the restart/phase state is in scope — stringifies it, and downloads it as a timestamped file.
+// A stall caught on screen becomes a file you can read and, later, replay.
+function updateDbgButton(){
+  const b = document.getElementById('dbgDump');
+  if (b) b.hidden = running;
+}
+document.getElementById('dbgDump').addEventListener('click', () => {
+  let snap;
+  try { snap = dumpGameState(); }
+  catch (e) { alert('Could not read game state: ' + e.message); return; }
+  const blob = new Blob([JSON.stringify(snap, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const t = (snap.clockSec != null) ? snap.clockSec.toFixed(1).replace('.', '_') : 'x';
+  a.href = url;
+  a.download = `tsf-debug-${t}s-${(snap.note||'state').replace(/[^a-z0-9]+/gi,'-')}.json`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
 document.getElementById('play').addEventListener('click', () => {
   running = !running; setPlayIcon(); keepAwake(running);
   // resuming drops whatever was in hand — you cannot carry a ball into live play
   if (running) grabbed = null;
+  updateDbgButton();
 });
 // Reset opens the menu rather than restarting the same match: a reset is the moment you might
 // want different teams or a different length, and the flat page treats it the same way.
