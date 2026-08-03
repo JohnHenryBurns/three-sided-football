@@ -5197,6 +5197,14 @@ function physics(dt){
     if(ball.strayF>0) ball.strayF-=S; else ball.strayer=null;
     let best=null,bd=1e9;
     if(nowMs()<restartHold&&!ball.owner) return;   // dead ball awaits its taker
+    // ── THE POST-GOAL KICK-OFF BALL IS NObody'S UNTIL IT IS TAKEN ──────────
+    // After a goal the keeper kicks the ball to the centre and it rolls there under its own pace
+    // (the 'settle' phase). It is the kick-off in transit — not a loose ball to be claimed. A
+    // reflex claim here snapped it to the claimer, and the shadow guard yanked it back the next
+    // frame: the jerk John saw, ball to keeper and back to centre. Block the claim at the source
+    // instead, so the ball simply rolls to the spot untouched. (goalRestart is also in
+    // holdingPlay(), but that gate is not on this loop; this is the one place the claim is made.)
+    if(goalRestart && goalRestart.phase==='settle' && !ball.owner) return;
     if(ball.clearT&&clockSec<ball.clearT) return;            // a clearance in flight escapes the furnace
     players.forEach(p=>{ if(p.out||p.sentOff)return; if(p===ball.noClaim&&ball.noClaimF>0)return;
       if(suppress&&suppress.team===p.team&&clockSec<suppress.until)return;
