@@ -492,7 +492,7 @@ function awardFreeKick(victim, offender){
                wall:offender.team, aim:(aimT!==null&&aimT!==undefined)?aimT:offender.team };
   ball.owner=null; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
   TEL.freeKicks++;
-  restartHold = Math.max(restartHold, nowMs()+1200);
+  restartHold = Math.min(Math.max(restartHold, nowMs()+1200), nowMs()+3200);
 }
 
 /** Book a man. `red` sends him off. The walk itself is the front end's, as before. */
@@ -5837,6 +5837,8 @@ function dumpGameState(){
       goalRestart: restartRef(goalRestart),
       pendingRestart: restartRef(pendingRestart),
       pendingKickoff, resumeAt, restartHold,
+      nowMs: nowMs(),
+      restartHoldRemainingMs: restartHold - nowMs(),   // >0 blocks claims; a large value is the stale-hold bug
       freeKick: restartRef(freeKick),
       cornerPending: cornerPending ? cornerPending.name : null, cornerSpot,
       cornerTaker: (typeof cornerTaker!=='undefined'&&cornerTaker) ? cornerTaker.name : null,
@@ -6775,7 +6777,7 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
   }
   GKSTAT.lastThrower=null;
   GKSTAT.lastThrowAt=clockSec; GKSTAT.lastThrowX=ex; GKSTAT.lastThrowY=ey;
-  restartHold=Math.max(restartHold,nowMs()+2400);   // staging owns its hold
+  restartHold=Math.min(Math.max(restartHold,nowMs()+2400), nowMs()+3200);   // staging owns its hold
   const sx=ex+e.nx*6, sy=ey+e.ny*6;   // he throws FROM the line, not from midfield
   // NEAREST TO WHERE HE MUST STAND, not to the mark. A thrower stands 22 units OUTSIDE the
   // line and the ball sits on it — sorting by distance to the ball picked a man who then had a
@@ -6853,7 +6855,7 @@ function stageGoalKick(t){
   // comment that describes the fix is not the fix. Now it is the throw's contract exactly: the
   // ball stays where it went out, the keeper is named fetcher, and his whole job is going to
   // get it, carrying it to the six-yard mark, and striking from there. No teleporting balls.
-  restartHold=Math.max(restartHold, nowMs()+2400);
+  restartHold=Math.min(Math.max(restartHold, nowMs()+2400), nowMs()+3200);
   const og9=goalCenter(t);
   const gkSpot={ x: og9.x + (CX-og9.x)*0.15, y: og9.y + (CY-og9.y)*0.15 };
   ball.z=0; ball.zv=0;
@@ -6869,7 +6871,7 @@ function stageGoalKick(t){
   restartHold=nowMs()+650;
 }
 function stageCorner(ownerT,e,ex,ey){
-  restartHold=Math.max(restartHold,nowMs()+2400);   // staging owns its hold
+  restartHold=Math.min(Math.max(restartHold,nowMs()+2400), nowMs()+3200);   // staging owns its hold
   const alive=[0,1,2].filter(x=>x!==ownerT&&!out[x]);
   const att=alive.find(x=>targets[x]===ownerT)??alive[0];
   if(att===undefined){ telPort('corner: nobody to take it'); ball.x=CX; ball.y=CY; return; }
@@ -6902,7 +6904,7 @@ function stageCorner(ownerT,e,ex,ey){
   cornerTaker=taker; cornerGoal=ownerT;
   // The ceremony starts when the ball reaches the flag, not when the corner is awarded — he
   // has to walk there first, and the box should fill while he does rather than before.
-  restartHold=Math.max(restartHold,nowMs()+2900);   // corners earn a longer ceremony GKSTAT.cornerStage=(GKSTAT.cornerStage||0)+1;
+  restartHold=Math.min(Math.max(restartHold,nowMs()+2900), nowMs()+3200);   // corners earn a longer ceremony GKSTAT.cornerStage=(GKSTAT.cornerStage||0)+1;
   ENGINE_HOOKS.spawnNote(taker.x,taker.y-26,"corner!",TEAMS[att].color,TEAMS[att].accent);
   sayLogged(pick([
     `<b style="color:${TEAMS[att].color}">Corner to ${tm(att)}</b> — ${taker.name} to swing it in...`,
