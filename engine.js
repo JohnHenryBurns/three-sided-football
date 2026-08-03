@@ -645,6 +645,7 @@ function kickoff(toTeam, firstWhistle){
   // to their formation spot on foot, the taker walks to the ball, and the `kick-off` action
   // strikes it when it ripens. No hold anywhere.
   ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.owner=null; ball.z=0; ball.zv=0;
+  ball.goalLatch=false; ball.scored=false;   // a fresh kick-off: the previous goal is fully closed
   ball.touchT=0; ball.strayer=null; ball.strayF=0; ball.z=0; ball.zv=0;
   cornerTaker=null; cornerGoal=null; restartHold=0; pendingRestart=null; ball.oob=false; throwPending=null;
   // ── EVERY PIECE OF PER-MATCH STATE, CLEARED ────────────────────────────────
@@ -5470,34 +5471,30 @@ function physics(dt){
           // playing side of the depth line last frame. A ball that is deep without having
           // crossed from the front is not a goal, it is out of play, and it falls through to
           // the staging below like any other dead ball.
-          const dPrev=(ball.px-e.p1.x)*e.nx + (ball.py-e.p1.y)*e.ny;
-          if(ball.z<GOAL_H && dPrev>=-6.5){
-            // ── IT SHOOTS IN AND PHYSICS CARRIES IT INTO THE NET ──────────
-            // The goal is recorded here, but the ball is NOT touched: no velocity kill, no
-            // teleport. It keeps its pace, crosses the line, and physics runs on until the
-            // stadium hoarding 34 behind the goal (stadiumWall) stops it. It lies in the net
-            // until the losing keeper fetches it.
-            //
-            // A GOAL IS AN UNOWNED BALL CROSSING IN FLIGHT, WITH NO RESTART PENDING.
-            //
-            // Once the keeper has picked it up to walk it out (goalRestart), or is fetching a
-            // dead ball for a goal kick, corner or throw (ball.fetch / a staged pendingRestart),
-            // it is not a goal however deep he carries it. John watched a keeper retrieve an
-            // out-of-play ball, carry it back for the goal kick, brush his own line and score an
-            // own goal — because during the carry ball.owner flickers to null between nudges and
-            // the old guard only checked ownership. The rule is his: after the ball goes out for
-            // a corner or a goal, nothing scores until the restart is actually taken. So a
-            // pending dead-ball restart of ANY kind suppresses the goal test outright.
-            const deadBall = goalRestart || ball.fetch
-              || (pendingRestart && (pendingRestart.kind==='goalkick'
-                   || pendingRestart.kind==='corner' || pendingRestart.kind==='throw'));
-            if(!ball.scored && !ball.owner && !deadBall){
-              ball.scored=true; goalScored(GOAL_EDGE.indexOf(k));
+          // ── PRESENCE, NOT TRANSITION ──────────────────────────────────────
+          // The ball is between the posts and past the line (inMouth && d<-6). If it is also
+          // under the bar and live, that is a goal — full stop. Judging the CROSSING of the goal
+          // plane missed balls two ways: a fast shot jumps the whole proximity band in one frame
+          // and is never measured inside it, and a ball arriving at an angle never shows a clean
+          // plane transition. Presence in the goal box is what a goal IS and cannot be tunnelled.
+          // The moment it is given, the ball is out of play and the restart owns it, so a fetched
+          // or carried ball (any dead-ball restart pending) is never a goal, and it never scores
+          // twice.
+          const deadBall = goalRestart || ball.fetch
+            || (pendingRestart && (pendingRestart.kind==='goalkick'
+                 || pendingRestart.kind==='corner' || pendingRestart.kind==='throw'));
+          if(ball.z<GOAL_H){
+            // ball.goalLatch holds from the instant a goal is given until the next kick-off is
+            // taken (kickoff() clears it). It is the "out of play until the restart" rule made
+            // literal: while it is set, the ball sitting in the net — even after the fetch has
+            // cleared ball.scored and released ball.owner to walk it out — cannot score again.
+            if(!ball.scored && !ball.goalLatch && !ball.owner && !deadBall){
+              ball.scored=true; ball.goalLatch=true; goalScored(GOAL_EDGE.indexOf(k));
             }
             return;
           }
-          if(ball.z<GOAL_H && dPrev<-6.5){ if(oobRule){ outOfBounds(k,e); return; } }
-          else if(ball.isShot){ ENGINE_HOOKS.spawnNote(ball.x,ball.y-20,"over the bar!","#ffd166"); ball.isShot=false; }
+          // above the bar over the line: out of play, not a goal
+          if(ball.isShot){ ENGINE_HOOKS.spawnNote(ball.x,ball.y-20,"over the bar!","#ffd166"); ball.isShot=false; }
           if(oobRule){ outOfBounds(k,e); return; }
         }
       } else if(oobRule){
