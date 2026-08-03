@@ -5364,7 +5364,23 @@ function physics(dt){
 
       if(inMouth){
         if(d<-6){
-          if(ball.z<GOAL_H){ goalScored(GOAL_EDGE.indexOf(k)); return; }
+          // ── A GOAL ENTERS THROUGH THE FRONT ───────────────────────────────
+          // This was a position test: any ball deeper than 6 in the mouth strip scored,
+          // however it arrived — including sideways along the back of the net from an overhit
+          // corner, or played in by a man standing behind the goal (John watched one do it).
+          // The net has a front and only the front counts: the ball must have been on the
+          // playing side of the depth line last frame. A ball that is deep without having
+          // crossed from the front is not a goal, it is out of play, and it falls through to
+          // the staging below like any other dead ball.
+          const dPrev=(ball.px-e.p1.x)*e.nx + (ball.py-e.p1.y)*e.ny;
+          if(ball.z<GOAL_H && dPrev>=-6.5){
+            // ── AND THE NET CATCHES IT ────────────────────────────────────
+            // Nothing stopped a scored ball; it kept its velocity through the celebration and
+            // sailed into the stands. Nets exist. It dies where it scores.
+            ball.vx=0; ball.vy=0; ball.zv=0;
+            goalScored(GOAL_EDGE.indexOf(k)); return;
+          }
+          if(ball.z<GOAL_H && dPrev<-6.5){ if(oobRule){ outOfBounds(k,e); return; } }
           else if(ball.isShot){ ENGINE_HOOKS.spawnNote(ball.x,ball.y-20,"over the bar!","#ffd166"); ball.isShot=false; }
           if(oobRule){ outOfBounds(k,e); return; }
         }
