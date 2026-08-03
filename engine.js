@@ -919,6 +919,7 @@ function ballOutOfPlayCheck(){
     if(d<worst){ worst=d; we=e; wk=k; }
   }
   if(worst >= 0 || !we) return;                // in play
+  if(ball.scored || goalRestart) return;        // a goal in the net, or the keeper collecting it — never out
 
   // ── A BALL IN THE NET IS NOT OUT OF PLAY, IT IS A GOAL ────────────────────
   // This staged a restart for ANY ball past a line — including one that crossed the goal line
@@ -1555,11 +1556,68 @@ function stageGoalRestart(concederTeam, scorerTeam){
   const kicking = (scorerTeam!==null && scorerTeam!==undefined) ? concederTeam : concederTeam;
   // whoever is nearest the ball goes and gets it, whatever shirt he is wearing — that is what
   // happens, and it is often not the side who will take the kick-off
-  let fetcher=null, fd=1e9;
-  players.forEach(q=>{ if(q.out||q.sentOff) return; const d=dist(q,ball); if(d<fd){fd=d;fetcher=q;} });
+  // The keeper who was just scored on fetches the ball out of his own net — that is who picks it
+  // up in a real match, and it means the man walking to collect it is the man the goal happened
+  // to, which reads right. If he is off, the nearest man does it.
+  let fetcher=players.find(q=>q.team===concederTeam && q.role==='K' && !q.out && !q.sentOff);
+  if(!fetcher){ let fd=1e9; players.forEach(q=>{ if(q.out||q.sentOff) return; const d=dist(q,ball); if(d<fd){fd=d;fetcher=q;} }); }
   const taker = players.find(q=>q.team===kicking && q.role==='F' && !q.out && !q.sentOff)
              || players.find(q=>q.team===kicking && q.role!=='K' && !q.out && !q.sentOff) || null;
-  goalRestart = { conceder:concederTeam, kicking, taker, fetcher, at:clockSec };
+  // the state machine drives everything from here: fetcher retrieves, taker walks to the spot,
+  // everyone else sets up. The kick-off is armed only when the fetcher reaches the ball — see
+  // stepGoalRestart — so nothing teleports and no dead window opens.
+  goalRestart = { conceder:concederTeam, kicking, taker, fetcher, at:clockSec, phase:'fetch' };
+}
+
+// ── THE POST-GOAL STATE MACHINE ─────────────────────────────────────────────
+// John's architecture: after a goal, physics keeps running, the losing keeper is put on the
+// fetching instruction, everyone else sets up for the kick-off, and the machine that drives
+// instructions handles the whole transition. goalRestart already routes the three instructions
+// (retrieving / walking to the spot / setting up); this is the missing transition that arms the
+// kick-off once the keeper actually has the ball out of the net. No timer, no teleport — the
+// state advances on the world, the way every other restart here does.
+function stepGoalRestart(){
+  if(!goalRestart) return;
+  const gk=goalRestart.fetcher;
+  if(!gk || gk.out || gk.sentOff){
+    // fetcher lost mid-celebration: hand off to the nearest man so the machine never stalls
+    let nd=1e9, nf=null;
+    players.forEach(q=>{ if(q.out||q.sentOff) return; const d=dist(q,ball); if(d<nd){nd=d;nf=q;} });
+    goalRestart.fetcher=nf;
+    return;
+  }
+
+  if(goalRestart.phase==='fetch'){
+    // PHASE ONE: the keeper collects the ball out of his own net. When he reaches it the goal is
+    // over — the scored flag drops and the ball becomes live in his hands — but the kick-off is
+    // NOT armed yet. He still has to get back to his position.
+    if(dist(gk,ball) < 16){
+      ball.scored=false;
+      ball.owner=gk; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+      goalRestart.phase='setup';
+    }
+    return;
+  }
+
+  if(goalRestart.phase==='setup'){
+    // PHASE TWO: the keeper carries the ball to his kick-off position — OUT of the goal, at his
+    // formation spot — and everyone else finishes forming up. He drops the ball there so play
+    // does not treat him as a carrier, and the kick-off arms only when he is home and the sides
+    // are set. Until then the kicker's own can() (sidesSet, which counts keepers) refuses it, so
+    // there is nothing to ripen against and no early whistle.
+    const kIdx=players.filter(q=>q.team===gk.team).indexOf(gk);
+    const spot=(formation(gk.team)[kIdx]) || formation(gk.team)[0];
+    if(gk.team===goalRestart.conceder && dist(gk,spot) > 20){
+      // still walking out — he holds the ball to his chest; nothing else may take it
+      ball.owner=gk; ball.x=gk.x; ball.y=gk.y; ball.z=0; ball.zv=0; ball.vx=0; ball.vy=0;
+      return;
+    }
+    // he is home. release the ball and arm the kick-off — the single point that sets it.
+    ball.owner=null;
+    const kickTeam=goalRestart.kicking;
+    goalRestart=null;
+    pendingKickoff=kickTeam;
+  }
 }
 
 function job(p, what, tier){
@@ -1960,6 +2018,18 @@ const PORTED = [
       if(!pendingRestart || pendingRestart.kind!=='kickoff' || pendingRestart.p!==p) return false;
       if(ball.owner) return false;
       if(dist(p, {x:CX,y:CY}) > 22 || dist(ball,{x:CX,y:CY}) > 12) return false;
+      // ── AND THE KEEPER WHO WAS SCORED ON MUST BE BACK OUT OF HIS GOAL ──────
+      // John: the goalie sets up for the kick-off after fetching, and the kicker is blocked on
+      // his can() until then. A keeper still walking the ball out of his net is not set, so the
+      // kick-off cannot ripen while he is short of his spot.
+      for(let t=0;t<3;t++){
+        if(out[t]) continue;
+        const gk=players.find(q=>q.team===t && q.role==='K' && !q.out && !q.sentOff);
+        if(gk){ const gi=players.filter(q=>q.team===t).indexOf(gk);
+          const gs=(formation(t)[gi])||formation(t)[0];
+          if(dist(gk,gs) > 130) return false;
+        }
+      }
       // ── AND THE SIDES MUST BE SET ─────────────────────────────────────────
       // This is what sidesSet() was kept for. It was gating throws, where it was wrong — a throw
       // is quick — and it was removed from them and left defined and unused against exactly this
@@ -4320,7 +4390,16 @@ const INSTRUCTIONS = [
   { name:'retrieving after a goal', tier:TIER.SCRIPT, base:950,
     applies:p => !!(goalRestart && goalRestart.fetcher===p && !p.out && !p.sentOff),
     score:p => 950,
-    act:p => { steer(p, ball.x, ball.y, 2.4); return true; } },
+    act:p => {
+      if(goalRestart.phase==='setup'){
+        // he has the ball and walks it OUT to his kick-off position, clearing the goal
+        const kIdx=players.filter(q=>q.team===p.team).indexOf(p);
+        const spot=(formation(p.team)[kIdx]) || formation(p.team)[0];
+        steer(p, spot.x, spot.y, 2.4);
+        return true;
+      }
+      steer(p, ball.x, ball.y, 2.4); return true;   // phase 'fetch': go and get it
+    } },
 
   // ── AFTER A GOAL: TAKE THE KICK-OFF ───────────────────────────────────────
   // SCRIPT. The man who will restart it walks to the spot and waits, which is why the ball
@@ -4388,10 +4467,22 @@ const INSTRUCTIONS = [
       return true;
     } },
   { name:'taking up position', tier:TIER.SCRIPT, base:940,
+    // EVERYONE sets up, keepers included. Excluding role K left the two non-conceding keepers on
+    // their live defensive jobs ('holding the line') all through the restart — play was not
+    // actually held, and a defender still tracking a runner is a second live actor during what
+    // should be a dead ball. The only keeper NOT here is the one fetching; everybody else walks
+    // to their kick-off shape.
     applies:p => !!(goalRestart && goalRestart.fetcher!==p && goalRestart.taker!==p
-                    && !p.out && !p.sentOff && p.role!=='K'),
+                    && !p.out && !p.sentOff),
     score:p => 940,
     act:p => {
+      // a keeper's kick-off spot is his goal; everyone else fills toward the middle third
+      if(p.role==='K'){
+        const kIdx=players.filter(q=>q.team===p.team).indexOf(p);
+        const spot=(formation(p.team)[kIdx]) || formation(p.team)[0];
+        steer(p, spot.x, spot.y, 2.0);
+        return true;
+      }
       const own=goalCenter(p.team);
       const ax=CX-own.x, ay=CY-own.y, al=Math.hypot(ax,ay)||1;
       const px=-ay/al, py=ax/al;
@@ -4741,6 +4832,7 @@ function physics(dt){
   stepBench();           // and the disgraced watch from the side
   stepRestartWatchdog(); // and no restart may hang the match
   stadiumWall();         // and it cannot leave the ground at all
+  stepGoalRestart();     // after a goal: keeper fetches from the net, then the kick-off arms
   ballOutOfPlayCheck();  // outside is out of play, however it got there
   players.forEach(p=>{
     if(p.out)return;
@@ -5228,7 +5320,13 @@ function physics(dt){
     }
   }
   // walls & goals
-  for(let k=0;k<6;k++){
+  // ── AFTER A GOAL, THE NETTED BALL IS INERT ────────────────────────────────
+  // Once a goal is being processed (goalRestart set: the keeper is fetching or walking the ball
+  // out), the ball sitting in the net must not be re-tested against the goal line — a wide of the
+  // mouth here stages a phantom corner, which is what pulled players onto 'into the box' and
+  // 'fetching the ball' and put a SECOND ball in play. Play is held until the kick-off; the ball
+  // in the net does nothing until the keeper collects it. Only the stadium wall still contains it.
+  for(let k=0;k<6 && !goalRestart;k++){
     const e=EDGES[k];
     const d=(ball.x-e.p1.x)*e.nx+(ball.y-e.p1.y)*e.ny;
 
@@ -5374,11 +5472,20 @@ function physics(dt){
           // the staging below like any other dead ball.
           const dPrev=(ball.px-e.p1.x)*e.nx + (ball.py-e.p1.y)*e.ny;
           if(ball.z<GOAL_H && dPrev>=-6.5){
-            // ── AND THE NET CATCHES IT ────────────────────────────────────
-            // Nothing stopped a scored ball; it kept its velocity through the celebration and
-            // sailed into the stands. Nets exist. It dies where it scores.
-            ball.vx=0; ball.vy=0; ball.zv=0;
-            goalScored(GOAL_EDGE.indexOf(k)); return;
+            // ── IT SHOOTS IN AND PHYSICS CARRIES IT INTO THE NET ──────────
+            // The goal is recorded here, but the ball is NOT touched: no velocity kill, no
+            // teleport. It keeps its pace, crosses the line, and physics runs on until the
+            // stadium hoarding 34 behind the goal (stadiumWall) stops it. It lies in the net
+            // until the losing keeper fetches it.
+            //
+            // A GOAL IS AN UNOWNED BALL CROSSING IN FLIGHT. Once the keeper has picked it up to
+            // walk it out (goalRestart, ball.owner set), it is no longer a goal however deep in
+            // the net he is standing — otherwise carrying it back across his own line scores it
+            // a second time. That double-count was 11 celebrations for 6 goals.
+            if(!ball.scored && !ball.owner && !goalRestart){
+              ball.scored=true; goalScored(GOAL_EDGE.indexOf(k));
+            }
+            return;
           }
           if(ball.z<GOAL_H && dPrev<-6.5){ if(oobRule){ outOfBounds(k,e); return; } }
           else if(ball.isShot){ ENGINE_HOOKS.spawnNote(ball.x,ball.y-20,"over the bar!","#ffd166"); ball.isShot=false; }
@@ -5584,7 +5691,10 @@ function goalScored(concederTeam){
   }
   computeTargets();
   ENGINE_HOOKS.flash(concederTeam); if(legit) ENGINE_HOOKS.flash(scorerTeam);
-  pendingKickoff=concederTeam;   // kickoff happens after the celebration clears
+  // pendingKickoff is NOT set here. The ball is live in the net; goalRestart's fetch phase owns
+  // the transition and arms the kick-off only once the keeper has the ball. Setting it here was
+  // the teleport: the front end fired kickoff() the same frame and the ball vanished to centre
+  // while still crossing the line.
 }
 // ── TELEMETRY ───────────────────────────────────────────────────────────────
 // Counters the match report prints, so a match played in a real browser can be compared against
