@@ -2300,8 +2300,12 @@ const PORTED = [
       // Both now measure the distance to his spot, which is the thing that is actually held.
       return dist(p, restartSpot(p)) <= 22;
     },
+    // ── RIPENS A BIT LONGER ───────────────────────────────────────────────
+    // John wanted the goal kick to take a beat more before it fires. It ripened fastest of all the
+    // restarts (rate 50-120, ~2.9-4.5s); dropped to 34-80 it now takes ~3.5-5.4s, in the same
+    // unhurried range as the kick-off. A direct side still gets to it sooner than a patient one.
     score:p => pendingRestart ? ripeness(pendingRestart.at!==undefined?pendingRestart.at:clockSec,
-                                        50 + 70*T(p.team).direct) : 0,
+                                        34 + 46*T(p.team).direct) : 0,
     act:p => {
       const f=gkOutlets(p);
       ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p;
@@ -2313,6 +2317,7 @@ const PORTED = [
         kick(f.near.x+f.near.vx*4, f.near.y+f.near.vy*4,
              Math.min(6.2, Math.max(2.4, f.nd/66*1.15)), false);
       } else kick(CX, CY, 8);
+      ENGINE_HOOKS.spawnNote(ball.x, ball.y-24, "goal kick", TEAMS[p.team].color, TEAMS[p.team].accent);
       ball.owner=null;
       pendingRestart=null;
       TEL.goalKicks=(TEL.goalKicks||0)+1;
