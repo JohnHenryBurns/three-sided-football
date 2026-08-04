@@ -1127,6 +1127,27 @@ function steer(p,tx,ty,maxV){
 }
 /** Has the offending side backed off the required ten yards? */
 
+// ── STEER TO A POINT, AIMED PAST IT ─────────────────────────────────────────
+// steer() settles a man at 9 from his target and does not wake him until it is 20 away. That
+// hysteresis keeps arrived players from vibrating, but it has a cost that bit us four separate
+// times this session: a man told to steer AT a spot he must stand ON — a restart taker over the
+// ball — settles 9-to-16 short of it and never closes the last stride, because to steer() he has
+// "arrived". The keeper on his line, the goal-kick fetcher, the kick-off taker, the free-kick
+// taker all froze this exact way, each found and fixed on its own.
+//
+// The fix was the same every time: aim the steer at a point PAST the real target, out along the
+// approach, so the settle band centres BEYOND the spot and the man rolls onto it on his way there.
+// This is that fix, named once. `over` is how far past to aim — 16 puts the far edge of the settle
+// band (target + 9-ish) a comfortable few units beyond the spot. Steering toward the point and
+// overshooting are the same call now, so the next taker that freezes is a one-line change, not a
+// rediscovery. NOTE: this is for overshooting toward a spot the man approaches; positioning
+// relative to a fixed landmark (a goal, a mark he stands off from) is a different intent and
+// stays hand-rolled.
+function steerPast(p, tx, ty, over, maxV){
+  const dx=tx-p.x, dy=ty-p.y, dl=Math.hypot(dx,dy)||1;
+  steer(p, tx+dx/dl*over, ty+dy/dl*over, maxV);
+}
+
 // ── A KICK THAT KNOWS WHERE THE LINES ARE ───────────────────────────────────
 // Keeper launches went out of play 59% of the time: power picked for the receiver's distance,
 // nothing watching the boundary past him. A lofted ball runs about 48 units per power point
@@ -3450,8 +3471,7 @@ const INSTRUCTIONS = [
       // he steers at a point 16 PAST the ball: the settle band centres beyond it, and he
       // crosses the claim radius on the way through. Same thresholds, no gap between them.
       if(dist(p,ball) > 12){
-        const bx=ball.x-p.x, by=ball.y-p.y, bl=Math.hypot(bx,by)||1;
-        steer(p, ball.x+bx/bl*16, ball.y+by/bl*16, 3.0); return true;
+        steerPast(p, ball.x, ball.y, 16, 3.0); return true;
       }
       ball.owner=p; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
       ENGINE_HOOKS.spawnNote(ball.x, ball.y-22, "\u{1F450} fetched", TEAMS[p.team].color);
@@ -3704,8 +3724,7 @@ const INSTRUCTIONS = [
         // meant to be standing over, and the hold long since expired so it read as open play.
         // Same fix as the keeper and the kick-off taker: aim 16 PAST the spot so the settle band
         // centres beyond it and he crosses the take radius on the way in.
-        const dx=freeKick.x-p.x, dy=freeKick.y-p.y, dl=Math.hypot(dx,dy)||1;
-        steer(p, freeKick.x+dx/dl*16, freeKick.y+dy/dl*16, 2.4);
+        steerPast(p, freeKick.x, freeKick.y, 16, 2.4);
         return true;
       }
       p.vx=0; p.vy=0;
@@ -4531,8 +4550,7 @@ const INSTRUCTIONS = [
       // aiming AT the ball parks in that 8-20 dead zone one unit short and never collects — the
       // freeze on the goal line John saw. Same fix as the goal-kick fetcher: aim 16 PAST the
       // ball so the settle band centres beyond it and he crosses the collect radius on the way.
-      const bx=ball.x-p.x, by=ball.y-p.y, bl=Math.hypot(bx,by)||1;
-      steer(p, ball.x+bx/bl*16, ball.y+by/bl*16, 2.6);
+      steerPast(p, ball.x, ball.y, 16, 2.6);
       return true;
     } },
 
