@@ -919,7 +919,8 @@ function buildPitch(){
     //
     // The posts and crossbar stay white, so the frame identifies the goal and the mouth still
     // reads as a mouth.
-    const barMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(TEAMS[t].color) });
+    const barMat = registerTeamMat(new THREE.MeshLambertMaterial({ color: new THREE.Color(TEAMS[t].color) }), t, false);
+    paintTeamMat(barMat, TEAMS[t].color, false);
     // ── AND AN ACCENT BAND ON EACH STANCHION ──────────────────────────────
     // The frame said whose goal it was in one colour. A side has two — every team carries an
     // accent as well as a colour, and it is what tells the Bulldogs from anyone else in blue at
@@ -927,8 +928,9 @@ function buildPitch(){
     //
     // A band around each stanchion, a third of the way up, in the accent. Solid, like the frame:
     // a washed stripe reads as a rendering artefact rather than a choice.
-    const accMat = new THREE.MeshLambertMaterial({
-      color: new THREE.Color(TEAMS[t].accent || TEAMS[t].color) });
+    const accMat = registerTeamMat(new THREE.MeshLambertMaterial({
+      color: new THREE.Color(TEAMS[t].accent || TEAMS[t].color) }), t, true);
+    paintTeamMat(accMat, TEAMS[t].accent || TEAMS[t].color, true);
     const foot = [];                                    // where each stanchion meets the ground
     for (const sgn of [-1, 1]) {
       const topX = e.mx + e.ux*half*sgn,  topZ = e.my + e.uy*half*sgn;
@@ -1222,6 +1224,38 @@ function nameSprite(text, colour, px, stroke){
 // expands and fades — a tackle, a shot. Both are on the pitch rather than in the feed because
 // WHERE they happened is half of what they say, and the feed cannot carry that.
 const notes3 = [], pings3 = [];
+
+// ── TEAM-COLOURED SCENE MATERIALS ────────────────────────────────────────────
+// The goal frame, its accent bands, and the dugout seat are all coloured for the team that
+// defends that goal — but they are built ONCE, at boot, from whatever three teams were loaded
+// then. When the setup screen or the random-dice picks different teams, buildBodies() rebuilds
+// the players' kits but the goals were left alone, so a goal kept the colour of whoever used to
+// defend it — the mismatch John saw. Rather than tear down and rebuild the whole pitch, every
+// team-coloured material registers here under its team index and its accent flag, and
+// recolourTeams() repaints them in place whenever the teams change. Cheap, and it cannot drift.
+const teamMats = [];   // { mat, team, accent }
+function registerTeamMat(mat, team, accent){ teamMats.push({ mat, team, accent }); return mat; }
+// ── VIBRANCY ─────────────────────────────────────────────────────────────────
+// A MeshLambertMaterial only ever reflects the light that lands on it, so a saturated team colour
+// under ambient 0.66 + sun 0.75 came back muted — the frame read as a washed, darker version of
+// the swatch on the scoreboard. Giving these materials a matching `emissive` at a fraction of the
+// colour lifts them back toward the true hue regardless of face angle, so a red goal reads as the
+// team's red rather than a lit maroon. The accent bands get a touch more, since they are the
+// identifying detail seen from the far end.
+function paintTeamMat(mat, hex, accent){
+  const c = new THREE.Color(hex);
+  mat.color.copy(c);
+  mat.emissive = new THREE.Color(hex);
+  mat.emissiveIntensity = accent ? 0.55 : 0.42;
+  mat.needsUpdate = true;
+}
+function recolourTeams(){
+  for (const rec of teamMats){
+    const T = TEAMS[rec.team]; if (!T) continue;
+    const hex = rec.accent ? (T.accent || T.color) : T.color;
+    paintTeamMat(rec.mat, hex, rec.accent);
+  }
+}
 ENGINE_HOOKS.spawnNote = (x, y, text, colour, stroke) => {
   // An engine-supplied stroke is honoured only if it actually contrasts with the fill — several
   // sides pass their own accent, and a few of those are as dark as the colour they outline.
@@ -1684,8 +1718,9 @@ function buildGround(){
     //
     // Wider for five, deeper than a person, and the roof lifted to 44 — which is 16.5 of
     // clearance over a seated player rather than 2.5, and reads as a dugout instead of a shelf.
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(96, 5, 20),
-      new THREE.MeshLambertMaterial({ color: new THREE.Color(TEAMS[t].color) }));
+    const seatMat = registerTeamMat(new THREE.MeshLambertMaterial({ color: new THREE.Color(TEAMS[t].color) }), t, false);
+    paintTeamMat(seatMat, TEAMS[t].color, false);
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(96, 5, 20), seatMat);
     seat.position.set(bx, 8, by);
     seat.rotation.y = -Math.atan2(e.uy, e.ux);
     scene.add(seat);
@@ -3163,6 +3198,7 @@ function startMatch(){
   kickoff(0, true);
   renderScore();
   buildBodies();          // the kits change with the teams, so the bodies are rebuilt
+  recolourTeams();        // and the goals + dugouts repaint for whoever now defends them
   running = true;
   setPlayIcon();
   keepAwake(true);
@@ -3970,6 +4006,7 @@ function boot(){
   kickoff(0, true);
   renderScore();
   buildBodies();
+  recolourTeams();          // paint the goals for the teams actually loaded, not the library defaults
   renderTeamSlots();
   setPlayIcon();
   setFullIcon();
