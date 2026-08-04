@@ -1372,6 +1372,43 @@ function holdingPlay(){
   return !!(pendingRestart || freeKick || cornerPending || throwPending || goalRestart || ball.fetch);
 }
 
+// ── ONE PLACE ENDS A RESTART ────────────────────────────────────────────────
+// Every restart is the same set of facts held at once — a taker (pendingRestart), its geometry
+// (freeKick / cornerPending+cornerSpot / throwPending), a fetch job (ball.fetch), and the claim
+// hold (restartHold) — and ending one means clearing ALL of them together. That clearing was
+// spread across the six take sites and the three void sites, and each cleared the subset its
+// author happened to be thinking about. The gaps between those subsets are a whole class of bug
+// John and I have chased this session: a corner that cleared pendingRestart but left ball.fetch
+// set held play for 175 seconds; a throw taken by kick() that left restartHold in the future
+// deadlocked the next claim. holdingPlay() reads the whole set, so the whole set must fall
+// together. This is that single point.
+//
+// It deliberately does NOT touch match-level state (score, phase, the kick-off's goalLatch) or
+// the post-restart courtesies (justDelivered, a taker's noChase) — only the dead-ball facts that
+// make holdingPlay() true. resetMatch() and kickoff() still own the full wipe; this owns the
+// transition from "a restart is pending" back to "the ball is live".
+function endRestart(){
+  // Clears the dead-ball STATE that holdingPlay() reads. It deliberately does NOT touch the corner
+  // GEOMETRY (cornerSpot, cornerGoal): cornerSpot is released by kick() when the corner is struck,
+  // and cornerGoal is left set on purpose — it is overwritten by the next stageCorner and read by
+  // corner instructions in the meantime, so clearing it early changed play. Matching what the old
+  // take/void sites actually cleared, no more.
+  pendingRestart = null;
+  freeKick = null;
+  cornerPending = null; cornerTaker = null;
+  throwPending = null;
+  ball.fetch = null;
+  ball.oob = false;
+  // NOTE: restartHold is deliberately NOT cleared here. It is a claim-timing clock, bounded at its
+  // setters so it cannot stack stale, and the old take/void sites left it to expire on its own —
+  // clearing it early here changed the claim timing and moved the bench. The hold is load-bearing
+  // (it protects a just-restarted ball for a beat); endRestart ends the restart STATE, and lets
+  // the hold run its short bounded course.
+  //
+  // goalRestart is its own three-phase machine that arms the kick-off on completion; it clears
+  // itself at that handoff, so endRestart leaves it be unless a caller is explicitly ending it.
+}
+
 // ── A SEEDED RANDOM, SO A MATCH CAN BE RUN TWICE ────────────────────────────
 // RNG() is unseeded, so no run is reproducible: the same configuration gave 23 goals and
 // then 15. Which means a degenerate match cannot be investigated because it cannot be repeated,
@@ -1530,13 +1567,13 @@ function stepRestartWatchdog(){
     const gone = !t || t.out || t.sentOff;
     if(gone || clockSec-freeKick.at>8){
       TEL.restartVoid++;
-      freeKick=null;
+      endRestart();
       if(ball.owner && ball.owner.role!=='K') ball.owner=null;
     }
   }
   if(pendingRestart && pendingRestart.p && (pendingRestart.p.out||pendingRestart.p.sentOff)){
     TEL.restartVoid++;
-    pendingRestart=null; ball.fetch=null;
+    endRestart();
   }
   // ── AND STAGED RESTARTS GET THE SAME MORTALITY ────────────────────────────
   // The free kick had an 8-second void; a staged pendingRestart had none, so the hung penalty
@@ -1546,7 +1583,7 @@ function stepRestartWatchdog(){
   if(pendingRestart && pendingRestart.kind!=='kickoff' && pendingRestart.at!==undefined
      && clockSec-pendingRestart.at>20){
     TEL.restartVoid++;
-    pendingRestart=null; ball.fetch=null;
+    endRestart();
   }
 }
 
@@ -2044,7 +2081,7 @@ const PORTED = [
       kick(cx2, cy2, 11.5, false);
       ball.zv=3.6;                                              // it swings in high
       ball.owner=null;
-      pendingRestart=null; cornerPending=null; cornerTaker=null; ball.fetch=null;  // over
+      endRestart();   // the whole dead-ball set falls together
       justDelivered={p, at:clockSec};
       return true;
     } },
@@ -2108,7 +2145,7 @@ const PORTED = [
       if(b) kick(b.x+b.vx*5, b.y+b.vy*5, Math.min(6.5, Math.max(3, dist(b,p)/66*1.15)), false);
       else  kick(CX+(RNG()*2-1)*120, CY+(RNG()*2-1)*120, 5.5, false);
       ball.owner=null;
-      pendingRestart=null;
+      endRestart();
       TEL.kickOffs=(TEL.kickOffs||0)+1;
       return true;
     } },
@@ -2153,7 +2190,7 @@ const PORTED = [
         ball.zv = 2.6 + Math.min(1.6, d9/260*1.6);
       } else kick(CX, CY, 5.5, false);
       ball.owner=null;
-      pendingRestart=null; throwPending=null; ball.fetch=null;   // struck: the restart is over
+      endRestart();   // struck: the restart is over
       p.noChase=clockSec+1.0;
 
       return true;
@@ -2211,7 +2248,7 @@ const PORTED = [
         sayLogged(`${gkP.name} guessed right and got a hand to it \u2014 not enough!`, true);
       }
       ball.owner=null;
-      pendingRestart=null;
+      endRestart();
       // gkDiveCheck WAS DELETED WITH THE CASCADE and this still called it — the penalty would
       // have thrown the moment one was awarded. It never was, so nobody found out.
       // The keeper's own `dive` action handles this now: the ball is a shot, and he reads it.
@@ -2240,7 +2277,7 @@ const PORTED = [
         if(best) kick(best.x+best.vx*8, best.y+best.vy*8, Math.min(8, dist(best,p)/66*1.15));
         else kick(tgt.x, tgt.y, 8.4, false);
       }
-      freeKick=null;
+      endRestart();
       p.noChase=clockSec+1.0;
       return true;
     } },
@@ -2319,7 +2356,7 @@ const PORTED = [
       } else kick(CX, CY, 8);
       ENGINE_HOOKS.spawnNote(ball.x, ball.y-24, "goal kick", TEAMS[p.team].color, TEAMS[p.team].accent);
       ball.owner=null;
-      pendingRestart=null;
+      endRestart();
       TEL.goalKicks=(TEL.goalKicks||0)+1;
       return true;
     } },
