@@ -2692,7 +2692,16 @@ let drawGL = function drawGL(){
       // step turns 1.55 radians a frame, which at 60fps is nine rotations a second — past the
       // point where a rendered wheel starts to look like it is standing still or going
       // backwards. Physically honest and visually useless. Slower reads as faster here.
-      const spin = new THREE.Quaternion().setFromAxisAngle(axis, (sp * 0.6) / 9);
+      //
+      // ── AND THE SPIN TRACKS THE GAME SPEED ────────────────────────────────
+      // The sim advances `dt * speed` each rendered frame, so at 2x the ball covers twice the
+      // ground per frame — but the spin was a flat function of velocity, applied once per frame
+      // regardless of speed, so it turned the same amount however fast the match was running. The
+      // ball skated at high speed and over-spun at low. Rolling is distance over radius, and the
+      // distance this frame is velocity times the speed multiplier, so the turn scales with it:
+      // the wheel and the ground move together at every setting.
+      const spd = (typeof speed === 'number' && speed > 0) ? speed : 1;
+      const spin = new THREE.Quaternion().setFromAxisAngle(axis, (sp * 0.6 * spd) / 9);
       ballGL.quaternion.premultiply(spin);
     }
   }
