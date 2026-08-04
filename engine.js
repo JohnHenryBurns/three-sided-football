@@ -2491,7 +2491,7 @@ const PORTED = [
 
         ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p; ball.isShot=false;
         suppress={team:victim.team, until:clockSec+1.0};
-        ENGINE_HOOKS.spawnNote(p.x,p.y-20,"got away with it","#8fa0ae");
+        ENGINE_HOOKS.spawnNote(p.x,p.y-20,"got away with it",TEAMS[p.team].color);
         return false;
       }
 
@@ -2596,7 +2596,7 @@ const PORTED = [
         p.fooled = clockSec + 0.7;
         stam(p,-0.05);
         TEL.tacklesLost=(TEL.tacklesLost||0)+1;
-        ENGINE_HOOKS.spawnNote(p.x, p.y-24, "rides the tackle", "#8fa0ae");
+        ENGINE_HOOKS.spawnNote(p.x, p.y-24, "rides the tackle", TEAMS[p.team].color);
         return false;
       }
       TEL.tacklesWon=(TEL.tacklesWon||0)+1;
@@ -2672,7 +2672,7 @@ const PORTED = [
         p.diveUntil = clockSec + 1.2;
         steer(p, g.x + e.ux*half*0.62*side, g.y + e.uy*half*0.62*side, 3.4);
         GKSTAT.penDives=(GKSTAT.penDives||0)+1;
-        ENGINE_HOOKS.spawnNote(p.x, p.y-26, side<0?"dives left":"dives right", "#8fa0ae");
+        ENGINE_HOOKS.spawnNote(p.x, p.y-26, side<0?"dives left":"dives right", TEAMS[p.team].color);
       } else {
         GKSTAT.penStands=(GKSTAT.penStands||0)+1;
         ENGINE_HOOKS.spawnNote(p.x, p.y-26, "stands up!", "#ffd166");
@@ -3034,7 +3034,7 @@ const ACTIONS = [
         TEL.footSideWon=(TEL.footSideWon||0)+1;
         sayLogged(`${p.name} sweeps it round ${d.name} and goes!`);
         ENGINE_HOOKS.spawnNote(p.x, p.y-26, "round him!", TEAMS[p.team].color);
-      } else ENGINE_HOOKS.spawnNote(p.x, p.y-24, "shifts it wide", "#8fa0ae");
+      } else ENGINE_HOOKS.spawnNote(p.x, p.y-24, "shifts it wide", TEAMS[p.team].color);
       return true;
     } },
 
@@ -3102,7 +3102,7 @@ const ACTIONS = [
         ENGINE_HOOKS.spawnNote(p.x, p.y-26, "beats him!", TEAMS[p.team].color);
       } else {
         stam(p,-0.04);
-        ENGINE_HOOKS.spawnNote(p.x, p.y-26, "shows him the ball", "#8fa0ae");
+        ENGINE_HOOKS.spawnNote(p.x, p.y-26, "shows him the ball", TEAMS[p.team].color);
       }
       // and he carries on, past him if it worked
       const t9=targets[p.team];
