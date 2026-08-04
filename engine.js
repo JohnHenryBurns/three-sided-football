@@ -1393,6 +1393,22 @@ function holdingPlay(){
   return !!(pendingRestart || freeKick || cornerPending || throwPending || goalRestart || ball.fetch);
 }
 
+// ── IS AN UNOWNED BALL OFF-LIMITS TO AN OPEN-PLAY CLAIM RIGHT NOW? ───────────
+// The possession loop in physics() is the one place a loose ball is claimed, and it must not claim
+// a ball that a restart owns. That protection had grown as scattered guards, each added when a
+// specific ball slipped through: the restartHold time-gate for a staged restart, and a separate
+// goalRestart-settle check for the kick-off rolling to the centre (the jerk — a claim that skipped
+// the gate snapped the ball to the claimer). Two half-answers to one question. This is the whole
+// question in one place: while the ball is nobody's, is it being held for a restart? A new dead-ball
+// phase joins the answer here, once, instead of being forgotten at the claim site — which is exactly
+// how the settle ball was missed the first time. Only meaningful for an UNOWNED ball; a claim of an
+// owned ball is a tackle, judged elsewhere.
+function claimHeldForRestart(){
+  if(nowMs() < restartHold) return true;                       // a staged restart's hold clock
+  if(goalRestart && goalRestart.phase==='settle') return true; // the kick-off rolling to the spot
+  return false;
+}
+
 // ── ONE PLACE ENDS A RESTART ────────────────────────────────────────────────
 // Every restart is the same set of facts held at once — a taker (pendingRestart), its geometry
 // (freeKick / cornerPending+cornerSpot / throwPending), a fetch job (ball.fetch), and the claim
@@ -5292,15 +5308,14 @@ function physics(dt){
     if(ball.noClaimF>0) ball.noClaimF-=S; else ball.noClaim=null;
     if(ball.strayF>0) ball.strayF-=S; else ball.strayer=null;
     let best=null,bd=1e9;
-    if(nowMs()<restartHold&&!ball.owner) return;   // dead ball awaits its taker
-    // ── THE POST-GOAL KICK-OFF BALL IS NObody'S UNTIL IT IS TAKEN ──────────
-    // After a goal the keeper kicks the ball to the centre and it rolls there under its own pace
-    // (the 'settle' phase). It is the kick-off in transit — not a loose ball to be claimed. A
-    // reflex claim here snapped it to the claimer, and the shadow guard yanked it back the next
-    // frame: the jerk John saw, ball to keeper and back to centre. Block the claim at the source
-    // instead, so the ball simply rolls to the spot untouched. (goalRestart is also in
-    // holdingPlay(), but that gate is not on this loop; this is the one place the claim is made.)
-    if(goalRestart && goalRestart.phase==='settle' && !ball.owner) return;
+    // ── A BALL HELD FOR A RESTART IS NOT CLAIMED IN OPEN PLAY ──────────────
+    // The staged-restart hold clock and the post-goal kick-off rolling to the centre were two
+    // separate guards here, each found by a ball that slipped the other. They are one question now
+    // — is this unowned ball being held for a restart — asked in claimHeldForRestart(), so the next
+    // dead-ball phase joins the answer there rather than being forgotten at this claim site. (The
+    // settle roll was exactly such a miss the first time: the jerk, a claim that snapped the rolling
+    // kick-off ball to the claimer.)
+    if(!ball.owner && claimHeldForRestart()) return;
     if(ball.clearT&&clockSec<ball.clearT) return;            // a clearance in flight escapes the furnace
     players.forEach(p=>{ if(p.out||p.sentOff)return; if(p===ball.noClaim&&ball.noClaimF>0)return;
       if(suppress&&suppress.team===p.team&&clockSec<suppress.until)return;
