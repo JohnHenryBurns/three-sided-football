@@ -1900,6 +1900,31 @@ function ripeness(since, rate){
   return t*t*rate;            // quadratic: hesitant, then decisive, which is how people are
 }
 
+// ── HOW FAST EACH RESTART RIPENS, IN ONE PLACE ──────────────────────────────
+// Every SCRIPT-tier restart-taker "ripens": ripeness() grows its score as t², and once it clears
+// the field the taker strikes. How FAST it ripens — how long the taker stands over the ball before
+// he takes it — was a `base + span*direct` literal buried in each taker's score line, six of them
+// scattered across two hundred lines. Tuning one meant hunting the magic number (John's goal-kick
+// "ripen a bit longer" was exactly that hunt). They live here now, keyed by kind, where the whole
+// set can be read and compared at a glance:
+//   base   — the rate a perfectly patient side ripens at
+//   span   — how much a fully direct side adds on top (0 = pace is the same for everyone)
+// The ordering tells its own story: penalty and kick-off are the most deliberate, the free kick and
+// the throw the most eager, the corner and goal kick unhurried in between.
+const RESTART_SPECS = {
+  penalty:  { base: 33, span: 0  },   // no rush: a kept ball, a set piece, taken when settled
+  kickoff:  { base: 40, span: 0  },   // deliberate, and the same for every side
+  goalkick: { base: 34, span: 46 },   // unhurried; John asked it wait a beat longer
+  corner:   { base: 45, span: 65 },   // a corner ripens slower than a throw
+  freekick: { base: 50, span: 75 },   // eager, a direct side eager-er
+  throw:    { base: 60, span: 75 },   // the quickest to be taken
+};
+/** The ripen rate for a restart of `kind`, for a player on `team` — base plus the direct bonus. */
+function ripenRate(kind, team){
+  const s = RESTART_SPECS[kind];
+  return s.base + s.span * T(team).direct;
+}
+
 /** The cascade's RK — a side's appetite for a shot. Named because both shot actions read it and
  *  it was an inline expression in each.
  *
@@ -2094,7 +2119,7 @@ const PORTED = [
       return true;
     },
     score:p => pendingRestart ? ripeness(pendingRestart.at !== undefined ? pendingRestart.at : clockSec,
-                        45 + 65*T(p.team).direct) : 0,   // a corner ripens slower than a throw
+                        ripenRate('corner', p.team)) : 0,   // a corner ripens slower than a throw
     act:p => {
       const e=EDGES[GOAL_EDGE[cornerGoal]], g=goalCenter(cornerGoal);
       const cx2=g.x+e.nx*46, cy2=g.y+e.ny*46;
@@ -2159,7 +2184,7 @@ const PORTED = [
       // resting positions during it, which is what used to be a hold.
       return sidesSet(p);
     },
-    score:p => pendingRestart ? ripeness(pendingRestart.at!==undefined?pendingRestart.at:clockSec, 40) : 0,
+    score:p => pendingRestart ? ripeness(pendingRestart.at!==undefined?pendingRestart.at:clockSec, ripenRate('kickoff', p.team)) : 0,
     act:p => {
       const b=bestPass(p);
       ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p;
@@ -2200,7 +2225,7 @@ const PORTED = [
     // showed it as `since:n` for nineteen consecutive frames.
     score:p => pendingRestart ? ripeness(pendingRestart.since !== undefined ? pendingRestart.since
                         : (pendingRestart.at !== undefined ? pendingRestart.at : clockSec),
-                        60 + 75*T(p.team).direct) : 0,
+                        ripenRate('throw', p.team)) : 0,
     act:p => {
       const best=bestPass(p);
       const tgt = best || players.find(m=>m.team===p.team && m!==p && onPitch(m) && m.role!=='K');
@@ -2235,7 +2260,7 @@ const PORTED = [
     // penalty could be AWARDED (2.38 a match) and never TAKEN.
     //
     // He ripens from the moment the ball is on the spot, and chooses his own moment.
-    score:p => pendingRestart ? ripeness(pendingRestart.at!==undefined?pendingRestart.at:clockSec, 33) : 0,
+    score:p => pendingRestart ? ripeness(pendingRestart.at!==undefined?pendingRestart.at:clockSec, ripenRate('penalty', p.team)) : 0,
     act:p => {
       const gt=penaltyGoalTeam;
       const e=EDGES[GOAL_EDGE[gt]], g=goalCenter(gt);
@@ -2283,7 +2308,7 @@ const PORTED = [
   { name:'free-kick', tier:TIER.SCRIPT, ported:true,
     coach:T => 0,
     can:p => !!(freeKick && freeKick.taker===p && ball.owner===p),
-    score:p => ripeness(freeKick ? freeKick.at : clockSec, 50 + 75*T(p.team).direct),
+    score:p => ripeness(freeKick ? freeKick.at : clockSec, ripenRate('freekick', p.team)),
     act:p => {
       const aim = (freeKick && freeKick.aim!==undefined) ? freeKick.aim : targets[p.team];
       const tgt = goalCenter(aim);
@@ -2363,7 +2388,7 @@ const PORTED = [
     // restarts (rate 50-120, ~2.9-4.5s); dropped to 34-80 it now takes ~3.5-5.4s, in the same
     // unhurried range as the kick-off. A direct side still gets to it sooner than a patient one.
     score:p => pendingRestart ? ripeness(pendingRestart.at!==undefined?pendingRestart.at:clockSec,
-                                        34 + 46*T(p.team).direct) : 0,
+                                        ripenRate('goalkick', p.team)) : 0,
     act:p => {
       const f=gkOutlets(p);
       ball.owner=p; ball.lastTouch=p.team; ball.lastKicker=p;
