@@ -2299,9 +2299,20 @@ const PORTED = [
       kick(g.x+e.ux*off2, g.y+e.uy*off2, 10.8, true);
       if(shootHigh) ball.zv = 3.1;                   // over the keeper's standing reach
 
-      // THE SAVE, decided by the guess rather than by geometry.
+      // THE SAVE, a parry — not a shot back the way it came. John: a saved penalty flew the
+      // opposite direction. It did, literally — this negated the shot velocity (*= -0.42), so the
+      // ball left the spot heading straight back up the pitch at nearly half pace, and since the
+      // save resolves on the SAME frame as the strike there was no flight toward goal first. It
+      // read as a shot fired backwards. A keeper gets a hand ACROSS the ball and it goes to the
+      // side — parried wide and down, a fraction of the pace off at an angle, not batted back down
+      // its own line. Kill the shot; push it along the goal line (e.u) to the dive side with a
+      // little back off the hands (e.n) so it clears the frame; drop it.
       if(sideRight && heightRight){
-        ball.vx*=-0.42; ball.vy*=-0.42; ball.zv=1.2;
+        const spd = Math.hypot(ball.vx, ball.vy) || 1;
+        const parrySide = (shootSide!==0 ? shootSide : (RNG()<0.5?-1:1));
+        ball.vx = (e.ux*parrySide*1.0 + e.nx*0.22) * spd*0.28;
+        ball.vy = (e.uy*parrySide*1.0 + e.ny*0.22) * spd*0.28;
+        ball.zv = 1.2;
         stats.saves[gt]++;
         sayLogged(`SAVED! ${gkP.name} went the right way \u2014 and the right height!`, true);
         ENGINE_HOOKS.spawnNote(gkP.x, gkP.y-28, "\u{1F9E4} SAVED", "#7ee787");
