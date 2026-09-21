@@ -24,7 +24,9 @@ const HOOKS = ['say','spawnNote','spawnPing','renderScore','crownChampion','elim
 
 /** One match, played to full time on a clock we control. */
 function play(opts){
-  const o = Object.assign({ minutes: 5, teams: [0,1,2], first: 0, rules: {} }, opts || {});
+  // England, Germany, France: three FIRM sides. The default used to be 0-1-2, and side 1 is
+  // Argentina, who are Nasty — so every default measurement carried one side's temperament.
+  const o = Object.assign({ minutes: 5, teams: [2,4,6], first: 0, rules: {} }, opts || {});
   const E = new Function(SRC + `
     return { ENGINE_CLOCK, ENGINE_HOOKS, resetMatch, kickoff, think, physics, computeTargets,
              colorCommentary, resolveFullTime, applyTeamSelection, selTeams, goalCenter, rankCmp,
@@ -35,7 +37,8 @@ function play(opts){
              get clockSec(){return clockSec}, set clockSec(v){clockSec=v},
              set matchLen(v){matchLen=v}, get matchLen(){return matchLen},
              get stoppageLen(){return stoppageLen},
-             set oobRule(v){oobRule=v}, set zoneRule(v){zoneRule=v}, set foulMult(v){foulMult=v},
+             set oobRule(v){oobRule=v}, set zoneRule(v){zoneRule=v},
+             set refLevel(v){refLevel=v}, get refLevel(){return refLevel}, get teamAGG(){return teamAGG},
              set momentumOn(v){momentumOn=v}, set scoreMode(v){scoreMode=v},
              get retargetTimer(){return retargetTimer}, set retargetTimer(v){retargetTimer=v},
              get pendingRestart(){return pendingRestart}, get restartHold(){return restartHold},
@@ -106,7 +109,12 @@ function play(opts){
   E.matchLen = o.minutes * 60;
   if ('oob'   in o.rules) E.oobRule    = o.rules.oob;
   if ('zone'  in o.rules) E.zoneRule   = o.rules.zone;
-  if ('ref'   in o.rules) E.foulMult   = o.rules.ref;
+  // THE TWO KNOBS. `ref` names a referee ('Play On','Lenient','Fair','Strict','Mayhem') — it used to
+  // set foulMult, which the engine never read, so every sheet was refereed at Fair. `agg` sets every
+  // side's aggression ('Clean','Firm','Nasty','Filthy'), or pass an array for one each; without it
+  // each side keeps its national temperament, which is NOT neutral (Argentina is Nasty).
+  if ('ref' in o.rules) E.refLevel = o.rules.ref;
+  if ('agg' in o.rules) for (let t = 0; t < 3; t++) E.teamAGG[t] = Array.isArray(o.rules.agg) ? o.rules.agg[t] : o.rules.agg;
   if ('fire'  in o.rules) E.momentumOn = o.rules.fire;
   if ('score' in o.rules) E.scoreMode  = o.rules.score;
   E.kickoff(o.first);
@@ -239,6 +247,15 @@ function play(opts){
 
   const owned = own.reduce((a, c) => a + c, 0) || 1;
   const per90 = x => x * (90 / o.minutes);
+  // THE BALL'S STATE DURING LIVE PLAY — the engine's four-way count with the dead frames taken
+  // out of the denominator, because a ball waiting on a mark is not football being played badly.
+  const live = (function(){
+    const T = E.TEL || {}, o2 = T.pOwned||0, f = T.pFlight||0, d = T.pDead||0, c = T.pContested||0,
+          h = T.pHoofed||0;
+    const all = (o2+f+d+c+h) || 1, lv = (o2+f+c+h) || 1;
+    return { deadPct: 100*d/all, owned: 100*o2/lv, flight: 100*f/lv, hoofed: 100*h/lv,
+             contested: 100*c/lv };
+  })();
   return {
     minutes: o.minutes, frames, stoppage: E.stoppageLen, finished: done, phase: E.phase, clock: E.clockSec,
     ev, per90: {
@@ -259,10 +276,18 @@ function play(opts){
     //
     // So every match says whether it is usable and WHY NOT, and a sweep can discard and count.
     // If that count climbs, something has been broken rather than tuned.
-    ok: !(100*loose/frames > 75 || 100*loose/frames < 45 || crowd/frames < 1.4),
-    why: 100*loose/frames > 75 ? 'nobody chasing'
-       : 100*loose/frames < 45 ? 'ball held too long'
-       : crowd/frames < 1.4    ? 'nobody near the ball' : null,
+    // JUDGED ON THE LIVE SPLIT, NOT ON `loose`. `loose` is "no owner this frame", which counts a
+    // pass in flight, a shot, and every dead ball sitting on its mark — it read 78-86% on matches
+    // that were playing normally and this flag called eleven healthy matches in twelve 'nobody
+    // chasing'. What actually marks a broken match is a restart that never completes (dead time
+    // swallowing the match) or a live ball nobody goes for.
+    // (the crowd test assumes fifteen men: after half a dozen sendings-off "fewer than 1.4 near
+    // the ball" is arithmetic, not a fault, so a card-fest is excused it)
+    ok: !(live.deadPct > 55 || live.contested > 70 || (crowd/frames < 1.4 && ev.reds < 6)),
+    why: live.deadPct > 55     ? 'stuck in a restart'
+       : live.contested > 70   ? 'nobody chasing'
+       : (crowd/frames < 1.4 && ev.reds < 6) ? 'nobody near the ball' : null,
+    live,
     // THE FOUR STATES, because `loose` alone conflates a pass in flight with a ball nobody
     // wants. John watched a match full of passing and correctly said it did not look like a
     // ball on the floor for six-sevenths of the time — because it was not.
@@ -292,11 +317,19 @@ function play(opts){
   };
 }
 
+const FIRM = [2,4,6,7,10,11];   // England, Germany, France, Netherlands, Portugal, USA
+const FIRM_TRIOS = (function(){ const out=[]; for(let a=0;a<6;a++)for(let b=a+1;b<6;b++)for(let c=b+1;c<6;c++) out.push([FIRM[a],FIRM[b],FIRM[c]]);
+  // interleave so the first eight are not all England
+  return out.map((t,i)=>[t,(i*7)%out.length]).sort((x,y)=>x[1]-y[1]).map(x=>x[0]); })();
+
 /** A sheet of matches, with the fixtures varied so this is not one game measured n times. */
 function sweep(n, opts){
   const out = [];
   for (let s = 0; s < n; s++) {
-    const teams = [(s*3) % 15, (s*3+1) % 15, (s*3+2) % 15];
+    // THE DEFAULT SHEET IS PLAYED BY DEFAULT-TEMPERAMENT SIDES (John). All twenty trios of the six
+    // Firm nations, in turn. Aggression is a knob to turn on purpose — rules:{agg:'Filthy'} — not
+    // something a fixture list should smuggle in. Pass `teams` to play anybody else.
+    const teams = FIRM_TRIOS[s % FIRM_TRIOS.length];
     out.push(play(Object.assign({ teams, first: s % 3 }, opts)));
   }
   return out;
@@ -322,7 +355,14 @@ function report(runs){
   console.log(line('corners',  avg(runs.map(r=>r.per90.corners)), '~10'));
   console.log(line('saves',    avg(runs.map(r=>r.per90.saves)),   '~6'));
   console.log('\n  ball state');
-  console.log('   loose               ' + avg(runs.map(r=>r.loosePct)).toFixed(0) + '%        ~35%');
+  // `loose` as it used to be printed — any frame without an owner — put next to a ~35% target
+  // that means something else entirely. The three live states are the comparable figures.
+  console.log('   live: at feet       ' + avg(runs.map(r=>r.live.owned)).toFixed(0) + '%        ~55-65%');
+  console.log('   live: pass/shot in flight ' + avg(runs.map(r=>r.live.flight)).toFixed(0) + '%  ~25-30%');
+  console.log('   live: hoofed at nobody ' + avg(runs.map(r=>r.live.hoofed)).toFixed(0) + '%     ~5%      (auto-clearances, headers)');
+  console.log('   live: nobody\'s      ' + avg(runs.map(r=>r.live.contested)).toFixed(0) + '%        ~10-15%');
+  console.log('   dead ball           ' + avg(runs.map(r=>r.live.deadPct)).toFixed(0) + '% of all frames');
+  console.log('   (no owner, any reason ' + avg(runs.map(r=>r.loosePct)).toFixed(0) + '% — the old "loose"; includes passes, shots and dead balls)');
   console.log('   airborne            ' + avg(runs.map(r=>r.aerialPct)).toFixed(0) + '%        ~20%');
   console.log('   held by a keeper    ' + avg(runs.map(r=>r.keeperPct)).toFixed(0) + '%        ~5%');
   console.log('   near the ball       ' + avg(runs.map(r=>r.crowd)).toFixed(1) + ' of 15   ~4-6');

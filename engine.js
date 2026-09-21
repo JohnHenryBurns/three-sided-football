@@ -414,7 +414,14 @@ const DEF_PRESETS={Balanced:{line:.5,press:.5,bunker:0},Gegenpress:{line:.8,pres
   ParkTheBus:{line:.15,press:.2,bunker:1},Trap:{line:.35,press:.6,bunker:0}};
 const ATK_AB={Balanced:"BAL",TikiTaka:"TT",RouteOne:"R1",Swashbuckle:"SB",Probe:"PR"};
 const DEF_AB={Balanced:"BAL",Gegenpress:"GP",ParkTheBus:"BUS",Trap:"TRP"};
-const AGG_PRESETS={Clean:{f:.55,t:.92},Firm:{f:1,t:1},Nasty:{f:1.8,t:1.18},Filthy:{f:2.8,t:1.38}};
+// `f` scales the INCIDENTAL foul (a mistimed challenge) and is read nowhere else. Filthy is
+// untouched — half of all tackles whistled is the Mayhem setting John asked for. The low end
+// comes down: at f=1 a Firm side fouled on 18-25% of tackles, and once carriers held the ball
+// long enough to be tackled (13 -> 32 attempts a match) that was a whistle every ten seconds.
+// (second pass, measured on the aggression x referee grid with three like-minded sides: Firm under a
+// Fair referee was still 2.9 called fouls a minute. John: quiet by default, absurd at the top. So the
+// bottom comes down again and the top stays exactly where it was.)
+const AGG_PRESETS={Clean:{f:.2,t:.92},Firm:{f:.25,t:1},Nasty:{f:1.2,t:1.18},Filthy:{f:2.8,t:1.38}};
 
 // ── THE REFEREE ─────────────────────────────────────────────────────────────
 // John's design: a side's aggression decides how often it fouls ON PURPOSE; the referee decides
@@ -437,7 +444,19 @@ const AGG_PRESETS={Clean:{f:.55,t:.92},Firm:{f:1,t:1},Nasty:{f:1.8,t:1.18},Filth
 // HOW READILY A SIDE FOULS ON PURPOSE. Not a multiplier on a shared base — an explicit weight
 // per identity, because the spread John wants is 300:1 and a multiplier cannot express that
 // while a linear one is also what made Clean and Filthy measure identically.
-const INTENT_W = { Clean:3, Firm:45, Nasty:260, Filthy:900 };
+//
+// RE-DERIVED FOR POSSESSIONS THAT LAST. These were tuned while a carrier kept the ball for a
+// third of a second, so a defender got a handful of frames inside 30 to be tempted in. 45 is
+// 1.6% of those frames — about once a second of contact — and the moment carriers began holding
+// the ball, Firm x3 under a Fair referee went from 10 fouls a three-minute match to 23, with 2.2
+// sendings-off. "Standard football" is a foul every half-minute or so, not every eight seconds.
+// The 300:1 spread is John's and is kept; the scale slides down under it, top end untouched.
+// Firm at 6 still measured 10 a match: two or three defenders are inside 30 of a carrier for most
+// of a possession, and each rolls every frame. 2 is the honest "now and then".
+// Nasty at 60 was 11 a match from ONE side (Argentina, in every seed of the tuning set) — a
+// whistle every sixteen seconds. 20 is a side that leaves a foot in; Filthy remains the circus.
+// (Clean and Firm now sit BELOW 1, which needed the lottery's weight floor lowered — see runAction.)
+const INTENT_W = { Clean:0.1, Firm:0.4, Nasty:8, Filthy:900 };
 
 const REF_PRESETS = {
   "Play On":   { sees:0.05, zeal:0.15, blurb:"Lets it go. All of it." },
@@ -451,7 +470,15 @@ const REF_PRESETS = {
   //
   // At 3.6: booked on essentially every foul, red on most of those. Six fouls become four or
   // five sendings-off, and a side that keeps fouling runs out of players. Which is the setting.
-  "Mayhem":    { sees:1.00, zeal:3.60, blurb:"Calls everything, and some things that never happened." }
+  //
+  // AND THEN 6, WITH PHANTOMS. Measured on the grid, three Filthy sides under Mayhem at 3.6 finished
+  // with 10.8 of 12 outfielders sent off and a true goalie duel one match in six. Two things stood
+  // between that and John's target (everybody off, keepers only): a second yellow was needed too
+  // often, and the LAST man or two survive because with nobody left near them they run out of
+  // people to foul. 6 makes most Mayhem cards straight reds. `phantom` is the blurb made literal:
+  // per second of open play, the chance he books somebody near the ball for nothing at all.
+  // Only Mayhem has it, so no other referee's matches draw a single extra random number.
+  "Mayhem":    { sees:1.00, zeal:6.00, phantom:0.07, blurb:"Calls everything, and some things that never happened." }
 };
 let refLevel = "Fair";
 function REF(){ return REF_PRESETS[refLevel] || REF_PRESETS.Fair; }
@@ -492,6 +519,7 @@ function awardFreeKick(victim, offender){
                wall:offender.team, aim:(aimT!==null&&aimT!==undefined)?aimT:offender.team };
   ball.owner=null; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
   TEL.freeKicks++;
+  addStoppage(1.5);
   restartHold = Math.min(Math.max(restartHold, nowMs()+1200), nowMs()+3200);
 }
 
@@ -528,6 +556,19 @@ function incidentalFoul(p, victim, clumsiness){
 }
 
 function bookPlayer(p, red){
+  // A GOALKEEPER IS NEVER SENT OFF. Nothing could book one until the last man was allowed to
+  // tackle; the first grid run after that sent off fourteen players of a possible twelve and left
+  // sides with nobody at all. He goes in the book as often as the referee likes — a side always
+  // keeps its last man, because the endgame IS the last men.
+  if(p.role==='K'){
+    p.yellows=(p.yellows||0)+1; addStoppage(2);
+    ENGINE_HOOKS.spawnNote(p.x,p.y-26,"🟨 booked"+(p.yellows>1?" (again)":""),"#f7c948");
+    sayLogged(p.yellows>1
+      ? `${p.name} is booked for the ${p.yellows===2?'second':p.yellows===3?'third':'umpteenth'} time. The referee would send ${PRN(p).him} off, but somebody has to stand in that goal.`
+      : `${p.name} goes into the book. A goalkeeper! The referee is thorough, if nothing else.`, true);
+    return;
+  }
+  addStoppage((red || p.yellows>=1) ? 7 : 3);
   if(red || p.yellows>=1){
     p.yellows++;
     p.sentOff=true; p.redCard=true; walkPending=p;
@@ -669,6 +710,7 @@ function kickoff(toTeam, firstWhistle){
   // was hoisted to module scope so instructions could see it, and each time I did not ask what
   // clears it.
   freeKick=null; goalRestart=null; walking=null; walkingAt=-1; cornerPending=null; cornerSpot=null;
+  ball.fetch=null;                       // whatever errand was running died with the whistle
   justDelivered=null;
   // ── AND THE KICK-OFF STAGES ITSELF ────────────────────────────────────────
   // A taker is named, the ball is on the spot, and pendingRestart carries the clock the
@@ -706,6 +748,15 @@ function kickoff(toTeam, firstWhistle){
     if(firstWhistle){ kp.x=mkx; kp.y=mky; kp.vx=0; kp.vy=0; }
     ball.owner = null;                     // and nobody starts holding it
     pendingRestart = { kind:'kickoff', at:clockSec, p:kp, x:CX, y:CY, team:koTeam };
+    // ── THE ERRAND IS THE KICKER'S, AND ONLY HIS ──────────────────────────────
+    // kickoff() wipes every restart fact except ball.fetch. Full time arriving DURING A GOAL
+    // KICK therefore left the fetch errand with the goalkeeper: he alone could claim the ball,
+    // did, and carried it off to his kick-off position while the taker followed him round at
+    // arm's length — overtime never started and the watchdog does not void a kick-off
+    // (seed 7010, a 1-minute blitz that ran three minutes and was stopped by the harness).
+    // An overtime kick-off starts from wherever the ball lies, so whoever takes it fetches it.
+    ball.fetch = (dist(ball,{x:CX,y:CY}) >= 14)
+      ? { by:kp, sx:CX, sy:CY, team:koTeam, at:clockSec } : null;
   }
   players.forEach(q=>{ q.__atSpot=false; q.__showing=false; q.__pushed=false; });
   chaser=[null,null,null];
@@ -1011,6 +1062,16 @@ function nearestOpp(p, r){
   return best;
 }
 
+/** How hard is this man being pressed? 0 with nobody inside 75, rising to 1 with a man inside 25.
+ *  A rate that should depend on the situation reads this — a carrier in space has no reason to
+ *  hurry and one with a man on his shoulder has every reason. */
+function pressureOn(p){
+  let nd=1e9;
+  players.forEach(o=>{ if(o.team===p.team || !onPitch(o)) return;
+    const d=dist(o,p); if(d<nd) nd=d; });
+  return Math.max(0, Math.min(1, (75-nd)/50));
+}
+
 /** The goal this side is attacking, or the centre if it has none. */
 function attackGoal(p){
   const t=targets[p.team];
@@ -1091,6 +1152,13 @@ function clampInside(p,margin){
         //
         // Outfielders stop 2 in front of the line, where they can still reach a ball on it.
         lim = (p.role==='K') ? -12 : 2;
+        // ── THE MAN FETCHING A GOAL OUT OF THE NET GOES ALL THE WAY IN ─────────
+        // The ball rolls on after it scores and the stadium wall stops it at WALL_OUT (34); the
+        // collect in stepGoalRestart wants him within 8. A keeper held at -12 could therefore
+        // never reach a ball resting deeper than -20, and the match stayed in goalRestart
+        // phase 'fetch' until full time — three seeds in eight, which is what the "degenerate
+        // match" was. He may go as deep as the ball can.
+        if(goalRestart && goalRestart.fetcher===p) lim = -(WALL_OUT+2);
       }
     }
     if(d < lim){ p.x+=e.nx*(lim-d); p.y+=e.ny*(lim-d); }
@@ -1205,6 +1273,7 @@ function kick(tx,ty,power,isShot){
   }
   const dx=tx-ball.x, dy=ty-ball.y, d=Math.hypot(dx,dy)||1;
   ball.vx=dx/d*power; ball.vy=dy/d*power;
+  ball.kickedAt=clockSec;                // telFrame: a struck ball is in flight, not loose
   ball.lastTouch=o.team; ball.lastKicker=o; ball.isShot=!!isShot;
   // ── AND THE KEEPERS HAVE TO SEE IT FIRST ──────────────────────────────────
   // A keeper reacted the instant isShot went true, which is a machine's reflexes. Measured: he
@@ -1442,6 +1511,15 @@ function endRestart(){
   // (it protects a just-restarted ball for a beat); endRestart ends the restart STATE, and lets
   // the hold run its short bounded course.
   //
+  // REVERSED, AND MEASURED. claimHeldForRestart() reads the hold and blocks EVERY claim while it
+  // runs — the receiver's and the goalkeeper's included. A free kick sets it 1.2-3.2s ahead and
+  // ripens inside that window, so a direct free kick was struck at a keeper who was not allowed
+  // to touch it: 3.3 free-kick shots a match scored 3.2 goals, 47% of all goals in the game.
+  // The same window made a quick throw unclaimable by the man it was thrown to. The kicker is
+  // already barred by ball.noClaim and the wall is already ten yards off, so nothing else needed
+  // the beat. A ball that has been struck is live.
+  restartHold = 0;
+  //
   // goalRestart is its own three-phase machine that arms the kick-off on completion; it clears
   // itself at that handoff, so endRestart leaves it be unless a caller is explicitly ending it.
 }
@@ -1598,6 +1676,49 @@ function benchSpot(t){
 // Eight seconds and it is void, whatever the state. A watchdog is not a fix for the underlying
 // fault, and it is written down as such — but a match that cannot restart is worse than a free
 // kick that gets abandoned.
+/** MAYHEM ONLY: the referee sees a foul that did not happen. The nearest opposing outfielder to the
+ *  man on the ball is penalised — free kick, and with Mayhem's zeal almost certainly a card. */
+function stepPhantomCalls(dt){
+  const R=REF();
+  if(!R.phantom) return;
+  const o=ball.owner;
+  if(!o || holdingPlay() || pendingRestart || goalRestart || freeKick) return;
+  if(o.role==='K' && gkHolding()) return;
+  if(RNG() > R.phantom*dt) return;
+  let who=null, wd=90;
+  players.forEach(q=>{ if(q.team===o.team || !onPitch(q) || q.role==='K') return;
+    const d=dist(q,o); if(d<wd){ wd=d; who=q; } });
+  // NOBODY NEAR HIM TO BLAME? THEN IT WAS HIM. Once two sides are down to their keepers the third
+  // side's outfielders have nobody left to foul and nobody near them to be blamed for — the
+  // trace had three of them untouchable from the 73rd second to the whistle. Mayhem does not
+  // need a victim. The free kick goes to the nearest opponent able to take one.
+  let victim=o;
+  if(!who){
+    if(o.role==='K') return;
+    who=o; victim=null; let vd=1e9;
+    players.forEach(q=>{ if(q.team===o.team || !onPitch(q)) return;
+      if(q.role==='K' && !loneKeeper(q)) return;            // a keeper with a side to mind stays home
+      const d=dist(q,o); if(d<vd){ vd=d; victim=q; } });
+    if(!victim) return;
+  }
+  // REPUTATION PRECEDES THEM. Mayhem alone was sending off six of a CLEAN side's men; John's circus
+  // is both knobs turned, not one. The referee invents fouls for sides that look the part: a Filthy
+  // man always, a Nasty one 43% of the time, Firm 13%, Clean 7%.
+  if(RNG() > AGG_PRESETS[teamAGG[who.team]].f/2.8) return;
+  TEL.phantoms=(TEL.phantoms||0)+1;
+  ENGINE_HOOKS.spawnNote(who.x, who.y-30, "👁 he saw SOMETHING", "#ffd166");
+  sayLogged(who===o ? pick([
+    `${who.name} is penalised for... having the ball? The referee consults a rulebook only he owns.`,
+    `Whistle! ${who.name} was enjoying that dribble, and the referee will not have it.`,
+    `${who.name} looks around for whoever he is supposed to have fouled. There is nobody within thirty yards.`]) : pick([
+    `The referee has seen something from ${who.name}. Nobody else did. Nobody else ever will.`,
+    `${who.name} is penalised for a foul that, on review, took place in the referee's imagination.`,
+    `Whistle! ${who.name} was ${Math.round(wd/9)} yards away. The referee does not care.`,
+    `${who.name} protests ${PRN(who).his} innocence, which is — uniquely, tonight — genuine.`]), true);
+  awardFreeKick(victim, who);
+  if(RNG() < 0.30*R.zeal) bookPlayer(who, RNG() < 0.10*R.zeal);
+}
+
 function stepRestartWatchdog(){
   if(freeKick && !freeKick.done){
     const t=freeKick.taker;
@@ -2051,6 +2172,33 @@ function bestPass(p){
  *  it available to each can(), which is the one real cost of the scored shape. */
 /** Is the shooting lane clear? The cascade samples the line to goal and looks for a body near
  *  any point on it. Lifted unchanged, because a shot into a wall of legs is not a shot. */
+/** How much a man with a clear sight of goal wants to shoot, as a function of how far out he is.
+ *  Quadratic in closeness: from the edge of his range it is a speculative thought, inside about
+ *  150 it outweighs a pass, and close in it is nearly the only thing on his mind. Better
+ *  finishers back themselves more. `floor` is the long-range appetite, `peak` the point-blank one. */
+function shotKeenness(p, dGoal, range, floor, peak){
+  const c=Math.max(0, 1-dGoal/range);
+  return (floor + peak*c*c) * (0.6+0.8*(p.rating||0.5));
+}
+
+/** Where along the goal line a shooter puts it. HE LOOKS AT THE KEEPER: the target is the side of
+ *  the mouth the keeper is not covering, about 60% of the way to that post, and the error around
+ *  it grows with distance and shrinks with quality.
+ *
+ *  This replaces a uniform draw across the mouth that ignored the keeper entirely — a third of
+ *  shots went straight at him by construction — and whose spread was MULTIPLIED by the shooter's
+ *  rating, so a better striker missed the target more often than a worse one. */
+function shotAim(p, goalTeam, tighten){
+  const e=EDGES[GOAL_EDGE[goalTeam]], hw=e.len*GOAL_HALF, RK=p.rating||0.5;
+  const gk=players.find(q=>q.team===goalTeam && q.role==='K' && onPitch(q));
+  const gkAlong = gk ? (gk.x-e.mx)*e.ux+(gk.y-e.my)*e.uy : 0;
+  const side = Math.abs(gkAlong)<4 ? (RNG()<0.5?-1:1) : (gkAlong>0?-1:1);
+  const dGoal=dist(p, goalCenter(goalTeam));
+  const err=(RNG()+RNG()-1) * hw * (0.30+dGoal*0.0042) * (1.35-0.7*RK) * (tighten||1);
+  return side*hw*0.62 + err;
+}
+
+
 function shotLaneClear(p, tgt){
   let clear=true;
   for(let t=0.2;t<=0.8;t+=0.2){
@@ -2094,9 +2242,62 @@ function ballIsIn(){
   return false;
 }
 
+// ── THE LAST MAN STANDING ───────────────────────────────────────────────────
+// John's endgame: dial the sides to Filthy and the referee to Mayhem and the outfielders all get
+// sent off, leaving a goalie duel. It could be REACHED and could not be PLAYED — a keeper never
+// leaves his line for a loose ball (holding the line 400 beats closing it down 395), may not
+// control it outside his area, is made to drop it if he carries it out, and may neither shoot nor
+// tackle. Twelve reds produced a ball lying in midfield until the whistle.
+//
+// A keeper whose side has no outfielders left is its last man and plays like one: he goes for a
+// loose ball, takes it on with his feet anywhere, shoots, and tackles. With team-mates on the pitch
+// nothing about him changes, and inside his own area he is still a goalkeeper with hands.
+/** Is he the nearest man on the pitch to the ball? A lone keeper leaves his line for a loose ball
+ *  only if so — otherwise all three last men abandon their nets at once and the duel is a race to
+ *  roll it into an empty goal (measured: a goal every five seconds). One goes; two stay home. */
+function nearestToBall(p){
+  const d=dist(p,ball);
+  for(const q of players){ if(q!==p && onPitch(q) && dist(q,ball) < d-1) return false; }
+  return true;
+}
+function loneKeeper(p){ return !!p && p.role==='K' && fieldersLeft(p.team)===0; }
+/** May he play the ball as an outfielder does — dribble, shoot? Anybody but a keeper, and a lone
+ *  keeper once he is off his own patch. */
+function playsOutfield(p){ return p.role!=='K' || (loneKeeper(p) && !mayGather(p)); }
+
+/** A restart nobody is left to take. The ball goes live on the centre spot. It used to be put
+ *  there still flagged out of play with no fetcher named — so nobody could ever claim it again,
+ *  and the first throw-in owed to a side with no outfielders ended the match as a contest. */
+function dropBallLive(why){
+  telPort(why);
+  ball.x=CX; ball.y=CY; ball.vx=0; ball.vy=0; ball.z=0; ball.zv=0;
+  ball.owner=null; ball.oob=false; ball.fetch=null; restartHold=0;
+}
+
 function mayGather(p){
   if(p.role!=='K') return false;
   return dist(p, goalCenter(p.team)) <= 112;
+}
+
+/** Boot it out of a crowd: away from the pack, bent a little toward the middle, never aimed off
+ *  the pitch. The geometry is the old reflex clearance's, unchanged — only WHO DECIDES moved. */
+function hoofClear(p){
+  let wolves=0,wx=0,wy=0;
+  players.forEach(q=>{ if(q.team!==p.team&&onPitch(q)&&q.role!=="K"&&dist(q,p)<36){ wolves++; wx+=q.x; wy+=q.y; }});
+  if(!wolves) return false;
+  let cx9=p.x-(wx/wolves-p.x), cy9=p.y-(wy/wolves-p.y);              // away from the pack
+  cx9=p.x+(cx9-p.x)*0.7+(CX-p.x)*0.3*0.4;                            // bent toward safety, not glory
+  cy9=p.y+(cy9-p.y)*0.7+(CY-p.y)*0.3*0.4;
+  const dl9=Math.hypot(cx9-p.x,cy9-p.y)||1;
+  let kx9=p.x+(cx9-p.x)/dl9*260, ky9=p.y+(cy9-p.y)/dl9*260;
+  for(let pass=0;pass<2;pass++) for(const e9 of EDGES){              // a clear never books its own throw-in
+    const de9=(kx9-e9.p1.x)*e9.nx+(ky9-e9.p1.y)*e9.ny;
+    if(de9<40){ kx9+=e9.nx*(40-de9); ky9+=e9.ny*(40-de9); }
+  }
+  GKSTAT.clears=(GKSTAT.clears||0)+1;
+  kick(kx9, ky9, 7.6, false);
+  ball.clearT=clockSec+0.4;                                          // the escape guarantee: it gets OUT
+  return true;
 }
 
 function gkOutlets(gk){
@@ -2362,7 +2563,7 @@ const PORTED = [
   { name:'gk-roll', tier:TIER.PLAYER, ported:true,
     coach:T => (1-T.direct)*60,
     can:p => {
-      if(p.role!=='K' || ball.owner!==p) return false;
+      if(p.role!=='K' || ball.owner!==p || playsOutfield(p)) return false;
       const f=gkOutlets(p);
       return !!f.near && !(f.crowded && dist(f.near,p)<110);
     },
@@ -2449,7 +2650,7 @@ const PORTED = [
   { name:'clearing his lines', tier:TIER.PLAYER, ported:true,
     coach:T => (1-T.press)*-20,          // a pressing side leaves it later; a cautious one earlier
     can:p => {
-      if(p.role!=='K' || ball.owner!==p || !onPitch(p)) return false;
+      if(p.role!=='K' || ball.owner!==p || !onPitch(p) || loneKeeper(p)) return false;   // the last man carries it out
       const og=goalCenter(p.team);
       return dist(p,og) > 82;            // the last thirty units of his area
     },
@@ -2478,7 +2679,7 @@ const PORTED = [
   { name:'gk-punt', tier:TIER.PLAYER, ported:true,
     coach:T => T.direct*80,
     can:p => {
-      if(p.role!=='K' || ball.owner!==p) return false;
+      if(p.role!=='K' || ball.owner!==p || playsOutfield(p)) return false;
       const f=gkOutlets(p);
       return !!(f.far && ((f.fd>255 && (f.nd>140 || RNG()<0.11)) || (f.crowded && f.fd>150)));
     },
@@ -2498,7 +2699,7 @@ const PORTED = [
   { name:'gk-clear', tier:TIER.PLAYER, ported:true,
     coach:T => (T.bunker>0.5?110:0),
     can:p => {
-      if(p.role!=='K' || ball.owner!==p) return false;
+      if(p.role!=='K' || ball.owner!==p || playsOutfield(p)) return false;
       const f=gkOutlets(p);
       // crowded, and the only outlet is short and in the same trouble
       return f.crowded && (!f.near || dist(f.near,p)<110);
@@ -2632,7 +2833,10 @@ const PORTED = [
                                           && !q.out && q.role!=='K' && dist(p,q)<24) : null);
       if(!tgt || tgt.role==='K') return false;
       if(suppress && suppress.team===p.team && clockSec<suppress.until) return false;
-      return RNG() < 0.006;                        // rare: an event, not a habit
+      // AND IT OBEYS THE AGGRESSION KNOB, which it never did: a Clean side shoved exactly as often
+      // as a Filthy one, and at default settings shoves were a third of all the free kicks given.
+      // Firm shoves half as often as before; Filthy three times as often.
+      return RNG() < 0.006 * Math.min(3, AGG_PRESETS[teamAGG[p.team]].f*1.4);
     },
     score:p => 640,
     act:p => {
@@ -2663,7 +2867,7 @@ const PORTED = [
   { name:'tackle', tier:TIER.PLAYER, ported:true,
     coach:T => T.press*60,
     can:p => {
-      if(!onPitch(p) || p.role==='K') return false;
+      if(!onPitch(p) || (p.role==='K' && !loneKeeper(p))) return false;   // the last man may tackle
       const o=ball.owner;
       if(!o || o.team===p.team) return false;
       if(ball.fetch && ball.fetch.by===o) return false;      // nor a man carrying it to a mark
@@ -2674,7 +2878,10 @@ const PORTED = [
     },
     score:p => {
       const o=ball.owner;
-      let sc = 44 * (0.6+0.8*T(p.team).press) * AGG_PRESETS[teamAGG[p.team]].t;
+      // 44 -> 26. With the coach term that was 2.6% a frame for EVERY defender inside 26: an attempt
+      // every 0.6s per man, 55 a match once carriers held the ball long enough to be tackled, and the
+      // commonest way a possession ended. 26 is an attempt about once a second of contact.
+      let sc = 26 * (0.6+0.8*T(p.team).press) * AGG_PRESETS[teamAGG[p.team]].t;
       sc *= (0.55+0.45*p.stamina);                          // fresh tacklers bite harder
       sc *= (1.35-0.5*(o?o.stamina:1));                     // gassed carriers are easier to rob
       if(momentumOn && clockSec<boostUntil[p.team]) sc *= 1.3;
@@ -2831,7 +3038,7 @@ const PORTED = [
 
   { name:'gk-hopeful', tier:TIER.PLAYER, ported:true,
     coach:T => 0,
-    can:p => p.role==='K' && ball.owner===p,
+    can:p => p.role==='K' && ball.owner===p && !playsOutfield(p),
     score:p => 100,
     act:p => { kick(CX,CY,9); return true; } },
 
@@ -2857,7 +3064,15 @@ const PORTED = [
     // fourteen frames by arithmetic and five in practice once every other release is counted.
     // At 74 it is 2.6%, and he keeps it for about forty frames — two thirds of a second of
     // actually having the ball, with room for a touch, a look, and a decision.
-    score:p => 74,
+    // ── 74 -> A RATE THAT READS THE SITUATION ─────────────────────────────────
+    // Measured on twelve seeds at 74: the mean hold was 0.37s, 119 holds a match, and the ball
+    // was at somebody's feet 21% of the time — pinball. A flat rate cannot be right in both
+    // cases that matter: low enough to let a man in space carry, it is too low to get the ball
+    // off a man being closed down.
+    //
+    // So it is 16 in space (the coach makes that 0.9% a frame for a Balanced side — he carries
+    // for a couple of seconds and then looks up) rising to 96 with a man on him.
+    score:p => 16 + 80*pressureOn(p),
     act:p => {
       const best=bestPass(p);
       if(!best) return false;
@@ -2897,7 +3112,7 @@ const PORTED = [
       if(ahead < 2) return false;                     // the way forward is open enough
       return !!backPass(p);
     },
-    score:p => 240,
+    score:p => 80,   // was 240: fired within ~5 frames of any opponent arriving; see pass
     act:p => {
       const b=backPass(p);
       if(!b) return false;
@@ -2942,22 +3157,46 @@ const PORTED = [
   // which is the first thing this port has removed rather than moved.
 
 
+  // ── HOOF IT ───────────────────────────────────────────────────────────────
+  // What the reflex clearance became. Available only in a genuine crowd (two opponents inside
+  // 36), and RARE: 14 against the 2800 no-op is half a percent a frame, so a man crowded in
+  // midfield almost always gets a touch, a shield or a pass away first. It climbs where a
+  // clearance is actually football — deep in his own territory, and with no pass on.
+  { name:'hoof it', tier:TIER.PLAYER, ported:true,
+    coach:T => T.direct*25 + (T.bunker>0.5?45:0),      // Route One and the bus hoof more readily
+    can:p => {
+      if(ball.owner!==p || p.role==='K' || !onPitch(p) || targets[p.team]===null) return false;
+      if(holdingPlay()) return false;
+      let wolves=0;
+      players.forEach(q=>{ if(q.team!==p.team&&onPitch(q)&&q.role!=="K"&&dist(q,p)<36) wolves++; });
+      return wolves>=2;
+    },
+    // 14/+70/+50 measured 12 a match, 8 of them nowhere near his own goal: under the tempo cap
+    // what matters is a weight's SHARE of the decision, and with no pass on the +50 made the hoof a
+    // third of it. Out of his own territory it is now a last resort among last resorts.
+    // (then 4/+40/+8 measured 8.7, two thirds of them deep: still a habit. 3/+12/+6 is ~6% of a
+    // crowded decision in his own third and ~2% anywhere else.)
+    score:p => 3 + (dist(p,goalCenter(p.team))<240 ? 12 : 0) + (bestPass(p) ? 0 : 6),
+    act:p => { if(!hoofClear(p)) return false; TEL.hoofs=(TEL.hoofs||0)+1; return true; } },
+
   { name:'shot', tier:TIER.PLAYER, ported:true,
     coach:T => T.direct*70,
     can:p => {
-      if(ball.owner!==p || p.role==='K' || targets[p.team]===null) return false;
+      if(ball.owner!==p || !playsOutfield(p) || targets[p.team]===null) return false;   // a lone keeper off his patch may shoot
       const tgt=goalCenter(targets[p.team]);
       const dGoal=dist(p,tgt);
       if(dGoal>=230) return false;
-      const RK=p.rating||0.5;
-      return shotLaneClear(p,tgt) && RNG() < 0.016*(0.4+1.2*RK);
+      // NO DICE HERE. This rolled RNG()<0.016 to be AVAILABLE and then had to win the lottery
+      // as well — a rate charged twice, ~0.25% a frame, which against half-second possessions
+      // was 0.8 open-play shots a match and one goal in eighty-one. A prerequisite is a
+      // prerequisite; how much he WANTS it is the score.
+      return shotLaneClear(p,tgt);
     },
-    score:p => 360,
+    score:p => shotKeenness(p, dist(p,goalCenter(targets[p.team])), 230, 6, 800),
     act:p => {
       const tgt=goalCenter(targets[p.team]), e=EDGES[GOAL_EDGE[targets[p.team]]];
       const hw2=e.len*GOAL_HALF, RK=p.rating||0.5, dGoal=dist(p,tgt);
-      const sc=(0.6+0.8*RK)*(0.75+dGoal*0.0035);
-      const off=(RNG()*2-1)*hw2*sc;
+      const off=shotAim(p, targets[p.team], 1);
       kick(tgt.x+e.ux*off, tgt.y+e.uy*off, 11.2, true);
       return true;
     } },
@@ -2971,29 +3210,27 @@ const PORTED = [
   // by his rating and by the frame length, so a better player shoots more often rather than more
   // accurately, and the whole thing is frame-rate independent.
   //
-  // That does not translate to a score, and pretending it did would change the game. So the rate
-  // stays in can(): the action becomes AVAILABLE at a rate rather than under a condition, which
-  // is a third shape alongside prerequisite and preference. Worth naming — it is the first thing
-  // in this port that the can/score/act shape did not already fit.
+  // SUPERSEDED. The rate was kept in can() on that reasoning AND a score of 360 was added on top,
+  // so a shot had to pass a 1.6% dice roll and then win a ~13% lottery: 0.8 open-play shots a
+  // match, one goal in eighty-one. The rate is the score now (shotKeenness), which is what every
+  // other action does, and rating still makes a better player shoot more readily.
   { name:'shot-power', tier:TIER.PLAYER, ported:true,
     coach:T => T.direct*90,
     can:p => {
-      if(ball.owner!==p || p.role==='K' || targets[p.team]===null) return false;
+      if(ball.owner!==p || !playsOutfield(p) || targets[p.team]===null) return false;   // a lone keeper off his patch may shoot
       if(p.burst<=0.7) return false;                  // the super shot needs legs
       const tgt=goalCenter(targets[p.team]);
       const dGoal=dist(p,tgt);
       if(dGoal>=260) return false;
-      const RK=p.rating||0.5;
-      return shotLaneClear(p,tgt) && RNG() < 0.016*(0.4+1.2*RK)*(1/60)*60*0.5;
+      return shotLaneClear(p,tgt);              // the rate is the score — see `shot`
     },
-    score:p => 370,
+    score:p => shotKeenness(p, dist(p,goalCenter(targets[p.team])), 260, 5, 250),   // the long-range specialist
     act:p => {
       const tgt=goalCenter(targets[p.team]), e=EDGES[GOAL_EDGE[targets[p.team]]];
       const hw2=e.len*GOAL_HALF, RK=p.rating||0.5, dGoal=dist(p,tgt);
-      const scL=(0.6+0.8*RK)*(0.75+dGoal*0.0035);
-      const offL=(RNG()*2-1)*hw2*scL;
+      const offL=shotAim(p, targets[p.team], 0.75);      // a flame shot is struck truer
       p.burst-=0.6; GKSTAT.superShots=(GKSTAT.superShots||0)+1;
-      kick(tgt.x+e.ux*offL*0.75, tgt.y+e.uy*offL*0.75, 13.2, true);
+      kick(tgt.x+e.ux*offL, tgt.y+e.uy*offL, 13.2, true);
       ball.flameShot=true;
       // The announcer for this exact moment existed the whole time — superSay, the eighth dead
       // feature, defined beside the flame palette and called by nothing. The keeper scores the
@@ -3100,7 +3337,7 @@ const ACTIONS = [
       const dx=d.x-p.x, dy=d.y-p.y, dl=Math.hypot(dx,dy)||1;
       return (ax/al)*(dx/dl) + (ay/al)*(dy/dl) > 0.45;
     },
-    score:p => 250,
+    score:p => 70,   // was 250: fired within ~5 frames of any opponent arriving; see pass
     act:p => {
       const d=nearestOpp(p, 30); if(!d) return false;
       const g=attackGoal(p);
@@ -3128,7 +3365,7 @@ const ACTIONS = [
       if(p.footAt && clockSec < p.footAt) return false;
       return !!nearestOpp(p, 32);
     },
-    score:p => 330,
+    score:p => 90,   // was 330: fired within ~5 frames of any opponent arriving; see pass
     act:p => {
       const d=nearestOpp(p, 32); if(!d) return false;
       // the lateral away from him: perpendicular to the line between us, pointing off his side
@@ -3173,7 +3410,7 @@ const ACTIONS = [
         if(dist(o,{x:tx,y:ty})<46) others++; });   // 70 was empty-pitch space; 46 is a gap
       return others===0;
     },
-    score:p => 300,
+    score:p => 80,   // was 300: fired within ~5 frames of any opponent arriving; see pass
     act:p => {
       const d=nearestOpp(p, 34); if(!d) return false;
       const g=attackGoal(p);
@@ -3199,7 +3436,7 @@ const ACTIONS = [
         if(dist(o,p) < 34) n2++; });
       return n2===1;                                   // one man is a duel; two is a trap
     },
-    score:p => 300,
+    score:p => 80,   // was 300: fired within ~5 frames of any opponent arriving; see pass
     act:p => {
       let d=null;
       players.forEach(o=>{ if(o.team===p.team||!onPitch(o)||allied(p.team,o.team)) return;
@@ -3242,7 +3479,7 @@ const ACTIONS = [
         } });
       return !openMate;
     },
-    score:p => 430,
+    score:p => 200,   // was 430: 13% a frame of standing still
     act:p => {
       // back to the nearest opponent, ball on the far side of his body
       let near=null,nd=1e9;
@@ -3450,7 +3687,9 @@ function runAction(p){
     // shot. A Route One side shoots from range two and a half times as readily as a Tiki-Taka
     // one, which is what those words are supposed to mean.
     const cMul = Math.max(0.12, 1 + cRaw/45);
-    const w = Math.max(1, x.A.score(p) * cMul);
+    // floor 0.01, not 1: at 1 no action could be rarer than 0.036% a frame, which for something
+    // available to every defender near the ball all match (the deliberate foul) is not rare.
+    const w = Math.max(0.01, x.A.score(p) * cMul);
     total += w;
     return w;
   });
@@ -3466,7 +3705,25 @@ function runAction(p){
   //
   // The growth rate is where tactics reach it: a side that wants tempo ripens fast, one that
   // wants to settle ripens slowly. Same action, different urgency, no second code path.
-  if(topTier===TIER.PLAYER) total += PLAY_ON_WEIGHT;
+  let noop = PLAY_ON_WEIGHT;
+  // ── A MAN ON THE BALL DECIDES AT A HUMAN TEMPO ────────────────────────────
+  // The weights say WHICH thing a carrier does. They were also setting HOW SOON, by summing: a
+  // pressed carrier has a pass, a back-pass, four footwork moves and a hoof all available at
+  // once, ~600 against the 2800 no-op, so something fired within six frames whatever each one
+  // weighed. Median possession measured 0.13s — and turning any one weight down only handed its
+  // share to the others. Seven dials, none of which was the dial.
+  //
+  // This is the dial: the most a carrier may decide per frame. 1.2% in space (a couple of
+  // seconds on the ball), rising to 4.2% with a man on him or the goal in front of him (a
+  // decision in under half a second), and a side with tempo gets there sooner. Below the cap
+  // nothing changes — a man in space with one quiet option is still governed by its weight.
+  if(topTier===TIER.PLAYER && ball.owner===p && p.role!=='K' && total>0){
+    const tg=targets[p.team];
+    const near = (tg===null||tg===undefined) ? 0 : Math.max(0, 1-dist(p,goalCenter(tg))/180);
+    const cap = (0.012 + 0.030*Math.max(pressureOn(p), near)) * (0.7+0.6*T9.tempo);
+    noop = Math.max(noop, total*(1-cap)/cap);
+  }
+  if(topTier===TIER.PLAYER) total += noop;
   else if(topTier===TIER.SCRIPT) total += SETUP_WEIGHT;
 
   let r = RNG()*total;
@@ -4204,12 +4461,38 @@ const INSTRUCTIONS = [
   // Two behaviours in one branch, and the second is the interesting one: a keeper who leaves his
   // line is making a decision, not holding a position.
   { name:'holding the line', tier:TIER.PLAYER, base:400,
+    // THE LAST MAN does not hold a line while the ball is there to be won or is at his own feet;
+    // the moment an opponent has it he is a goalkeeper again. See loneKeeper().
     applies:p => p.role==='K' && !p.out && !p.sentOff
+              && !(loneKeeper(p) && !holdingPlay() && (ball.owner===p || (!ball.owner && nearestToBall(p))))
               && !(dist(p,ball)<55 && (!ball.owner || ball.owner.team!==p.team)),
     score:p => 400,
     act:p => {
       const e=EDGES[GOAL_EDGE[p.team]];
-      let along=(ball.x-e.mx)*e.ux+(ball.y-e.my)*e.uy;
+      // ── HE STANDS ON THE LINE FROM THE BALL TO THE MIDDLE OF HIS GOAL ─────────
+      // This copied the ball's SIDEWAYS OFFSET onto the goal line: a ball 200 out and 60 to one
+      // side put him 60 to that side — on the post, with the whole mouth open behind him. The
+      // free-kick trace caught him at |along| 50-69 of a 71 half-mouth on thirteen shots in
+      // sixteen. A keeper narrows the ANGLE: he stands on the line between the ball and the
+      // centre of his goal, R out from it, so both posts are the same stretch away whatever the
+      // angle. Near the byline that line runs along the goal and he ends up at the near post,
+      // which is also right. Depth never drops below 10 so he is not standing on the chalk.
+      const bx=ball.x-e.mx, by=ball.y-e.my, bl=Math.hypot(bx,by)||1, R=26;
+      let along=(bx*e.ux+by*e.uy)/bl*R;
+      const depth=Math.max(10, (bx*e.nx+by*e.ny)/bl*R);
+      let gain=0.045;
+      // ── AND HE READS A SHOT ─────────────────────────────────────────────────
+      // Angle play is where to stand BEFORE the strike. Once it is struck — and once he has had
+      // his reaction time — the spot that matters is where the ball will cross his depth, and he
+      // goes there with quick feet rather than a third of a second of composure. The old offset
+      // rule did this by accident (the ball's offset converges on the crossing point as it
+      // arrives); the angle rule does not, so it is stated.
+      const vn=ball.vx*e.nx+ball.vy*e.ny;
+      if(ball.isShot && !ball.owner && vn<-0.5 && !(p.reactAt && clockSec<p.reactAt)){
+        const dn=(ball.x-e.p1.x)*e.nx+(ball.y-e.p1.y)*e.ny;
+        const t=(dn-depth)/(-vn);
+        if(t>0 && t<90){ along=(ball.x+ball.vx*t-e.mx)*e.ux+(ball.y+ball.vy*t-e.my)*e.uy; gain=0.3; }
+      }
       const lim=e.len*GOAL_HALF*0.9; along=Math.max(-lim,Math.min(lim,along));
       // HE READS THE MOVE, NOT THE WIGGLE. This retargeted from the ball every frame at full
       // gain, so a dribbler working the face made the keeper run every swing of the projection
@@ -4219,8 +4502,8 @@ const INSTRUCTIONS = [
       // and he approaches it at a speed proportional to how wrong he is, arriving soft and
       // standing set. On a real shot 'coming for it' takes over inside 55 with full reactions.
       if(p.lineAlong===undefined) p.lineAlong=along;
-      p.lineAlong += (along - p.lineAlong) * 0.045;
-      const tx=e.mx+e.ux*p.lineAlong+e.nx*20, ty=e.my+e.uy*p.lineAlong+e.ny*20;
+      p.lineAlong += (along - p.lineAlong) * gain;
+      const tx=e.mx+e.ux*p.lineAlong+e.nx*depth, ty=e.my+e.uy*p.lineAlong+e.ny*depth;
       steer(p, tx, ty, Math.min(1.9, 0.4 + Math.hypot(tx-p.x, ty-p.y)*0.12));
       return true;
     } },
@@ -5012,7 +5295,15 @@ function think(dt){
 }
 
 // ---------- Physics ----------
+// ONE HEARTBEAT A FRAME, WHATEVER physicsStep DOES. telFrame() sat at the bottom of the physics
+// function, below a dozen early returns — a scored ball in the net, a claim hold, a clearance in
+// flight — so exactly the dead-ball and clearance frames went uncounted headless, while
+// index.html called telFrame() a second time itself and double-counted the rest.
 function physics(dt){
+  physicsStep(dt);
+  telFrame();
+}
+function physicsStep(dt){
   const S=dt*60;
   // WHERE IT WAS. Any test that asks "did it cross" needs the previous position, and nothing was
   // keeping one — which is why the woodwork could only ever ask "is it inside a band".
@@ -5036,6 +5327,7 @@ function physics(dt){
   stepJumps(S);          // heads move before anybody reaches with one
   stepBench();           // and the disgraced watch from the side
   stepRestartWatchdog(); // and no restart may hang the match
+  stepPhantomCalls(dt);  // Mayhem only: fouls that never happened
   stadiumWall();         // and it cannot leave the ground at all
   stepGoalRestart();     // after a goal: keeper fetches from the net, then the kick-off arms
   ballOutOfPlayCheck();  // outside is out of play, however it got there
@@ -5202,7 +5494,7 @@ function physics(dt){
       const og=goalCenter(o.team);
       const kx=o.x-og.x, ky=o.y-og.y, kd=Math.hypot(kx,ky);
       const AREA=112;
-      if(kd>AREA){
+      if(kd>AREA && !loneKeeper(o)){
         // ── HE CANNOT HANDLE IT OUT HERE, SO HE PUTS IT DOWN ──────────────
         // This hauled the keeper back to the area edge and dragged the ball 70% of the way with
         // him — a jump of nearly 300 units for a keeper who had wandered, eight times a match.
@@ -5250,11 +5542,14 @@ function physics(dt){
       // take a touch — long in space, short under pressure
       let pr=1e9; players.forEach(q=>{ if(q.team!==o.team&&!q.out){const d=dist(q,o); if(d<pr)pr=d;}});
       const long=pr>70;
-      ball.vx+=hx*(long?3.6:2.2); ball.vy+=hy*(long?3.6:2.2);
+      ball.vx+=hx*(long?3.1:2.2); ball.vy+=hy*(long?3.1:2.2);   // long touch 3.6 -> 3.1: see the stray rule below
       ball.touchT=long?0.75:0.45;
     }
     // heavy touch: the ball got away — it's anyone's now
-    if(dist(ball,o)>30){
+    // 30 -> 36. A long touch at 3.6 ran the ball ~28 clear of a man going straight, so any change
+    // of direction took it past 30: 18-24 strays a match, 61% of them straight to an opponent and 7%
+    // recovered by the dribbler. The heavy touch stays a risk; it stops being the usual outcome.
+    if(dist(ball,o)>36){
       ball.strayer=o; ball.strayF=54;
       ball.owner=null; ball.noClaim=o; ball.noClaimF=8;
     }
@@ -5350,7 +5645,7 @@ function physics(dt){
     // standing by the corner flag collects a ball that is out, and play carries on illegally.
     if(ball.oob && !(ball.fetch && ball.fetch.by===p)) return;
 
-    if(p.role==="K" && !mayGather(p)) return;   // he cannot gather it out here
+    if(p.role==="K" && !mayGather(p) && !loneKeeper(p)) return;   // he cannot gather it out here — unless he is the last man, playing it with his feet
 
 
 
@@ -5418,6 +5713,16 @@ function physics(dt){
       if(ball.fetch && ball.fetch.by && ball.fetch.by!==best) return;
       if(ball.dribbleBy && ball.dribbleBy!==best){ ball.dribbleBy=null; ball.dribbleF=0; }   // somebody else got it
     ball.owner=best; ball.lastTouch=best.team; ball.x=best.x; ball.y=best.y; ball.isShot=false;
+      // ── THE FIRST TOUCH ─────────────────────────────────────────────────────
+      // The ball kept ALL of its pace through a claim. A pass arrives at 5-9 a frame, the
+      // dribble spring pulls at 0.08, so the ball ran 30 clear of the man who had just "received"
+      // it and the stray rule took it off him: the commonest single way a possession ended
+      // inside five frames, and two thirds of those went to an opponent. Receiving a pass IS
+      // taking the pace off it. A good player kills it (12% survives); a poor one lets a quarter
+      // of it run, which on a driven ball is still a heavy touch somebody can pounce on — the
+      // mechanic is kept, as a function of who is receiving and how hard it was hit.
+      { const ctl = best.role==='K' ? 0 : 0.12 + 0.30*(1-(best.rating||0.5));
+        ball.vx*=ctl; ball.vy*=ctl; }
       // ── AND THE FLAME GOES OUT WHEN HE CATCHES IT ─────────────────────────
       // `flameShot` was never cleared on the claim, so the keeper "extinguished" the same shot
       // frame after frame: 1,128 attempts in one match, 282 of them getting past a 25% gate. It
@@ -5441,33 +5746,13 @@ function physics(dt){
         { GKSTAT.rapid=(GKSTAT.rapid||0)+1;   // scramble signature: fast AND same spot
         TEL.rapid++; if(best.role==="K") TEL.gkRapid++; }
       GKSTAT.lastClaimAt=clockSec; GKSTAT.lastClaimX=ball.x; GKSTAT.lastClaimY=ball.y;
-      if((typeof __NOCLEAR==="undefined")&&best.role!=="K"&&nowMs()>=restartHold){
-        // CONFIDENT CLEAR: two+ wolves at the door — boot it out of the scramble first-time
-        let wolves=0,wx=0,wy=0;
-        players.forEach(q=>{ if(q.team!==best.team&&!q.out&&!q.sentOff&&q.role!=="K"&&dist(q,best)<36){ wolves++; wx+=q.x; wy+=q.y; }});
-        if(wolves>=2){
-          GKSTAT.clears=(GKSTAT.clears||0)+1;
-          let cx9=best.x-(wx/wolves-best.x), cy9=best.y-(wy/wolves-best.y);      // away from the pack
-          cx9=best.x+(cx9-best.x)*0.7+(CX-best.x)*0.3*0.4;                       // bent toward safety, not glory
-          cy9=best.y+(cy9-best.y)*0.7+(CY-best.y)*0.3*0.4;
-          const dl9=Math.hypot(cx9-best.x,cy9-best.y)||1;
-          let kx9=best.x+(cx9-best.x)/dl9*260, ky9=best.y+(cy9-best.y)/dl9*260;
-          for(const e9 of EDGES){                   // never ask the clearance to leave the pitch
-            const de9=(kx9-e9.p1.x)*e9.nx+(ky9-e9.p1.y)*e9.ny;
-            if(de9<30){ kx9+=e9.nx*(30-de9); ky9+=e9.ny*(30-de9); }
-          }
-          for(const e9 of EDGES){                     // a clear NEVER books its own throw-in
-            const de9=(kx9-e9.p1.x)*e9.nx+(ky9-e9.p1.y)*e9.ny;
-            if(de9<40){ kx9+=e9.nx*(40-de9); ky9+=e9.ny*(40-de9); }
-          }
-          kick(kx9, ky9, 7.6, false);
-          ball.clearT=clockSec+0.4;                            // the escape guarantee: no claims, no headers, just OUT
-          if(RNG_COS()<0.18) sayLogged(pick([
-            `${best.name} wants none of that scramble — hoofed clear!`,
-            `No dwelling from ${best.name}. First time, out of the furnace.`,
-            `${best.name} clears ${PRN(best).his} lines. Tidy is for open field.`]),false);
-        }
-      }
+      // ── THE REFLEX CLEARANCE IS GONE; `hoof it` IS AN ACTION NOW ──────────────
+      // This block booted the ball 260 units the instant ANYBODY claimed it with two opponents
+      // inside 36. On a hex with ten opponents that is most claims: measured on twelve seeds the
+      // ball spent ~40% of live play as a clearance or header aimed at nobody and 23% at
+      // somebody's feet. It also ran in physics(), so no weight, coach or report could see it.
+      // John: hoofing should be rare. It is now a scored choice the carrier makes — see `hoof it`
+      // in the action list — and a man who wins the ball in a crowd gets to try to play.
       ball.touchT=0.3; ball.strayer=null; ball.strayF=0;
       ball.lastKicker=best;   // person-level attribution follows possession
       if(strayer && best.team!==strayer.team){
@@ -5753,7 +6038,7 @@ function physics(dt){
   // jump counters, and the keep-the-penalty-line-clear rule were all downstream of one missing
   // call. Third sighting this week of a subsystem that looked alive because its wiring read
   // well.
-  telFrame();
+  // (it runs from physics(), the wrapper, so no early return above can skip it)
 }
 
 // ---------- Goal celebration ----------
@@ -5770,7 +6055,12 @@ const gkHolding=()=>ball.owner&&ball.owner===gkHolder&&clockSec<gkHoldUntil;
 let camFocusP=null, camFocusUntil=0, walkOff=null, walkPending=null;
 let cornerPending=null, cornerSpot=null;   // the corner's own pin, see physics()
 let freeKick=null;                         // and the free kick's, see below
-function addStoppage(sec){ stoppageLen=Math.min(Math.min(65,matchLen*0.30), stoppageLen+sec); }
+// THE FOURTH OFFICIAL, RECONNECTED. The README promises stoppage time that "grows with fouls, cards,
+// and penalties"; this had ONE caller, worth 0.8s. Fouls and cards added nothing — that went with the
+// cascade. Now: a free kick 1.5s, a booking 3s, a sending-off 7s. At default settings that is ten or
+// fifteen seconds on a three-minute match. Under Mayhem it is what lets a card-fest run to its
+// conclusion, so the ceiling is higher too: 45% of the match, 100s at most (was 30% / 65s).
+function addStoppage(sec){ stoppageLen=Math.min(Math.min(100,matchLen*0.45), stoppageLen+sec); }
 const YELLOW_OFFENSES=[
   "cynically confiscated {V}'s shirt as a souvenir",
   "arrived at the tackle three days late",
@@ -5937,7 +6227,7 @@ function telZero(){ return {
   posts:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0, jobFrames:{},
   jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0,
   backPass:0, actFrames:{}, holds:0, holdFrames:0, holdLongest:0, spells:0,
-  spellFrames:0, spellLongest:0, pOwned:0, pFlight:0, pDead:0, pContested:0,
+  spellFrames:0, spellLongest:0, pOwned:0, pFlight:0, pDead:0, pContested:0, pHoofed:0, hoofs:0,
   headers:0, shields:0, keeperHeld:0, carryTimeout:0, ballRecovered:0, wwNear:9999,
   wwBar:9999, unattributed:0, unattMax:0, portFrame:-1, stall:0, stalls:0,
   worstStall:0, shots:0, blocked:0
@@ -6126,9 +6416,32 @@ function telFrame(){
   //   contested  slow, unowned, nobody has picked it up. THIS is the loose-ball problem.
   //
   // 8 / 32 / 4 / 56 on a typical match. The headline was 85%; the number worth working on is 56.
-  if(ball.owner) TEL.pOwned++;
-  else if(Math.hypot(ball.vx,ball.vy)>1.2) TEL.pFlight++;
-  else if(pendingRestart||freeKick||throwPending||cornerPending) TEL.pDead++;
+  //
+  // ── AND THE SPLIT ITSELF WAS WRONG IN THREE PLACES ────────────────────────
+  // Audited frame by frame against an independent classifier, twelve seeds:
+  //   1. DEAD was tested LAST, and only for four flags. A goal's aftermath — the keeper walking
+  //      to the net, the kick to the centre, the settle — has no pendingRestart, so 22% of all
+  //      frames were a dead ball counted as `contested`. A taker standing over a free kick OWNS
+  //      the ball, so that dead time counted as `owned`.
+  //   2. FLIGHT was "unowned and moving", which is a header dropping into a crowd, a tackle's
+  //      ricochet and a heavy touch rolling away just as much as it is a pass. Flight is now a
+  //      ball somebody STRUCK ON PURPOSE in the last three seconds (kick() stamps kickedAt) or
+  //      a shot. Everything else unowned in live play is contested, moving or not.
+  //   3. Dead time is not football, so the three live states are what a percentage should be
+  //      taken over — lab.js does that.
+  const deadNow = !!(pendingRestart||freeKick||throwPending||cornerPending||goalRestart
+                     ||ball.fetch||ball.oob);
+  //   4. AND A STRUCK BALL IS NOT NECESSARILY A PASS. The cross-tab found 27% of frames where the
+  //      ball had been kicked on purpose but AT NOBODY: the automatic clearance when a man claims
+  //      it in a crowd, and headers. Calling that flight hides it and calling it loose blames the
+  //      chase for it, so it has its own bucket — it is the game's hoofing, and it is tunable.
+  const moving = Math.hypot(ball.vx,ball.vy)>1.2 || (ball.z||0)>4;
+  const struck = moving && clockSec-(ball.kickedAt||-9)<3;
+  const aimless = (ball.clearT && clockSec-ball.clearT<2.6) || clockSec-(ball.headedAt||-9)<3;
+  if(deadNow) TEL.pDead++;
+  else if(ball.owner) TEL.pOwned++;
+  else if(ball.isShot || (struck && !aimless)) TEL.pFlight++;
+  else if(struck || (moving && aimless)) TEL.pHoofed=(TEL.pHoofed||0)+1;
   else TEL.pContested++;
 
   TEL.frames++;
@@ -6197,12 +6510,16 @@ function buildMatchReport(){
   // being incremented every frame and read by nothing — the instrument for the problem existed
   // and was silent, which after chatterErr should surprise nobody. Same split as lab.js prints,
   // so a watched match and a headless one argue in the same units.
-  md+=`\n### Ball state (share of frames)\n\n| state | this match | lab target |\n|---|---|---|\n`;
-  const pTot=(TEL.pOwned+TEL.pFlight+TEL.pDead+TEL.pContested)||1;
-  md+=`| owned | ${Math.round(100*TEL.pOwned/pTot)}% | |\n`;
-  md+=`| in flight | ${Math.round(100*TEL.pFlight/pTot)}% | ~20% |\n`;
-  md+=`| dead (restart pending) | ${Math.round(100*TEL.pDead/pTot)}% | |\n`;
-  md+=`| **contested / loose** | ${Math.round(100*TEL.pContested/pTot)}% | **~35%** |\n`;
+  // Same units as lab.js: the live states are shares of LIVE play, dead time is a share of
+  // everything. The old "~35% loose" target compared against a figure that counted passes,
+  // shots and dead balls, and is retired with it.
+  md+=`\n### Ball state (share of live play)\n\n| state | this match | target |\n|---|---|---|\n`;
+  const pLive=(TEL.pOwned+TEL.pFlight+(TEL.pHoofed||0)+TEL.pContested)||1;
+  md+=`| at somebody's feet | ${Math.round(100*TEL.pOwned/pLive)}% | ~55% |\n`;
+  md+=`| pass or shot in flight | ${Math.round(100*TEL.pFlight/pLive)}% | ~30% |\n`;
+  md+=`| hoofed or headed at nobody | ${Math.round(100*(TEL.pHoofed||0)/pLive)}% | ~10% |\n`;
+  md+=`| **nobody's** | ${Math.round(100*TEL.pContested/pLive)}% | **~5%** |\n`;
+  md+=`| dead ball (share of all frames) | ${Math.round(100*TEL.pDead/(pLive+TEL.pDead))}% | |\n`;
 
   // ── INSTRUCTIONS ──────────────────────────────────────────────────────────
   // Whether the list is being used, and whether players stick with what they are told.
@@ -6937,7 +7254,7 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
   const cands=players.filter(q=>q.team!==toucher&&q.role!=="K"&&!q.out&&!q.sentOff)
     .sort((a,b)=>dist(a,spot0)-dist(b,spot0));
   const thr=cands[0];
-  if(!thr){ telPort('throw-in: nobody to take it'); ball.x=CX; ball.y=CY; return; }
+  if(!thr){ dropBallLive('throw-in: nobody to take it'); return; }
   // ── THE BALL STAYS WHERE IT WENT OUT ──────────────────────────────────────
   // It used to be lifted to the throw spot the instant the ball crossed the line — from wherever
   // it had run to, which is fifteen jumps of up to three hundred units a match and the single
@@ -6993,7 +7310,7 @@ function stageThrowIn(toucher,e,ex,ey){ GKSTAT.throwStage=(GKSTAT.throwStage||0)
 }
 function stageGoalKick(t){
   const gk=players.find(q=>q.team===t&&q.role==="K"&&!q.out);
-  if(!gk){ telPort('goal kick: no keeper'); ball.x=CX; ball.y=CY; return; }
+  if(!gk){ dropBallLive('goal kick: no keeper'); return; }
   ball.owner=null; ball.lastTouch=t; ball.lastKicker=gk;
   // THE GOAL KICK. Untagged until now, which is a large part of the fourteen teleports the
   // report could see but not name: the ball is lifted from wherever it went out and placed on
@@ -7023,7 +7340,7 @@ function stageCorner(ownerT,e,ex,ey){
   restartHold=Math.min(Math.max(restartHold,nowMs()+2400), nowMs()+3200);   // staging owns its hold
   const alive=[0,1,2].filter(x=>x!==ownerT&&!out[x]);
   const att=alive.find(x=>targets[x]===ownerT)??alive[0];
-  if(att===undefined){ telPort('corner: nobody to take it'); ball.x=CX; ball.y=CY; return; }
+  if(att===undefined){ dropBallLive('corner: nobody to take it'); return; }
   const vtx=dist({x:e.p1.x,y:e.p1.y},{x:ex,y:ey})<dist({x:e.p2.x,y:e.p2.y},{x:ex,y:ey})?e.p1:e.p2;
   const taker=players.filter(q=>q.team===att&&q.role!=="K"&&!q.out&&!q.sentOff)
     .sort((a,b)=>dist(a,vtx)-dist(b,vtx))[0];
