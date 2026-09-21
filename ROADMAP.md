@@ -1,5 +1,105 @@
 # Actions and instructions — status
 
+## Mechanics review, 2026-09-19 — supersedes the numbers below
+
+**"Loose 85%" was a measurement, not a game.** `lab.js` counted every frame without an owner —
+passes, shots, and dead balls on their mark. The engine's four-way split was wrong too: dead
+time was tested last (so a goal's aftermath read as `contested`, a free-kick taker as `owned`),
+"flight" was anything moving, and `telFrame()` sat below a dozen early returns in `physics()`
+while `index.html` called it a second time. Fixed; the sheet now reports shares of LIVE play and
+agrees with an independent frame-by-frame audit to a point or two.
+
+```
+live play, 12 seeds x 3 min      before     after     football
+at somebody's feet                 23%        51%      ~55-65%
+pass or shot in flight             29%        30%      ~25-30%
+hoofed / headed at nobody          41%        16%      ~5-10%
+nobody's                            7%         3%      ~5-15%
+
+possession, median                0.13s      0.38s
+passes completed                   74%        74%      (61 a match)
+open-play shots a match            0.8       12.0      conversion 29%
+goals from open-play shots          1%        48%
+goals from direct free kicks       47%        16%
+goals a minute                     2.25       2.4      unchanged on purpose
+degenerate matches                3 in 8    0 in 150
+```
+
+**Three stalls, all real, all in the browser too:**
+
+- **The "degenerate match" was the net.** A scored ball rolls up to 34 deep; the keeper was
+  clamped at 12 and collects within 8. Anything resting deeper than 20 left him "retrieving" it
+  until full time. The fetcher may now go as deep as the ball can.
+- **A direct free kick could not be saved.** `restartHold` blocks every claim, the keeper's
+  included, for 1.2–3.2s after the award, and the kick ripened inside it. `endRestart()` now
+  releases the hold.
+- **Full time during a goal kick deadlocked overtime.** `kickoff()` cleared every restart fact
+  except `ball.fetch`, so the keeper kept sole claim to the ball and walked off with it.
+
+**What changed in the football:**
+
+- **`hoof it` is an action, and rare** (4.6 a match, was the fate of ~40% of live play). It was a
+  reflex inside the claim: any man winning the ball with two opponents inside 36 booted it 260.
+- **The carrier decides at a tempo.** Weights chose WHICH action and, by summing, HOW SOON — a
+  pressed man had ~600 of weight against the 2800 no-op and did something within six frames.
+  One cap in `runAction` (1.2% a frame in space, 4.2% pressed or in front of goal, scaled by
+  `T.tempo`) is the dial; the weights are shares again.
+- **A first touch.** A claimed ball kept all its pace and ran 30 clear of the receiver.
+- **Shots:** the dice roll in `can()` is gone (it was charged twice, as ACTIONS.md said);
+  keenness is quadratic in closeness; the shooter aims away from the keeper, and a better
+  shooter is now MORE accurate (the spread was multiplied by rating).
+- **The keeper stands on the ball-to-goal-centre line** instead of copying the ball's sideways
+  offset onto his line (which parked him on a post for any angled shot), and reads a struck shot.
+- **Rates re-derived for possessions that last:** tackle 44→26, `INTENT_W` 3/45/260/900 →
+  1/2/12/900, incidental `f` .55/1/1.8/2.8 → .3/.55/1.5/2.8. Filthy untouched.
+
+### The two foul knobs: quiet by default, a goalie duel at the top
+
+**The Referee dial on the setup screen was connected to nothing.** It wrote `foulMult`, which the
+engine declares and never reads; the engine consults `refLevel`, which nothing set. Every browser
+match was refereed at Fair — "Off" and MAYHEM included. It now names a referee
+(Off→Play On, Balanced→Fair, Aggressive→Strict, MAYHEM→Mayhem), and `lab.js` has both knobs:
+`rules:{ agg:'Filthy', ref:'Mayhem' }`.
+
+```
+three like-minded sides, 3 min       fouls/min   sent off (of 12)   goalie duel
+Clean   / Fair                          0.8           0.0
+Firm    / Fair     <- the default       1.0           0.0              (was ~4 a minute)
+Firm    / Mayhem                        2.1           3.9
+Nasty   / Fair                          7.8           0.3
+Nasty   / Mayhem                        5.9          11.0               2 in 8
+Filthy  / Strict                       18.3           9.7
+Filthy  / Mayhem                        7.1          12.0               8 in 8
+```
+
+**What it took to reach the top cell**, none of it a weight: a side that still had outfielders
+when the other two were down to keepers had nobody left to foul, so Mayhem now **books men for
+fouls that never happened** (`phantom`, its blurb made literal) — scaled by the side's reputation
+so one knob alone is not the circus. Zeal 3.6→6. **Stoppage time was disconnected too**:
+`addStoppage()` had one caller worth 0.8s, against a README promising it grows with fouls and cards;
+free kick 1.5s, booking 3s, red 7s, ceiling 45%/100s.
+
+**And the duel had to be playable.** A throw-in owed to a side with no outfielders parked the ball
+on the centre spot still flagged out of play — untouchable for the rest of the match (same hole in
+the goal kick and the corner; `dropBallLive()`). Beyond that a keeper-only match could not be
+played at all, so a side's **last man** (`loneKeeper`) goes for a loose ball if he is nearest,
+plays it with his feet anywhere, shoots and tackles. Keepers can be booked and never sent off.
+The duel runs 5–11 goals a minute, which is the point.
+
+**Low end:** `INTENT_W` .1/.4/8/900 (the lottery's weight floor went 1→0.01 to allow it),
+incidental `f` .2/.25/1.2/2.8, shoves now obey aggression. Filthy untouched throughout.
+
+**The default test is played by default-temperament sides** — all twenty trios of the six Firm
+nations; it used to be 0-1-2 and side 1 is Argentina (Nasty). Defaults now: 52% at feet, 71% of
+goals from open-play shots, 4 fouls a 3-minute match, 2.3 goals a minute (unchanged, John's call).
+
+**Still open:** headers are most of what is left in "hoofed at nobody" (13 a match); Mayhem on
+its own is still rough on a Firm side (3.9 sent off). `sim/suite.js` and `loadcheck.js` fail on
+main for reasons of their own (a sandbox path; a null regex match). None of this has been watched
+in a browser yet.
+
+---
+
 **Measured through `lab.js`, six seeds, 3-minute matches, identities on.**
 
 ```
