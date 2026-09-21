@@ -433,10 +433,10 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
 
       <div class="frow"><label for="setRef">Referee</label>
         <select id="setRef">
-          <option value="0">Off &mdash; let them play</option>
-          <option value="1" selected>Balanced</option>
-          <option value="1.8">Aggressive</option>
-          <option value="3.5">MAYHEM</option>
+          <option value="Play On">Off &mdash; let them play</option>
+          <option value="Fair" selected>Balanced</option>
+          <option value="Strict">Aggressive</option>
+          <option value="Mayhem">MAYHEM</option>
         </select></div>
 
       <div class="frow"><label>Teams</label><div id="teamSlots"></div></div>
@@ -494,7 +494,7 @@ header #full.on{border-color:var(--hot);color:var(--hot)}
      engine.js from twenty minutes ago fails in the most confusing way available: everything works
      except the newest thing. That is what "shirtOf is not defined" was — the page had the call and
      the cached engine did not have the function. Bump this whenever engine.js changes shape. -->
-<script src="engine.js?v=265"></script>
+<script src="engine.js?v=267"></script>
 <script>
 // ── WHAT THE ENGINE ASKS FOR ────────────────────────────────────────────────
 // Seventeen hooks. Most of them are about chrome this page does not have — coach menus, team
@@ -3185,7 +3185,10 @@ function startMatch(){
   // only collecting answers.
   scoreMode  = document.getElementById('setRules').value;
   matchLen   = parseInt(document.getElementById('setLen').value, 10);
-  foulMult   = parseFloat(document.getElementById('setRef').value);
+  // THE DIAL WAS CONNECTED TO NOTHING. It wrote a number into `foulMult`, which the engine declares
+  // and never reads; the referee the engine actually consults is `refLevel`, which nothing set. Every
+  // match ever played here was refereed at Fair, whatever this said — 'Off' and MAYHEM included.
+  refLevel   = document.getElementById('setRef').value;
   momentumOn = document.getElementById('setMom').checked;
   zoneRule   = document.getElementById('setZone').checked;
   oobRule    = document.getElementById('setOob').checked;
@@ -3341,7 +3344,7 @@ function loop(now){
       retargetTimer += step;
       if (retargetTimer > 6) { retargetTimer = 0; computeTargets(); }
       think(step); physics(step); colorCommentary();
-      if (typeof telFrame === 'function') telFrame();   // telemetry for the match report
+      // telFrame() is called by physics() itself now; calling it here too counted every frame twice
 
       // ── STOPPAGE TIME AND FULL TIME ─────────────────────────────────────
       // This page had the resolveFullTime() call and neither of the two things around it: the
