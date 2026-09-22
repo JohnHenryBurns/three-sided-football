@@ -38,6 +38,16 @@
 // long a second is.
 const ENGINE_CLOCK = { now: () => performance.now() };
 function nowMs(){ return ENGINE_CLOCK.now(); }
+// ── THE WORLD ───────────────────────────────────────────────────────────────────
+//
+// Gravity, as a fraction of the game's own. 1 is this pitch, and nothing about the football
+// changes at 1: the ball still falls at 0.14 a step and a body at JUMP_G, exactly as they did.
+// A host that wants the same match somewhere else sets it once, the way a harness sets the clock:
+//
+//   ENGINE_WORLD.gravity = 1/6;   // the Moon: a jump goes six times as high, a long ball hangs six times as long
+//
+// Launch speeds are untouched, so it is the same kick and the same jump under a different sky.
+const ENGINE_WORLD = { gravity: 1 };
 
 // Every line the engine says goes through here, so the log cannot miss one and cannot double it.
 function sayLogged(html, big, voice){
@@ -371,7 +381,7 @@ function stepJumps(S){
   players.forEach(p=>{
     if(p.jz<=0) return;
     p.jz += p.jzv*S;
-    p.jzv -= JUMP_G*S;
+    p.jzv -= JUMP_G*S*ENGINE_WORLD.gravity;
     if(p.jz<=0){                                   // landed
       p.jz=0; p.jzv=0;
       p.jumpCd = clockSec + JUMP_CD;
@@ -5574,7 +5584,7 @@ function physicsStep(dt){
     ball.vx*=Math.pow(0.985,S); ball.vy*=Math.pow(0.985,S);
     // flight and landing
     if(ball.z>0||ball.zv>0){
-      ball.z+=ball.zv*S; ball.zv-=0.14*S;
+      ball.z+=ball.zv*S; ball.zv-=0.14*S*ENGINE_WORLD.gravity;
       if(ball.z<=0){
         ball.z=0; ball.zv=0;
         const near=players.filter(p=>onPitch(p)&&dist(p,ball)<62);
