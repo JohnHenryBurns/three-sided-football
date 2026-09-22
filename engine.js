@@ -375,6 +375,42 @@ function tryJump(p, boost){
   TEL.jumps++; if(pay) TEL.jumpsBoosted++;
   return true;
 }
+// ── A HIGH BALL ────────────────────────────────────────────────────────────────
+//
+// The jump was built for the heading contest and nothing called it: 'head it' is a standing header, so
+// a ball above head height was nobody's. This is the arithmetic both halves of going up for one need:
+// a ball that is falling, above standing reach and within a jump's reach, where it will be at head
+// height and how many steps until then, and how many steps a jump takes to rise that far. All of it
+// in steps (S = dt*60, the unit physics() and stepJumps() use) and all of it under ENGINE_WORLD.gravity,
+// so on a lighter world the reach grows and the timing stretches with it.
+function highBall(){
+  if(ball.owner || ball.z<=0 || ball.zv>0) return null;
+  const g=JUMP_G*ENGINE_WORLD.gravity, gb=0.14*ENGINE_WORLD.gravity;
+  const apexFree=JUMP_ZV*JUMP_ZV/(2*g), apexBoost=JUMP_BZV*JUMP_BZV/(2*g);
+  const need=ball.z-H_HEAD;
+  if(need<6 || need>apexBoost+6) return null;              // a standing header will do, or nobody reaches it
+  const a=-0.5*gb, b=ball.zv, c=ball.z-H_HEAD, disc=b*b-4*a*c;
+  if(disc<0) return null;
+  const tHead=(-b-Math.sqrt(disc))/(2*a);                  // steps until it is at head height
+  if(!(tHead>0) || tHead>400) return null;
+  const boost=need>apexFree*0.9;
+  const v=boost?JUMP_BZV:JUMP_ZV, apex=boost?apexBoost:apexFree;
+  const dj=v*v-2*g*Math.max(0, Math.min(need, apex*0.95));
+  const tUp=(v-Math.sqrt(Math.max(0,dj)))/g;               // steps a jump takes to rise to it
+  return { x:ball.x+ball.vx*tHead, y:ball.y+ball.vy*tHead, tHead, tUp, boost, reach:Math.min(110, 2.0*tHead+12) };
+}
+
+// The one man for it: the nearest eligible outfielder to where it will land, if he can get there in
+// the time it takes to fall. One man, so two do not swap the job between them every frame.
+function highBallMan(hb){
+  let best=null, bd=1e9;
+  players.forEach(q=>{
+    if(!onPitch(q) || q.role==='K' || q.jz>0 || clockSec<(q.jumpCd||0)) return;
+    const d=Math.hypot(hb.x-q.x, hb.y-q.y);
+    if(d<bd){ bd=d; best=q; }
+  });
+  return (best && bd<=hb.reach) ? best : null;
+}
 
 /** Age every jump. Called once a frame from physics, before anybody reaches for the ball. */
 function stepJumps(S){
@@ -3252,6 +3288,27 @@ const PORTED = [
 ];
 
 const ACTIONS = [
+  // ── GOING UP FOR IT ────────────────────────────────────────────────────────
+  // The second half of a header: the jump. The man 'under a high ball' has sent goes up when the ball
+  // is as many steps from head height as his jump takes to get there, boosted if the height needs it
+  // and he has the burst; 'head it' then fires in the air on its own, as it always could. This is the
+  // first thing in the engine to call tryJump(), which is what it was written for.
+  { name:'going up for it', tier:TIER.PLAYER,
+    can:p => {
+      if(!onPitch(p) || p.role==='K' || p.jz>0 || clockSec<(p.jumpCd||0)) return false;
+      const hb=highBall(); if(!hb) return false;
+      if(Math.hypot(hb.x-p.x, hb.y-p.y)>18) return false;     // not under it yet
+      if(Math.abs(hb.tHead-hb.tUp)>=4) return false;           // not yet, or too late
+      return highBallMan(hb)===p;
+    },
+    score:p => 900,                                            // once he is under it and it is time, nothing else matters
+    act:p => {
+      const hb=highBall(); if(!hb) return false;
+      if(!tryJump(p, hb.boost)) return false;
+      TEL.leaps=(TEL.leaps||0)+1; if(hb.boost) TEL.leapsBoosted=(TEL.leapsBoosted||0)+1;
+      ENGINE_HOOKS.spawnNote(p.x, p.y-26, hb.boost ? "UP for it!" : "up for it", TEAMS[p.team].color);
+      return true;
+    } },
   // ── HEAD IT ───────────────────────────────────────────────────────────────
   // The first action, and the one that was never real: "going for the header" has only ever been
   // a job() tag on a cascade branch — it reads 0% in every log because nothing was ever extracted.
@@ -4251,6 +4308,19 @@ const INSTRUCTIONS = [
   // ball died because the man it was for kept running his positional errand while a defender
   // attacked it. A teammate's ball in flight, stopping near you, with you the closest of his
   // side to that spot, is YOURS — at 700, which beats the errand.
+  // ── UNDER A HIGH BALL ────────────────────────────────────────────────────────
+  // The first half of a header: getting under it. A ball above standing reach and coming down is
+  // one man's, the nearest who can be there when it is at head height, and until then his job is
+  // the landing spot, not the ball. 720: a high ball in your patch is worth more than the shape you
+  // were holding, and a little more than receiving a pass along the ground.
+  { name:'under a high ball', tier:TIER.PLAYER, base:720,
+    applies:p => {
+      if(p.out || p.sentOff || p.role==='K' || p.jz>0) return false;
+      const hb=highBall(); if(!hb) return false;
+      return highBallMan(hb)===p;
+    },
+    score:p => 720,
+    act:p => { const hb=highBall(); if(!hb) return false; steer(p, hb.x, hb.y, 2.3); return true; } },
   { name:'intercepting', tier:TIER.PLAYER, base:480,
     applies:p => !p.out && !p.sentOff && p.role!=='K' && !ball.owner
               && Math.hypot(ball.vx,ball.vy)>2.5
@@ -6234,7 +6304,7 @@ function telZero(){ return {
   maxJump:0, lastX:null, lastY:null, claims:0, gkClaims:0, rapid:0,
   gkRapid:0, behindGoal:0, behindOwn:0, behindOther:0, zLow:0, zMid:0,
   zHigh:0, zSky:0, zMax:0, port:{}, woodwork:0, bars:0,
-  posts:0, jumpsBoosted:0, jumpsMissed:0, deflected:0, freeKicks:0, jobFrames:{},
+  posts:0, jumpsBoosted:0, jumpsMissed:0, leaps:0, leapsBoosted:0, deflected:0, freeKicks:0, jobFrames:{},
   jobSwitch:0, jobPop:0, jobHeld:0, jobHeldN:0, jobFallback:0, restartVoid:0,
   backPass:0, actFrames:{}, holds:0, holdFrames:0, holdLongest:0, spells:0,
   spellFrames:0, spellLongest:0, pOwned:0, pFlight:0, pDead:0, pContested:0, pHoofed:0, hoofs:0,
