@@ -47,7 +47,10 @@ function nowMs(){ return ENGINE_CLOCK.now(); }
 //   ENGINE_WORLD.gravity = 1/6;   // the Moon: a jump goes six times as high, a long ball hangs six times as long
 //
 // Launch speeds are untouched, so it is the same kick and the same jump under a different sky.
-const ENGINE_WORLD = { gravity: 1 };
+//   ENGINE_WORLD.edge = { player: p, tackle: 0.2, reach: 1.5 };   // one man plays a little above himself: a human
+//                                                                 // at the controls, whose tackles land more often
+//                                                                 // and who gathers a pass from further off
+const ENGINE_WORLD = { gravity: 1, edge: { player: null, tackle: 0, reach: 1 } };
 
 // Every line the engine says goes through here, so the log cannot miss one and cannot double it.
 function sayLogged(html, big, voice){
@@ -2958,6 +2961,9 @@ const PORTED = [
       let odds = 0.46 + 0.40*(rk-vk);
       if(victim.lastAction==='shield it') odds -= 0.18;
       if(!bestPass(victim)) odds += 0.10;
+      // THE EDGE: the man at the controls, if there is one, lands his tackles more often than the odds say. A
+      // human tackling on a keyboard has no ratings and no run-up, and a coin flip against him is not fun.
+      if(ENGINE_WORLD.edge && ENGINE_WORLD.edge.player===p) odds += ENGINE_WORLD.edge.tackle;
       TEL.tackles=(TEL.tackles||0)+1;
       if(RNG() > Math.max(0.10, Math.min(0.88, odds))){
         // beaten. He has thrown himself at it and the carrier goes past.
@@ -5752,9 +5758,12 @@ function physicsStep(dt){
       // WHATEVER HIS HEAD HAS REACHED. A jumping player's reach grows with his own height, which
       // is the whole design: no table of bonuses, just where he is.
       const lift=p.jz||0;
-      const reach=(p.role==="K"
+      let reach=(p.role==="K"
         ? ((p.diveUntil&&clockSec<p.diveUntil)||airborne ? 23 : 17)
         : 13) + lift*0.8;
+        // THE EDGE, again: the man at the controls gathers a ball from a little further off, so a pass played to
+        // him is his if it comes anywhere near. Keepers keep their own reach; a human keeper's edge is the dive.
+        if(ENGINE_WORLD.edge && ENGINE_WORLD.edge.player===p && p.role!=="K") reach *= ENGINE_WORLD.edge.reach;
       if(lift>0 && d<reach) p._gotIt=true;          // so a landing knows it was not wasted
       if(d<reach&&d<bd){bd=d;best=p;}});
     if(best){
